@@ -1,5 +1,20 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCwD4CXsZ91eD83ZKwn1s3lTHHt8Lyqfpw",
+  authDomain: "croquet-detwah.firebaseapp.com",
+  projectId: "croquet-detwah",
+  storageBucket: "croquet-detwah.firebasestorage.app",
+  messagingSenderId: "234715320279",
+  appId: "1:234715320279:web:95ecf8d65018b4c110c592"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const LEAGUE_DOC = doc(db, "league", "data");
 
 const C = {
   bg: "#0c1a0c", surface: "#121f12", card: "#172117", border: "#263d26",
@@ -57,20 +72,6 @@ const EMPTY_STATE = {
   players: [], weeklyGames: {}, totalWeeks: 1,
   leagueName: "Croquet De-Twah", leagueLogo: null,
   venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
-};
-
-const STORAGE_KEY = "croquet-detwah-data";
-
-const loadState = () => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : EMPTY_STATE;
-  } catch { return EMPTY_STATE; }
-};
-
-const saveState = (state) => {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  catch(e) { console.error("Save failed", e); }
 };
 
 function LoginScreen({onLogin}) {
@@ -135,49 +136,79 @@ function LoginScreen({onLogin}) {
 }
 
 export default function App() {
-  const [user, setUser]       = useState(null);
-  const [appState, setAppState] = useState(()=>loadState());
-
+  const [user, setUser]         = useState(null);
+  const [appState, setAppState] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [saving, setSaving]     = useState(false);
+  const saveTimer               = useRef(null);
   const isAdmin = user?.role==="admin"||user?.role==="superadmin";
+
+  // Listen to Firestore in real time
+  useEffect(() => {
+    const unsub = onSnapshot(LEAGUE_DOC, (snap) => {
+      if (snap.exists()) {
+        setAppState(snap.data());
+      } else {
+        setAppState(EMPTY_STATE);
+      }
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore error:", err);
+      setAppState(EMPTY_STATE);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
 
   const persist = (newState) => {
     setAppState(newState);
-    saveState(newState);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setSaving(true);
+    saveTimer.current = setTimeout(async () => {
+      try { await setDoc(LEAGUE_DOC, newState); }
+      catch(e) { console.error("Save failed", e); }
+      setSaving(false);
+    }, 800);
   };
 
-  if(!user) return <LoginScreen onLogin={setUser}/>;
-  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} onLogout={()=>setUser(null)}/>;
+  if (loading) return (
+    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",color:C.muted,fontFamily:"Georgia,serif",fontSize:"1rem"}}>
+      Loading league data…
+    </div>
+  );
+  if (!user) return <LoginScreen onLogin={setUser}/>;
+  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>setUser(null)}/>;
 }
 
-function LeagueApp({user, isAdmin, appState, persist, onLogout}) {
+function LeagueApp({user, isAdmin, appState, persist, saving, onLogout}) {
   const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues} = appState;
   const update = patch => persist({...appState,...patch});
 
-  const [tab, setTab]             = useState("standings");
+  const [tab, setTab]               = useState("standings");
   const [chartPlayers, setChartPlayers] = useState([]);
-  const [note, setNote]           = useState("");
+  const [note, setNote]             = useState("");
   const [editingName, setEditingName] = useState(false);
-  const [tempName, setTempName]   = useState("");
-  const logoInputRef              = useRef();
+  const [tempName, setTempName]     = useState("");
+  const logoInputRef                = useRef();
 
-  const [venueForm, setVenueForm] = useState({name:"",rating:0,comment:""});
-  const [editVenue, setEditVenue] = useState(null);
+  const [venueForm, setVenueForm]   = useState({name:"",rating:0,comment:""});
+  const [editVenue, setEditVenue]   = useState(null);
   const [reviewVenue, setReviewVenue] = useState(null);
   const [reviewForm, setReviewForm] = useState({rating:0,comment:""});
 
-  const [gameWeek, setGameWeek]   = useState(1);
-  const [gameVenue, setGameVenue] = useState(venues[0]?.name||"");
-  const [gameDate, setGameDate]   = useState(new Date().toISOString().slice(0,10));
-  const [groups, setGroups]       = useState([{id:1,players:[{playerId:"",position:""}]}]);
+  const [gameWeek, setGameWeek]     = useState(1);
+  const [gameVenue, setGameVenue]   = useState(venues[0]?.name||"");
+  const [gameDate, setGameDate]     = useState(new Date().toISOString().slice(0,10));
+  const [groups, setGroups]         = useState([{id:1,players:[{playerId:"",position:""}]}]);
   const [sotdEntries, setSotdEntries] = useState([{playerId:"",count:1}]);
   const [absentPreview, setAbsentPreview] = useState([]);
 
-  const [newName, setNewName] = useState("");
-  const [newWeek, setNewWeek] = useState(1);
+  const [newName, setNewName]       = useState("");
+  const [newWeek, setNewWeek]       = useState(1);
 
-  const [editModal, setEditModal] = useState(null);
-  const [editPos, setEditPos]     = useState("");
-  const [editSotd, setEditSotd]   = useState(0);
+  const [editModal, setEditModal]   = useState(null);
+  const [editPos, setEditPos]       = useState("");
+  const [editSotd, setEditSotd]     = useState(0);
 
   const notify = msg => { setNote(msg); setTimeout(()=>setNote(""),3500); };
   const maxWk  = Math.max(totalWeeks,...players.map(p=>p.joinedWeek||1),1);
@@ -213,7 +244,7 @@ function LeagueApp({user, isAdmin, appState, persist, onLogout}) {
 
   const chartData=useMemo(()=>buildChartData(players.filter(p=>chartPlayers.includes(p.id)),weeklyGames,maxWk),[players,weeklyGames,chartPlayers,maxWk]);
 
-  const venueAvgRating = (v) => {
+  const venueAvgRating = v => {
     const reviews=v.reviews||[];
     if(reviews.length===0) return v.rating||0;
     const sum=reviews.reduce((s,r)=>s+r.rating,0)+(v.rating||0);
@@ -416,7 +447,10 @@ function LeagueApp({user, isAdmin, appState, persist, onLogout}) {
                   {isAdmin&&<button onClick={()=>{setTempName(leagueName);setEditingName(true);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"3px 9px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>✎</button>}
                 </div>
               )}
-              <p style={{margin:"4px 0 0",color:C.muted,fontSize:"0.76rem"}}>{players.length} players · Week {maxWk} · {venues.length} venues</p>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"4px"}}>
+                <p style={{margin:0,color:C.muted,fontSize:"0.76rem"}}>{players.length} players · Week {maxWk} · {venues.length} venues</p>
+                {saving&&<span style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.05em"}}>💾 saving…</span>}
+              </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
               {isAdmin&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"8px 14px",fontSize:"0.78rem",display:"flex",flexDirection:"column",alignItems:"center",gap:"1px"}}><span style={{fontSize:"1rem",lineHeight:1}}>+</span><span style={{fontSize:"0.64rem",letterSpacing:"0.05em"}}>WEEK</span></button>}
@@ -685,3 +719,10 @@ function LeagueApp({user, isAdmin, appState, persist, onLogout}) {
     </div>
   );
 }
+```
+
+Once you've pasted and saved, run these commands in your Node.js command prompt:
+```
+git add .
+git commit -m "add Firebase real-time database"
+git push
