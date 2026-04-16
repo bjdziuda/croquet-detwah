@@ -165,7 +165,7 @@ export default function App() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaving(true);
     saveTimer.current = setTimeout(async () => {
-      try { await setDoc(LEAGUE_DOC, newState); }
+try { await setDoc(LEAGUE_DOC, newState); }
       catch(e) { console.error("Save failed", e); }
       setSaving(false);
     }, 800);
@@ -719,10 +719,3 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout}) {
     </div>
   );
 }
-```
-
-Once you've pasted and saved, run these commands in your Node.js command prompt:
-```
-git add .
-git commit -m "add Firebase real-time database"
-git push
