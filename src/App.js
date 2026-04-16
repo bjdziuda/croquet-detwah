@@ -191,10 +191,10 @@ try { await setDoc(LEAGUE_DOC, newState); }
     </div>
   );
   if (!user) return <LoginScreen onLogin={setUser}/>;
-  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>setUser(null)}/>;
+  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>setUser(null)} uploadImage={uploadImage}/>;
 }
 
-function LeagueApp({user, isAdmin, appState, persist, saving, onLogout}) {
+function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
   const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues} = appState;
   const update = patch => persist({...appState,...patch});
 
