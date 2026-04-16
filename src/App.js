@@ -16,6 +16,9 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 const LEAGUE_DOC = doc(db, "league", "data");
 
+const CLOUDINARY_CLOUD = "dr3pitbr2";
+const CLOUDINARY_PRESET = "croquet_uploads";
+
 const C = {
   bg: "#0c1a0c", surface: "#121f12", card: "#172117", border: "#263d26",
   accent: "#c9a84c", accentLight: "#e8c97a", green: "#4a8c4a", greenLight: "#6ab06a",
@@ -160,8 +163,19 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const persist = (newState) => {
-    setAppState(newState);
+  const uploadImage = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    return data.secure_url;
+  };
+
+const persist = (newState) => {    setAppState(newState);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaving(true);
     saveTimer.current = setTimeout(async () => {
@@ -544,11 +558,28 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout}) {
                       <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
                         {i===0&&avgRating>0&&<span style={{fontSize:"1.1rem"}}>🏆</span>}
                         <div>
-                          <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"1rem"}}>{v.name}</div>
-                          <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"4px"}}>
-                            <StarRating value={Math.round(avgRating)} size={16}/>
-                            <span style={{color:C.muted,fontSize:"0.74rem"}}>{avgRating>0?`${displayRating}/5`:"Unrated"}{totalReviews>0&&` · ${totalReviews} review${totalReviews!==1?"s":""}`}</span>
-                            {v.timesPlayed>0&&<span style={{color:C.muted,fontSize:"0.74rem"}}>· played {v.timesPlayed}×</span>}
+                          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"6px"}}>
+                            {v.imageUrl
+                              ? <img src={v.imageUrl} alt={v.name} style={{width:"44px",height:"44px",borderRadius:"7px",objectFit:"cover",border:`1px solid ${C.border}`}}/>
+                              : <div style={{width:"44px",height:"44px",borderRadius:"7px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.3rem"}}>📍</div>
+                            }
+                            <div>
+                              <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"1rem"}}>{v.name}</div>
+                              <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"4px"}}>
+                                <StarRating value={Math.round(avgRating)} size={16}/>
+                                <span style={{color:C.muted,fontSize:"0.74rem"}}>{avgRating>0?`${displayRating}/5`:"Unrated"}{totalReviews>0&&` · ${totalReviews} review${totalReviews!==1?"s":""}`}</span>
+                                {v.timesPlayed>0&&<span style={{color:C.muted,fontSize:"0.74rem"}}>· played {v.timesPlayed}×</span>}
+                              </div>
+                              <label style={{fontSize:"0.7rem",color:C.muted,cursor:"pointer",textDecoration:"underline",marginTop:"4px",display:"block"}}>
+                                {v.imageUrl ? "Change photo" : "Upload photo"}
+                                <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                                  const file = e.target.files[0];
+                                  if(!file) return;
+                                  const url = await uploadImage(file);
+                                  update({venues:venues.map(vn=>vn.id===v.id?{...vn,imageUrl:url}:vn)});
+                                }}/>
+                              </label>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -704,7 +735,28 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout}) {
             <div style={{display:"flex",flexDirection:"column",gap:"7px"}}>
               {players.map(p=>(
                 <div key={p.id} style={{...cardSt,padding:"11px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div><span style={{color:C.cream,fontSize:"0.9rem"}}>{p.name}</span>{p.joinedWeek>1&&<span style={{fontSize:"0.63rem",color:C.accent,background:C.accent+"22",padding:"1px 6px",borderRadius:"3px",marginLeft:"7px"}}>Wk {p.joinedWeek}</span>}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                    {p.imageUrl
+                      ? <img src={p.imageUrl} alt={p.name} style={{width:"38px",height:"38px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.accent}`}}/>
+                      : <div style={{width:"38px",height:"38px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.1rem"}}>👤</div>
+                    }
+                    <div>
+                      <span style={{color:C.cream,fontSize:"0.9rem"}}>{p.name}</span>
+                      {p.joinedWeek>1&&<span style={{fontSize:"0.63rem",color:C.accent,background:C.accent+"22",padding:"1px 6px",borderRadius:"3px",marginLeft:"7px"}}>Wk {p.joinedWeek}</span>}
+                      <div>
+                        <label style={{fontSize:"0.7rem",color:C.muted,cursor:"pointer",textDecoration:"underline"}}>
+                          {p.imageUrl ? "Change photo" : "Upload photo"}
+                          <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                            const file = e.target.files[0];
+                            if(!file) return;
+                            const url = await uploadImage(file);
+                            const newPlayers = players.map(pl=>pl.id===p.id?{...pl,imageUrl:url}:pl);
+                            persist({...appState,players:newPlayers});
+                          }}/>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                   <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
                     <span style={{color:C.muted,fontSize:"0.8rem"}}>{totalPts(p.id,weeklyGames)} pts</span>
                     <button onClick={()=>removePlayer(p.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"5px",padding:"3px 9px",cursor:"pointer",fontSize:"0.74rem",fontFamily:"Georgia,serif"}}>Remove</button>
