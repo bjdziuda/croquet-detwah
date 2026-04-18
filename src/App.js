@@ -918,7 +918,124 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           </div>
         )}
 
-        {tab==="players"&&isAdmin&&(
+        {tab==="profile"&&(()=>{
+          const myPlayer = players.find(p=>p.name===user.name);
+          const myStats = myPlayer ? standings.find(s=>s.id===myPlayer.id) : null;
+          const [editingProfileName, setEditingProfileName] = useState(false);
+          const [profileName, setProfileName] = useState(myPlayer?.name||"");
+          const [profileWeek, setProfileWeek] = useState(myPlayer?.joinedWeek||1);
+
+          if(!myPlayer) return (
+            <div>
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>👤 My Profile</h2>
+              <div style={{...cardSt,textAlign:"center",padding:"32px 16px"}}>
+                <div style={{fontSize:"2.5rem",marginBottom:"12px"}}>🔍</div>
+                <p style={{color:C.muted,fontSize:"0.88rem",margin:"0 0 6px"}}>You're not in the league yet.</p>
+                <p style={{color:C.muted,fontSize:"0.78rem",margin:0}}>Ask your admin to add you as a player.</p>
+              </div>
+            </div>
+          );
+
+          const saveProfileName = () => {
+            if(!profileName.trim()) return;
+            const updatedPlayers = players.map(p=>p.id===myPlayer.id?{...p,name:profileName.trim()}:p);
+            const updatedWG = {};
+            Object.entries(weeklyGames).forEach(([pid,wk])=>{updatedWG[pid]=wk;});
+            update({players:updatedPlayers,weeklyGames:updatedWG});
+            setEditingProfileName(false);
+            notify("Name updated!");
+          };
+
+          const saveProfileWeek = (wk) => {
+            const jw = parseInt(wk);
+            const preGames={};
+            for(let w=1;w<jw;w++) preGames[w]=[{gameId:`pre-${w}`,position:null,groupSize:null,pts:1,sotd:0,absent:true,label:"Pre-join"}];
+            const existingGames = weeklyGames[myPlayer.id]||{};
+            const mergedGames = {...preGames};
+            Object.entries(existingGames).forEach(([w,g])=>{ if(parseInt(w)>=jw) mergedGames[w]=g; });
+            update({players:players.map(p=>p.id===myPlayer.id?{...p,joinedWeek:jw}:p), weeklyGames:{...weeklyGames,[myPlayer.id]:mergedGames}});
+            notify("Joined week updated!");
+          };
+
+          return (
+            <div>
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>👤 My Profile</h2>
+              {/* Photo + Name */}
+              <div style={{...cardSt,marginBottom:"14px",display:"flex",alignItems:"center",gap:"14px"}}>
+                <div style={{position:"relative",flexShrink:0}}>
+                  {myPlayer.imageUrl
+                    ? <img src={myPlayer.imageUrl} alt={myPlayer.name} style={{width:"72px",height:"72px",borderRadius:"50%",objectFit:"cover",border:`3px solid ${C.accent}`}}/>
+                    : <div style={{width:"72px",height:"72px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"2rem"}}>👤</div>
+                  }
+                  <label style={{position:"absolute",bottom:0,right:0,background:C.accent,borderRadius:"50%",width:"22px",height:"22px",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:"0.7rem"}}>
+                    📷
+                    <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                      const file=e.target.files[0]; if(!file) return;
+                      const url=await uploadImage(file);
+                      update({players:players.map(p=>p.id===myPlayer.id?{...p,imageUrl:url}:p)});
+                      notify("Photo updated!");
+                    }}/>
+                  </label>
+                </div>
+                <div style={{flex:1}}>
+                  {editingProfileName ? (
+                    <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                      <input style={inputSt} value={profileName} onChange={e=>setProfileName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&saveProfileName()} autoFocus/>
+                      <div style={{display:"flex",gap:"6px"}}>
+                        <button style={{...btnSt(),flex:1,padding:"7px"}} onClick={saveProfileName}>Save</button>
+                        <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"7px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.8rem"}} onClick={()=>{setEditingProfileName(false);setProfileName(myPlayer.name);}}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                        <span style={{color:C.cream,fontWeight:"bold",fontSize:"1.1rem"}}>{myPlayer.name}</span>
+                        <button onClick={()=>{setProfileName(myPlayer.name);setEditingProfileName(true);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 7px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✎ edit</button>
+                      </div>
+                      <div style={{color:C.muted,fontSize:"0.75rem",marginTop:"4px"}}>
+                        <label style={lbSt}>JOINED WEEK</label>
+                        <select style={{...inputSt,width:"auto",padding:"4px 8px",fontSize:"0.78rem"}} value={profileWeek} onChange={e=>{setProfileWeek(parseInt(e.target.value));saveProfileWeek(e.target.value);}}>
+                          {weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Stats */}
+              {myStats&&(
+                <div style={{...cardSt,marginBottom:"14px"}}>
+                  <h3 style={{color:C.accentLight,fontSize:"0.82rem",letterSpacing:"0.08em",margin:"0 0 12px"}}>MY STATS</h3>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                    {[
+                      ["Total Points",myStats.pts,C.accent],
+                      ["MVP %",myStats.mvp!=="—"?`${myStats.mvp}%`:"—",C.blue],
+                      ["Wins",myStats.wins,C.greenLight],
+                      ["Weeks Attended",myStats.weeksAttended,C.muted],
+                      ["Shot of the Day",myStats.sotdTotal>0?`⭐ ${myStats.sotdTotal}`:"—",C.gold],
+                      ["Absences",myStats.absences,C.muted],
+                    ].map(([label,val,col])=>(
+                      <div key={label} style={{background:C.surface,borderRadius:"8px",padding:"10px 12px"}}>
+                        <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"4px"}}>{label.toUpperCase()}</div>
+                        <div style={{color:col,fontWeight:"bold",fontSize:"1.1rem"}}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* League rank */}
+              {myStats&&(
+                <div style={{...cardSt,textAlign:"center"}}>
+                  <div style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.08em",marginBottom:"6px"}}>LEAGUE POSITION</div>
+                  <div style={{fontSize:"2rem"}}><Medal rank={standings.findIndex(s=>s.id===myPlayer.id)+1}/></div>
+                  <div style={{color:C.cream,fontSize:"0.85rem",marginTop:"4px"}}>#{standings.findIndex(s=>s.id===myPlayer.id)+1} of {standings.length}</div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+{tab==="players"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Manage Players</h2>
             <div style={{...cardSt,marginBottom:"14px"}}>
