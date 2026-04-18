@@ -262,6 +262,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [logoRanking, setLogoRanking]   = useState([]);
   const [mottoRanking, setMottoRanking] = useState([]);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
 
   const votes = appState.votes || {};
   const myVote = votes[user?.name] || null;
@@ -711,7 +712,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           const logoResults = runRCV(LOGO_ENTRIES, votes, "logo");
           const mottoResults = runRCV(MOTTO_ENTRIES, votes, "motto");
           const totalVoters = Object.keys(votes).length;
-          const [lightbox, setLightbox] = React.useState(null);
 
           const Results = () => (
             <div>
