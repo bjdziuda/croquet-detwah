@@ -751,8 +751,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           );
 
-          const RankList = ({entries, ranking, setRanking, type}) => {
-            const unranked = entries.filter(e=>!ranking.includes(e.id));
+          
             const move = (id, dir) => {
               const idx = ranking.indexOf(id);
               if(idx===-1) return;
@@ -849,13 +848,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           );
         })()}
-          const logoResults = runRCV(LOGO_ENTRIES, votes, "logo");
-          const mottoResults = runRCV(MOTTO_ENTRIES, votes, "motto");
-          const totalVoters = Object.keys(votes).length;
 
-          const RankList = ({entries, ranking, setRanking, type}) => {
-            const unranked = entries.filter(e=>!ranking.includes(e.id));
-            const move = (id, dir) => {
+        {tab==="record"&&isAdmin&&(
               const idx = ranking.indexOf(id);
               if(idx===-1) return;
               const next = [...ranking];
@@ -911,13 +905,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             );
           };
 
-          return (
-            <div>
-              <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"6px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
-                🗳 Vote — 2026 Logo & Motto
-              </h2>
-              <p style={{color:C.muted,fontSize:"0.78rem",marginBottom:"20px"}}>{totalVoters} member{totalVoters!==1?"s":""} have voted so far.</p>
-              {alreadyVoted ? (
+          
                 <div>
                   <div style={{...cardSt,borderColor:C.green+"55",background:"#0d1f0d",marginBottom:"24px",padding:"16px 20px"}}>
                     <p style={{color:C.greenLight,margin:0,fontWeight:"bold"}}>✓ Your vote has been recorded!</p>
@@ -943,24 +931,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     ))}
                   </div>
                 </div>
-              ) : (
-                <div>
-                  <div style={{...cardSt,marginBottom:"28px"}}>
-                    <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",margin:"0 0 14px"}}>STEP 1 — RANK THE LOGOS</h3>
-                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 16px",lineHeight:"1.6"}}>Click logos to add them to your ranking. Use ▲▼ to reorder. You don't have to rank all of them.</p>
-                    <RankList entries={LOGO_ENTRIES} ranking={logoRanking} setRanking={setLogoRanking} type="logo"/>
-                  </div>
-                  <div style={{...cardSt,marginBottom:"28px"}}>
-                    <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",margin:"0 0 14px"}}>STEP 2 — RANK THE MOTTOS</h3>
-                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 16px",lineHeight:"1.6"}}>Click mottos to add them to your ranking. Use ▲▼ to reorder.</p>
-                    <RankList entries={MOTTO_ENTRIES} ranking={mottoRanking} setRanking={setMottoRanking} type="motto"/>
-                  </div>
-                  <button onClick={submitVote} style={{...btnSt(),padding:"13px 36px",fontSize:"0.95rem"}}>Submit My Vote 🗳</button>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+              
 
 {tab==="record"&&isAdmin&&(
           <div>
