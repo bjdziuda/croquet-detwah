@@ -852,8 +852,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
         {tab==="record"&&isAdmin&&(
           <div>
-                  <div style={{marginBottom:"16px"}}>
-                    <div style={{color:C.accent,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"8px"}}>YOUR RANKING</div>
+            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
                     {ranking.map((id,i)=>{
                       const entry=entries.find(e=>e.id===id);
                       if(!entry) return null;
@@ -889,10 +888,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       }
                     </div>
                   ))}
-                </div>
-              {tab==="record"&&isAdmin&&(
-          <div>
-            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
+                <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
             <div style={{...cardSt,marginBottom:"16px"}}>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px"}}>
                 <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
