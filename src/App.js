@@ -863,31 +863,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
               <p style={{margin:0,color:C.muted,fontSize:"0.77rem",lineHeight:"1.7"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. <strong style={{color:C.accentLight}}>Absences are automatic</strong> — eligible players not in a group get 1 pt on submit.</p>
             </div>
-                          <span style={{color:C.accent,fontWeight:"bold",fontSize:"1rem",minWidth:"24px"}}>#{i+1}</span>
-                          {type==="logo"
-                            ? <img src={entry.url} alt={`Logo ${id}`} style={{width:"60px",height:"60px",objectFit:"cover",borderRadius:"6px"}}/>
-                            : <span style={{color:C.cream,fontSize:"0.88rem",flex:1}}>{entry.text}</span>
-                          }
-                          <div style={{display:"flex",flexDirection:"column",gap:"3px",marginLeft:"auto"}}>
-                            <button onClick={()=>move(id,-1)} disabled={i===0} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.8rem"}}>▲</button>
-                            <button onClick={()=>move(id,1)} disabled={i===ranking.length-1} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.8rem"}}>▼</button>
-                          </div>
-                          <button onClick={()=>removeFromRanking(id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.75rem"}}>✕</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"8px"}}>
-                  {ranking.length===0?"CLICK TO RANK (in order of preference)":"UNRANKED — click to add to your ranking"}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"10px"}}>
-                  {unranked.map(entry=>(
-                    <div key={entry.id} onClick={()=>addToRanking(entry.id)}
-                      style={{cursor:"pointer",border:`1px solid ${C.border}`,borderRadius:"8px",overflow:"hidden",transition:"border-color 0.2s",background:C.surface}}
-                      onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                      {type==="logo"
+            {absentPreview.length>0&&(
                         ? <img src={entry.url} alt={`Logo ${entry.id}`} style={{width:"100px",height:"100px",objectFit:"cover",display:"block"}}/>
                         : <div style={{padding:"12px 16px",color:C.cream,fontSize:"0.85rem",maxWidth:"220px"}}>{entry.text}</div>
                       }
