@@ -110,10 +110,6 @@ const EMPTY_STATE = {
   leagueName: "Croquet De-Twah", leagueLogo: null,
   venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
   votes: {},
-}; = {
-  players: [], weeklyGames: {}, totalWeeks: 1,
-  leagueName: "Croquet De-Twah", leagueLogo: null,
-  venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
 };
 
 function LoginScreen({onLogin}) {
