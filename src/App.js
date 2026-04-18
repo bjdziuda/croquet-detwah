@@ -853,9 +853,14 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         {tab==="record"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
-                    {ranking.map((id,i)=>{
-                      const entry=entries.find(e=>e.id===id);
-                      if(!entry) return null;
+            <div style={{...cardSt,marginBottom:"16px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px"}}>
+                <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
+                <div><label style={lbSt}>📍 VENUE</label><select style={inputSt} value={gameVenue} onChange={e=>setGameVenue(e.target.value)}>{venues.map(v=><option key={v.id}>{v.name}</option>)}</select></div>
+                <div><label style={lbSt}>DATE</label><input style={inputSt} type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}/></div>
+              </div>
+            </div>
+            <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
                       return(
                         <div key={id} style={{...cardSt,padding:"10px 12px",marginBottom:"6px",display:"flex",alignItems:"center",gap:"10px",border:`1px solid ${C.accent}44`}}>
                           <span style={{color:C.accent,fontWeight:"bold",fontSize:"1rem",minWidth:"24px"}}>#{i+1}</span>
@@ -888,9 +893,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       }
                     </div>
                   ))}
-                <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
-            <div style={{...cardSt,marginBottom:"16px"}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px"}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px"}}>
                 <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
                 <div><label style={lbSt}>📍 VENUE</label><select style={inputSt} value={gameVenue} onChange={e=>setGameVenue(e.target.value)}>{venues.map(v=><option key={v.id}>{v.name}</option>)}</select></div>
                 <div><label style={lbSt}>DATE</label><input style={inputSt} type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}/></div>
