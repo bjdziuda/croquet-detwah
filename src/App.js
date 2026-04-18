@@ -851,15 +851,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         })()}
 
         {tab==="record"&&isAdmin&&(
-              if(idx===-1) return;
-              const next = [...ranking];
-              const swap = idx+dir;
-              if(swap<0||swap>=next.length) return;
-              [next[idx],next[swap]]=[next[swap],next[idx]];
-              setRanking(next);
-            };
-            const addToRanking = id => setRanking(prev=>[...prev,id]);
-            const removeFromRanking = id => setRanking(prev=>prev.filter(x=>x!==id));
             return (
               <div>
                 {ranking.length>0&&(
