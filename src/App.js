@@ -890,9 +890,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     </div>
                   ))}
                 </div>
-              </div>
-            );
-          {tab==="record"&&isAdmin&&(
+              {tab==="record"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
             <div style={{...cardSt,marginBottom:"16px"}}>
