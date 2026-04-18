@@ -181,7 +181,6 @@ export default function App() {
   const saveTimer               = useRef(null);
   const isAdmin = user?.role==="admin"||user?.role==="superadmin";
 
-  // Listen to Firestore in real time
   useEffect(() => {
     const unsub = onSnapshot(LEAGUE_DOC, (snap) => {
       if (snap.exists()) {
@@ -210,11 +209,12 @@ export default function App() {
     return data.secure_url;
   };
 
-const persist = (newState) => {    setAppState(newState);
+  const persist = (newState) => {
+    setAppState(newState);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaving(true);
     saveTimer.current = setTimeout(async () => {
-try { await setDoc(LEAGUE_DOC, newState); }
+      try { await setDoc(LEAGUE_DOC, newState); }
       catch(e) { console.error("Save failed", e); }
       setSaving(false);
     }, 800);
@@ -265,7 +265,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [lightbox, setLightbox] = useState(null);
 
   const votes = appState.votes || {};
-  const myVote = votes[user?.name] || null;
 
   const notify = msg => { setNote(msg); setTimeout(()=>setNote(""),3500); };
   const maxWk  = Math.max(totalWeeks,...players.map(p=>p.joinedWeek||1),1);
@@ -407,8 +406,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     notify("Your vote has been recorded! 🗳");
   };
 
-  const runRCV = (entries, votes, type) => {
-    const ballots = Object.values(votes).map(v => v[type==="logo"?"logoRanking":"mottoRanking"]).filter(b=>b&&b.length>0);
+  const runRCV = (entries, allVotes, type) => {
+    const ballots = Object.values(allVotes).map(v => v[type==="logo"?"logoRanking":"mottoRanking"]).filter(b=>b&&b.length>0);
     if(ballots.length===0) return entries.map(e=>({...e,votes:0,eliminated:false}));
     let remaining = entries.map(e=>e.id);
     while(remaining.length>1) {
@@ -427,8 +426,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     }
     const finalCounts={};
     remaining.forEach(id=>{finalCounts[id]=0;});
-    const ballots2=Object.values(votes).map(v=>v[type==="logo"?"logoRanking":"mottoRanking"]).filter(b=>b&&b.length>0);
-    ballots2.forEach(ballot=>{
+    ballots.forEach(ballot=>{
       const top=ballot.find(id=>remaining.includes(id));
       if(top) finalCounts[top]=(finalCounts[top]||0)+1;
     });
@@ -455,12 +453,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const inputSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.85rem",fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"};
   const textareaSt={...inputSt,resize:"vertical",minHeight:"70px",lineHeight:"1.5"};
   const btnSt=(col=C.accent,light=false)=>({background:`linear-gradient(135deg,${col},${col}bb)`,border:"none",borderRadius:"6px",color:light?C.text:C.bg,padding:"9px 16px",fontFamily:"Georgia,serif",fontSize:"0.84rem",fontWeight:"bold",cursor:"pointer",letterSpacing:"0.03em",whiteSpace:"nowrap"});
-  const tabSt=t=>({padding:"9px 13px",border:"none",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem",letterSpacing:"0.04em",background:tab===t?C.accent:"transparent",color:tab===t?C.bg:C.muted,borderBottom:tab===t?`2px solid ${C.accent}`:"2px solid transparent",transition:"all 0.2s",fontWeight:tab===t?"bold":"normal"});
-  const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"18px"};
+  const tabSt=t=>({padding:"8px 10px",border:"none",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.72rem",letterSpacing:"0.03em",background:tab===t?C.accent:"transparent",color:tab===t?C.bg:C.muted,borderBottom:tab===t?`2px solid ${C.accent}`:"2px solid transparent",transition:"all 0.2s",fontWeight:tab===t?"bold":"normal",flexShrink:0});
+  const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
   const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["vote","🗳 Vote"],
-    ...(isAdmin?[["record","✦ Record Week"],["history","◷ History"],["players","✤ Players"]]:[])
+    ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[])
   ];
 
   return (
@@ -507,7 +505,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             <h3 style={{color:C.cream,margin:"0 0 4px",fontSize:"1rem"}}>Rate Venue</h3>
             <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 20px"}}>{reviewVenue.name} · reviewing as <strong style={{color:C.accentLight}}>{user.name}</strong></p>
             <div style={{marginBottom:"16px"}}><label style={lbSt}>YOUR RATING</label><StarRating value={reviewForm.rating} onChange={r=>setReviewForm(f=>({...f,rating:r}))} size={32}/></div>
-            <div style={{marginBottom:"20px"}}><label style={lbSt}>YOUR COMMENTS (optional)</label><textarea style={{...textareaSt,minHeight:"90px"}} value={reviewForm.comment} onChange={e=>setReviewForm(f=>({...f,comment:e.target.value}))} placeholder="What did you think? Surface, atmosphere, facilities…"/></div>
+            <div style={{marginBottom:"20px"}}><label style={lbSt}>YOUR COMMENTS (optional)</label><textarea style={{...textareaSt,minHeight:"90px"}} value={reviewForm.comment} onChange={e=>setReviewForm(f=>({...f,comment:e.target.value}))} placeholder="What did you think?"/></div>
             <div style={{display:"flex",gap:"8px"}}>
               <button style={{...btnSt(C.green,true),flex:1}} onClick={submitReview}>Submit Review</button>
               <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 14px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>{setReviewVenue(null);setReviewForm({rating:0,comment:""});}}>Cancel</button>
@@ -516,45 +514,45 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         </div>
       )}
 
+      {/* HEADER - mobile friendly */}
       <div style={{background:`linear-gradient(180deg,#060e06,${C.surface})`,borderBottom:`1px solid ${C.border}`}}>
         <div style={{maxWidth:"1020px",margin:"0 auto"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"18px",padding:"16px 22px",borderBottom:`1px solid ${C.border}22`}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderBottom:`1px solid ${C.border}22`,flexWrap:"wrap"}}>
+            {/* Logo */}
             <div onClick={()=>isAdmin&&logoInputRef.current?.click()}
-              style={{width:"58px",height:"58px",borderRadius:"50%",border:`2px ${isAdmin?"dashed":"solid"} ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:isAdmin?"pointer":"default",overflow:"hidden",flexShrink:0,background:C.surface,position:"relative",transition:"border-color 0.2s"}}
-              onMouseEnter={e=>{if(isAdmin){e.currentTarget.style.borderColor=C.accent;const ov=e.currentTarget.querySelector('.ov');if(ov)ov.style.opacity='1';}}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;const ov=e.currentTarget.querySelector('.ov');if(ov)ov.style.opacity='0';}}>
-              {leagueLogo?<img src={leagueLogo} alt="logo" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.7rem",lineHeight:1}}>🔵</span>}
-              {isAdmin&&<div className="ov" style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",opacity:0,transition:"opacity 0.2s",borderRadius:"50%"}}><span style={{fontSize:"0.58rem",color:C.cream,textAlign:"center",letterSpacing:"0.05em",lineHeight:1.4}}>CHANGE<br/>LOGO</span></div>}
+              style={{width:"44px",height:"44px",borderRadius:"50%",border:`2px ${isAdmin?"dashed":"solid"} ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:isAdmin?"pointer":"default",overflow:"hidden",flexShrink:0,background:C.surface,position:"relative"}}
+              onMouseEnter={e=>{if(isAdmin){e.currentTarget.style.borderColor=C.accent;}}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}>
+              {leagueLogo?<img src={leagueLogo} alt="logo" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.3rem",lineHeight:1}}>🔵</span>}
             </div>
             <input ref={logoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleLogoUpload}/>
-            <div style={{flex:1}}>
+            {/* Title */}
+            <div style={{flex:1,minWidth:0}}>
               {editingName&&isAdmin?(
-                <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
-                  <input style={{...inputSt,fontSize:"1.3rem",fontWeight:"bold",padding:"4px 10px",width:"auto",flex:1,color:C.cream}} value={tempName} onChange={e=>setTempName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){update({leagueName:tempName||leagueName});setEditingName(false);}if(e.key==="Escape")setEditingName(false);}} autoFocus/>
-                  <button style={{...btnSt(),padding:"6px 14px",fontSize:"0.8rem"}} onClick={()=>{update({leagueName:tempName||leagueName});setEditingName(false);}}>Save</button>
-                  <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontSize:"0.8rem",fontFamily:"Georgia,serif"}} onClick={()=>setEditingName(false)}>Cancel</button>
+                <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                  <input style={{...inputSt,fontSize:"1rem",fontWeight:"bold",padding:"4px 8px",color:C.cream}} value={tempName} onChange={e=>setTempName(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){update({leagueName:tempName||leagueName});setEditingName(false);}if(e.key==="Escape")setEditingName(false);}} autoFocus/>
+                  <button style={{...btnSt(),padding:"4px 10px",fontSize:"0.75rem"}} onClick={()=>{update({leagueName:tempName||leagueName});setEditingName(false);}}>Save</button>
                 </div>
               ):(
-                <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                  <h1 style={{margin:0,fontSize:"1.7rem",fontWeight:"bold",color:C.cream,letterSpacing:"0.04em",lineHeight:1}}>{leagueName}</h1>
-                  {isAdmin&&<button onClick={()=>{setTempName(leagueName);setEditingName(true);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"3px 9px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>✎</button>}
+                <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                  <h1 style={{margin:0,fontSize:"1.1rem",fontWeight:"bold",color:C.cream,letterSpacing:"0.03em",lineHeight:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{leagueName}</h1>
+                  {isAdmin&&<button onClick={()=>{setTempName(leagueName);setEditingName(true);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif",flexShrink:0}}>✎</button>}
                 </div>
               )}
-              <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"4px"}}>
-                <p style={{margin:0,color:C.muted,fontSize:"0.76rem"}}>{players.length} players · Week {maxWk} · {venues.length} venues</p>
-                {saving&&<span style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.05em"}}>💾 saving…</span>}
-              </div>
+              <p style={{margin:"2px 0 0",color:C.muted,fontSize:"0.68rem"}}>{players.length} players · Wk {maxWk} · {venues.length} venues{saving?" · 💾":""}</p>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-              {isAdmin&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"8px 14px",fontSize:"0.78rem",display:"flex",flexDirection:"column",alignItems:"center",gap:"1px"}}><span style={{fontSize:"1rem",lineHeight:1}}>+</span><span style={{fontSize:"0.64rem",letterSpacing:"0.05em"}}>WEEK</span></button>}
+            {/* Right controls */}
+            <div style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
+              {isAdmin&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"6px 10px",fontSize:"0.72rem"}}>+Wk</button>}
               <div style={{textAlign:"right"}}>
-                <span style={{background:isAdmin?C.accent+"33":C.green+"22",border:`1px solid ${isAdmin?C.accent+"55":C.green+"44"}`,borderRadius:"20px",padding:"3px 10px",fontSize:"0.72rem",color:isAdmin?C.accentLight:C.greenLight,letterSpacing:"0.05em",display:"block"}}>{isAdmin?"⚙ ADMIN":"👁 GUEST"}</span>
-                <div style={{color:C.muted,fontSize:"0.73rem",marginTop:"3px"}}>{user.name}</div>
-                <button onClick={onLogout} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.7rem",fontFamily:"Georgia,serif",padding:0,marginTop:"2px",textDecoration:"underline"}}>sign out</button>
+                <span style={{background:isAdmin?C.accent+"33":C.green+"22",border:`1px solid ${isAdmin?C.accent+"55":C.green+"44"}`,borderRadius:"12px",padding:"2px 7px",fontSize:"0.65rem",color:isAdmin?C.accentLight:C.greenLight,display:"block"}}>{isAdmin?"⚙ ADMIN":"👁 GUEST"}</span>
+                <div style={{color:C.muted,fontSize:"0.65rem",marginTop:"1px"}}>{user.name}</div>
+                <button onClick={onLogout} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.62rem",fontFamily:"Georgia,serif",padding:0,textDecoration:"underline"}}>sign out</button>
               </div>
             </div>
           </div>
-          <div style={{display:"flex",flexWrap:"wrap",padding:"0 22px"}}>
+          {/* Tabs - scrollable on mobile */}
+          <div style={{display:"flex",overflowX:"auto",padding:"0 8px",WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
             {allTabs.map(([k,l])=><button key={k} style={tabSt(k)} onClick={()=>setTab(k)}>{l}</button>)}
           </div>
         </div>
@@ -562,49 +560,52 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
       {note&&<div style={{background:C.accent,color:C.bg,textAlign:"center",padding:"8px",fontSize:"0.85rem",fontWeight:"bold"}}>{note}</div>}
 
-      <div style={{maxWidth:"1020px",margin:"0 auto",padding:"24px 16px"}}>
+      <div style={{maxWidth:"1020px",margin:"0 auto",padding:"16px 10px"}}>
 
         {tab==="standings"&&(
           <div>
-            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Season Standings</h2>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Season Standings</h2>
             {standings.length===0&&<p style={{color:C.muted}}>No players yet{isAdmin?" — add some in the Players tab":"."}!</p>}
-            <div style={{display:"grid",gridTemplateColumns:"38px 1fr 55px 62px 55px 55px 55px 60px",gap:"6px",padding:"0 12px 6px",color:C.muted,fontSize:"0.65rem",letterSpacing:"0.09em",alignItems:"end"}}>
-              <div/><div>PLAYER</div><div style={{textAlign:"center"}}>PTS</div><div style={{textAlign:"center",color:C.blue}}>MVP %</div><div style={{textAlign:"center"}}>WINS</div><div style={{textAlign:"center"}}>ATT</div><div style={{textAlign:"center",color:C.gold}}>SOTD</div><div style={{textAlign:"center"}}>ABS</div>
-            </div>
+            {/* Mobile: simplified card layout */}
             <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
               {standings.map((p,i)=>(
-                <div key={p.id} style={{background:i===0&&p.pts>0?`linear-gradient(135deg,#1e3018,#253d20)`:C.card,border:`1px solid ${i===0&&p.pts>0?C.accent+"55":C.border}`,borderRadius:"9px",padding:"11px 12px",display:"grid",gridTemplateColumns:"38px 1fr 55px 62px 55px 55px 55px 60px",alignItems:"center",gap:"6px"}}>
-                  <div style={{textAlign:"center"}}><Medal rank={i+1}/></div>
-                  <div><span style={{fontWeight:"bold",color:i===0&&p.pts>0?C.accentLight:C.cream,fontSize:"0.9rem"}}>{p.name}</span>{p.joinedWeek>1&&<span style={{fontSize:"0.6rem",color:C.accent,background:C.accent+"22",padding:"1px 5px",borderRadius:"3px",marginLeft:"7px"}}>Wk {p.joinedWeek}</span>}</div>
-                  <div style={{textAlign:"center",color:C.accent,fontWeight:"bold",fontSize:"1rem"}}>{p.pts}</div>
-                  <div style={{textAlign:"center"}}><span style={{color:C.blue,fontWeight:"bold",fontSize:"0.9rem"}}>{p.mvp}{p.mvp!=="—"?"%":""}</span></div>
-                  <div style={{textAlign:"center",color:C.greenLight,fontWeight:"bold"}}>{p.wins}</div>
-                  <div style={{textAlign:"center",color:C.muted}}>{p.weeksAttended}</div>
-                  <div style={{textAlign:"center"}}>{p.sotdTotal>0?<span style={{color:C.gold,fontWeight:"bold"}}>⭐{p.sotdTotal}</span>:<span style={{color:C.muted}}>—</span>}</div>
-                  <div style={{textAlign:"center",color:C.muted,fontSize:"0.85rem"}}>{p.absences}</div>
+                <div key={p.id} style={{background:i===0&&p.pts>0?`linear-gradient(135deg,#1e3018,#253d20)`:C.card,border:`1px solid ${i===0&&p.pts>0?C.accent+"55":C.border}`,borderRadius:"9px",padding:"10px 12px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+                    <Medal rank={i+1}/>
+                    <span style={{fontWeight:"bold",color:i===0&&p.pts>0?C.accentLight:C.cream,fontSize:"0.95rem",flex:1}}>{p.name}</span>
+                    {p.joinedWeek>1&&<span style={{fontSize:"0.6rem",color:C.accent,background:C.accent+"22",padding:"1px 5px",borderRadius:"3px"}}>Wk {p.joinedWeek}</span>}
+                    <span style={{color:C.accent,fontWeight:"bold",fontSize:"1.1rem"}}>{p.pts}</span>
+                  </div>
+                  <div style={{display:"flex",gap:"12px",flexWrap:"wrap"}}>
+                    <span style={{color:C.blue,fontSize:"0.75rem"}}>MVP: {p.mvp}{p.mvp!=="—"?"%":""}</span>
+                    <span style={{color:C.greenLight,fontSize:"0.75rem"}}>Wins: {p.wins}</span>
+                    <span style={{color:C.muted,fontSize:"0.75rem"}}>Att: {p.weeksAttended}</span>
+                    {p.sotdTotal>0&&<span style={{color:C.gold,fontSize:"0.75rem"}}>⭐{p.sotdTotal}</span>}
+                    <span style={{color:C.muted,fontSize:"0.75rem"}}>Abs: {p.absences}</span>
+                  </div>
                 </div>
               ))}
             </div>
-            <p style={{color:C.muted,fontSize:"0.7rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts. Absent/pre-join = 1 pt. Last place = 0 pts.</p>
+            <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts.</p>
           </div>
         )}
 
         {tab==="chart"&&(
           <div>
-            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"10px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Cumulative Points — Season Progress</h2>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"10px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Season Progress</h2>
             {players.length===0&&<p style={{color:C.muted}}>No players yet.</p>}
-            <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"18px",marginTop:"10px"}}>
-              {players.map((p,i)=>{const on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"4px 11px",borderRadius:"20px",border:`1px solid ${on?col:C.border}`,background:on?col+"33":"transparent",color:on?col:C.muted,cursor:"pointer",fontSize:"0.76rem",fontFamily:"Georgia,serif",transition:"all 0.2s"}}>{p.name}</button>;})}
+            <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"14px"}}>
+              {players.map((p,i)=>{const on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"4px 10px",borderRadius:"20px",border:`1px solid ${on?col:C.border}`,background:on?col+"33":"transparent",color:on?col:C.muted,cursor:"pointer",fontSize:"0.74rem",fontFamily:"Georgia,serif"}}>{p.name}</button>;})}
             </div>
-            <div style={{...cardSt,padding:"18px 6px 18px 0"}}>
-              <ResponsiveContainer width="100%" height={340}>
-                <LineChart data={chartData} margin={{top:8,right:22,left:0,bottom:0}}>
+            <div style={{...cardSt,padding:"12px 4px 12px 0"}}>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={chartData} margin={{top:8,right:12,left:0,bottom:0}}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                  <XAxis dataKey="week" tick={{fill:C.muted,fontSize:11,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
-                  <YAxis tick={{fill:C.muted,fontSize:11,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
-                  <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.8rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
-                  <Legend wrapperStyle={{fontFamily:"Georgia,serif",fontSize:"0.76rem",paddingTop:"12px"}}/>
-                  {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={2.5} dot={{r:3}} activeDot={{r:6}}/>)}
+                  <XAxis dataKey="week" tick={{fill:C.muted,fontSize:10,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
+                  <YAxis tick={{fill:C.muted,fontSize:10,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
+                  <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.75rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
+                  <Legend wrapperStyle={{fontFamily:"Georgia,serif",fontSize:"0.7rem",paddingTop:"8px"}}/>
+                  {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={2} dot={{r:2}} activeDot={{r:5}}/>)}
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -613,19 +614,16 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
         {tab==="venues"&&(
           <div>
-            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"20px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
-              📍 Venue Directory
-              {!isAdmin&&<span style={{color:C.muted,fontSize:"0.75rem",fontWeight:"normal",marginLeft:"10px"}}>— anyone can add &amp; review venues</span>}
-            </h2>
-            <div style={{...cardSt,marginBottom:"28px",borderColor:C.green+"55"}}>
-              <h3 style={{color:C.greenLight,fontSize:"0.9rem",letterSpacing:"0.06em",margin:"0 0 16px"}}>ADD NEW VENUE</h3>
-              <div style={{marginBottom:"13px"}}><label style={lbSt}>VENUE NAME</label><input style={inputSt} placeholder="e.g. Riverside Park Lawn" value={venueForm.name} onChange={e=>setVenueForm(f=>({...f,name:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addVenue()}/></div>
-              <div style={{marginBottom:"13px"}}><label style={lbSt}>YOUR RATING</label><StarRating value={venueForm.rating} onChange={r=>setVenueForm(f=>({...f,rating:r}))} size={30}/></div>
-              <div style={{marginBottom:"16px"}}><label style={lbSt}>YOUR COMMENTS</label><textarea style={textareaSt} placeholder="Surface quality, parking, facilities, atmosphere…" value={venueForm.comment} onChange={e=>setVenueForm(f=>({...f,comment:e.target.value}))}/></div>
-              <button style={{...btnSt(C.green,true),width:"100%",padding:"11px"}} onClick={addVenue}>Add Venue</button>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>📍 Venues</h2>
+            <div style={{...cardSt,marginBottom:"20px",borderColor:C.green+"55"}}>
+              <h3 style={{color:C.greenLight,fontSize:"0.85rem",letterSpacing:"0.06em",margin:"0 0 12px"}}>ADD NEW VENUE</h3>
+              <div style={{marginBottom:"10px"}}><label style={lbSt}>VENUE NAME</label><input style={inputSt} placeholder="e.g. Riverside Park Lawn" value={venueForm.name} onChange={e=>setVenueForm(f=>({...f,name:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addVenue()}/></div>
+              <div style={{marginBottom:"10px"}}><label style={lbSt}>YOUR RATING</label><StarRating value={venueForm.rating} onChange={r=>setVenueForm(f=>({...f,rating:r}))} size={28}/></div>
+              <div style={{marginBottom:"12px"}}><label style={lbSt}>YOUR COMMENTS</label><textarea style={textareaSt} placeholder="Surface quality, parking, facilities…" value={venueForm.comment} onChange={e=>setVenueForm(f=>({...f,comment:e.target.value}))}/></div>
+              <button style={{...btnSt(C.green,true),width:"100%",padding:"10px"}} onClick={addVenue}>Add Venue</button>
             </div>
-            {sortedVenues.length===0&&<p style={{color:C.muted}}>No venues yet — be the first to add one!</p>}
-            <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
+            {sortedVenues.length===0&&<p style={{color:C.muted}}>No venues yet!</p>}
+            <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
               {sortedVenues.map((v,i)=>{
                 const reviews=v.reviews||[];
                 const avgRating=v.avgRating||0;
@@ -633,72 +631,65 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 const totalReviews=reviews.length+(v.rating>0?1:0);
                 return(
                   <div key={v.id} style={{...cardSt,border:`1px solid ${i===0&&avgRating>0?C.gold+"44":C.border}`,background:i===0&&avgRating>0?`linear-gradient(135deg,#1e1a0a,#22200e)`:C.card}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
-                        {i===0&&avgRating>0&&<span style={{fontSize:"1.1rem"}}>🏆</span>}
-                        <div>
-                          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"6px"}}>
-                            {v.imageUrl
-                              ? <img src={v.imageUrl} alt={v.name} style={{width:"44px",height:"44px",borderRadius:"7px",objectFit:"cover",border:`1px solid ${C.border}`}}/>
-                              : <div style={{width:"44px",height:"44px",borderRadius:"7px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.3rem"}}>📍</div>
-                            }
-                            <div>
-                              <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"1rem"}}>{v.name}</div>
-                              <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"4px"}}>
-                                <StarRating value={Math.round(avgRating)} size={16}/>
-                                <span style={{color:C.muted,fontSize:"0.74rem"}}>{avgRating>0?`${displayRating}/5`:"Unrated"}{totalReviews>0&&` · ${totalReviews} review${totalReviews!==1?"s":""}`}</span>
-                                {v.timesPlayed>0&&<span style={{color:C.muted,fontSize:"0.74rem"}}>· played {v.timesPlayed}×</span>}
-                              </div>
-                              <label style={{fontSize:"0.7rem",color:C.muted,cursor:"pointer",textDecoration:"underline",marginTop:"4px",display:"block"}}>
-                                {v.imageUrl ? "Change photo" : "Upload photo"}
-                                <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
-                                  const file = e.target.files[0];
-                                  if(!file) return;
-                                  const url = await uploadImage(file);
-                                  update({venues:venues.map(vn=>vn.id===v.id?{...vn,imageUrl:url}:vn)});
-                                }}/>
-                              </label>
-                            </div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"8px",flex:1,minWidth:0}}>
+                        {i===0&&avgRating>0&&<span style={{fontSize:"1rem"}}>🏆</span>}
+                        {v.imageUrl
+                          ? <img src={v.imageUrl} alt={v.name} style={{width:"40px",height:"40px",borderRadius:"6px",objectFit:"cover",flexShrink:0}}/>
+                          : <div style={{width:"40px",height:"40px",borderRadius:"6px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.2rem",flexShrink:0}}>📍</div>
+                        }
+                        <div style={{minWidth:0}}>
+                          <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"0.9rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"2px",flexWrap:"wrap"}}>
+                            <StarRating value={Math.round(avgRating)} size={13}/>
+                            <span style={{color:C.muted,fontSize:"0.7rem"}}>{avgRating>0?`${displayRating}/5`:"Unrated"}{totalReviews>0&&` · ${totalReviews}`}</span>
                           </div>
+                          <label style={{fontSize:"0.68rem",color:C.muted,cursor:"pointer",textDecoration:"underline",display:"block",marginTop:"3px"}}>
+                            {v.imageUrl ? "Change photo" : "Upload photo"}
+                            <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                              const file = e.target.files[0]; if(!file) return;
+                              const url = await uploadImage(file);
+                              update({venues:venues.map(vn=>vn.id===v.id?{...vn,imageUrl:url}:vn)});
+                            }}/>
+                          </label>
                         </div>
                       </div>
-                      <div style={{display:"flex",gap:"7px",flexWrap:"wrap",justifyContent:"flex-end"}}>
-                        <button onClick={()=>{setReviewVenue(v);setReviewForm({rating:0,comment:""}); }} style={{...btnSt(C.green,true),padding:"5px 12px",fontSize:"0.76rem"}}>⭐ Review</button>
+                      <div style={{display:"flex",flexDirection:"column",gap:"5px",marginLeft:"8px",flexShrink:0}}>
+                        <button onClick={()=>{setReviewVenue(v);setReviewForm({rating:0,comment:""}); }} style={{...btnSt(C.green,true),padding:"5px 10px",fontSize:"0.72rem"}}>⭐ Review</button>
                         {isAdmin&&<>
-                          <button onClick={()=>setEditVenue({...v})} style={{...btnSt(C.blue,true),padding:"5px 12px",fontSize:"0.76rem"}}>Edit</button>
-                          <button onClick={()=>removeVenue(v.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"5px",padding:"5px 10px",cursor:"pointer",fontSize:"0.76rem",fontFamily:"Georgia,serif"}}>Remove</button>
+                          <button onClick={()=>setEditVenue({...v})} style={{...btnSt(C.blue,true),padding:"5px 10px",fontSize:"0.72rem"}}>Edit</button>
+                          <button onClick={()=>removeVenue(v.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"5px",padding:"5px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>
                         </>}
                       </div>
                     </div>
                     {v.comment&&(
-                      <div style={{background:C.surface,borderRadius:"6px",padding:"10px 13px",borderLeft:`3px solid ${C.accent}55`,marginBottom:"12px"}}>
-                        <div style={{color:C.accent,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"4px"}}>OFFICIAL NOTES</div>
-                        <p style={{margin:0,color:C.muted,fontSize:"0.82rem",lineHeight:"1.6",fontStyle:"italic"}}>"{v.comment}"</p>
+                      <div style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",borderLeft:`3px solid ${C.accent}55`,marginBottom:"10px"}}>
+                        <p style={{margin:0,color:C.muted,fontSize:"0.78rem",lineHeight:"1.5",fontStyle:"italic"}}>"{v.comment}"</p>
                       </div>
                     )}
                     {reviews.length>0&&(
                       <div>
-                        <div style={{color:C.muted,fontSize:"0.67rem",letterSpacing:"0.1em",marginBottom:"8px"}}>MEMBER REVIEWS</div>
-                        <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                        <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"6px"}}>MEMBER REVIEWS</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
                           {reviews.map(r=>(
-                            <div key={r.id} style={{background:C.surface,borderRadius:"7px",padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"10px"}}>
+                            <div key={r.id} style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
                               <div style={{flex:1}}>
-                                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-                                  <span style={{color:C.cream,fontSize:"0.82rem",fontWeight:"bold"}}>{r.author}</span>
-                                  <StarRating value={r.rating} size={13}/>
-                                  <span style={{color:C.muted,fontSize:"0.71rem"}}>{r.date}</span>
+                                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px",flexWrap:"wrap"}}>
+                                  <span style={{color:C.cream,fontSize:"0.8rem",fontWeight:"bold"}}>{r.author}</span>
+                                  <StarRating value={r.rating} size={11}/>
+                                  <span style={{color:C.muted,fontSize:"0.68rem"}}>{r.date}</span>
                                 </div>
-                                {r.comment&&<p style={{margin:0,color:C.muted,fontSize:"0.8rem",lineHeight:"1.5",fontStyle:"italic"}}>"{r.comment}"</p>}
+                                {r.comment&&<p style={{margin:0,color:C.muted,fontSize:"0.76rem",lineHeight:"1.4",fontStyle:"italic"}}>"{r.comment}"</p>}
                               </div>
                               {(isAdmin||r.author===user.name)&&(
-                                <button onClick={()=>deleteReview(v.id,r.id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif",padding:"2px 6px",flexShrink:0}}>✕</button>
+                                <button onClick={()=>deleteReview(v.id,r.id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif",padding:"2px 4px",flexShrink:0}}>✕</button>
                               )}
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
-                    {reviews.length===0&&!v.comment&&<p style={{margin:0,color:C.border,fontSize:"0.78rem",fontStyle:"italic"}}>No reviews yet — click ⭐ Review to be the first!</p>}
+                    {reviews.length===0&&!v.comment&&<p style={{margin:0,color:C.border,fontSize:"0.74rem",fontStyle:"italic"}}>No reviews yet — be the first!</p>}
                   </div>
                 );
               })}
@@ -708,41 +699,38 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
         {tab==="vote"&&(()=>{
           const alreadyVoted = !!votes[user.name];
-          const canSeeResults = isAdmin || alreadyVoted;
           const logoResults = runRCV(LOGO_ENTRIES, votes, "logo");
           const mottoResults = runRCV(MOTTO_ENTRIES, votes, "motto");
           const totalVoters = Object.keys(votes).length;
 
           const Results = () => (
             <div>
-              <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",marginBottom:"16px"}}>LIVE RESULTS — LOGO</h3>
-              <div style={{display:"flex",flexWrap:"wrap",gap:"12px",marginBottom:"28px"}}>
+              <h3 style={{color:C.accentLight,fontSize:"0.9rem",letterSpacing:"0.06em",marginBottom:"12px"}}>LIVE RESULTS — LOGO</h3>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"20px"}}>
                 {logoResults.map((e,i)=>(
-                  <div key={e.id} style={{...cardSt,padding:"10px",textAlign:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
-                    <img src={e.url} alt="" onClick={()=>setLightbox(e.url)} style={{width:"80px",height:"80px",objectFit:"cover",borderRadius:"6px",display:"block",marginBottom:"6px",cursor:"pointer"}}/>
-                    <div style={{color:i===0?C.gold:C.muted,fontSize:"0.75rem",fontWeight:i===0?"bold":"normal"}}>{i===0?"🏆 ":""}{e.votes} vote{e.votes!==1?"s":""}</div>
-                    {e.eliminated&&<div style={{color:C.red,fontSize:"0.65rem"}}>eliminated</div>}
+                  <div key={e.id} style={{...cardSt,padding:"8px",textAlign:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
+                    <img src={e.url} alt="" onClick={()=>setLightbox(e.url)} style={{width:"70px",height:"70px",objectFit:"cover",borderRadius:"6px",display:"block",marginBottom:"4px",cursor:"pointer"}}/>
+                    <div style={{color:i===0?C.gold:C.muted,fontSize:"0.7rem",fontWeight:i===0?"bold":"normal"}}>{i===0?"🏆 ":""}{e.votes}v</div>
                   </div>
                 ))}
               </div>
-              <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",marginBottom:"12px"}}>LIVE RESULTS — MOTTO</h3>
-              <div style={{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"28px"}}>
+              <h3 style={{color:C.accentLight,fontSize:"0.9rem",letterSpacing:"0.06em",marginBottom:"10px"}}>LIVE RESULTS — MOTTO</h3>
+              <div style={{display:"flex",flexDirection:"column",gap:"6px",marginBottom:"20px"}}>
                 {mottoResults.map((e,i)=>(
-                  <div key={e.id} style={{...cardSt,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
-                    <span style={{color:i===0?C.gold:C.cream,fontSize:"0.88rem"}}>{i===0?"🏆 ":""}{e.text}</span>
-                    <span style={{color:C.muted,fontSize:"0.8rem",marginLeft:"12px",whiteSpace:"nowrap"}}>{e.votes} vote{e.votes!==1?"s":""}</span>
+                  <div key={e.id} style={{...cardSt,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
+                    <span style={{color:i===0?C.gold:C.cream,fontSize:"0.82rem"}}>{i===0?"🏆 ":""}{e.text}</span>
+                    <span style={{color:C.muted,fontSize:"0.75rem",marginLeft:"8px",whiteSpace:"nowrap"}}>{e.votes}v</span>
                   </div>
                 ))}
               </div>
               {isAdmin&&totalVoters>0&&(
                 <div style={{...cardSt,borderColor:C.red+"44"}}>
-                  <h3 style={{color:C.red,fontSize:"0.85rem",letterSpacing:"0.06em",margin:"0 0 12px"}}>⚙ ADMIN — MANAGE VOTES</h3>
+                  <h3 style={{color:C.red,fontSize:"0.82rem",letterSpacing:"0.06em",margin:"0 0 10px"}}>⚙ MANAGE VOTES</h3>
                   <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
                     {Object.entries(votes).map(([name,v])=>(
-                      <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.surface,borderRadius:"6px"}}>
-                        <span style={{color:C.cream,fontSize:"0.85rem"}}>{name}</span>
-                        <span style={{color:C.muted,fontSize:"0.75rem",marginRight:"12px"}}>{new Date(v.submittedAt).toLocaleDateString()}</span>
-                        <button onClick={()=>{const nv={...votes};delete nv[name];update({votes:nv});notify(`Vote from ${name} deleted.`);}} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 10px",cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif"}}>Delete</button>
+                      <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",background:C.surface,borderRadius:"6px"}}>
+                        <span style={{color:C.cream,fontSize:"0.82rem"}}>{name}</span>
+                        <button onClick={()=>{const nv={...votes};delete nv[name];update({votes:nv});notify(`Vote from ${name} deleted.`);}} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Delete</button>
                       </div>
                     ))}
                   </div>
@@ -767,42 +755,40 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             return (
               <div>
                 {ranking.length>0&&(
-                  <div style={{marginBottom:"16px"}}>
-                    <div style={{color:C.accent,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"8px"}}>YOUR RANKING</div>
+                  <div style={{marginBottom:"14px"}}>
+                    <div style={{color:C.accent,fontSize:"0.68rem",letterSpacing:"0.1em",marginBottom:"6px"}}>YOUR RANKING</div>
                     {ranking.map((id,i)=>{
                       const entry=entries.find(e=>e.id===id);
                       if(!entry) return null;
                       return(
-                        <div key={id} style={{...cardSt,padding:"10px 12px",marginBottom:"6px",display:"flex",alignItems:"center",gap:"10px",border:`1px solid ${C.accent}44`}}>
-                          <span style={{color:C.accent,fontWeight:"bold",fontSize:"1rem",minWidth:"24px"}}>#{i+1}</span>
+                        <div key={id} style={{...cardSt,padding:"8px 10px",marginBottom:"5px",display:"flex",alignItems:"center",gap:"8px",border:`1px solid ${C.accent}44`}}>
+                          <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.9rem",minWidth:"22px"}}>#{i+1}</span>
                           {type==="logo"
-                            ? <img src={entry.url} alt={`Logo ${id}`} onClick={()=>setLightbox(entry.url)} style={{width:"60px",height:"60px",objectFit:"cover",borderRadius:"6px",cursor:"pointer"}}/>
-                            : <span style={{color:C.cream,fontSize:"0.88rem",flex:1}}>{entry.text}</span>
+                            ? <img src={entry.url} alt={`Logo ${id}`} onClick={()=>setLightbox(entry.url)} style={{width:"50px",height:"50px",objectFit:"cover",borderRadius:"5px",cursor:"pointer"}}/>
+                            : <span style={{color:C.cream,fontSize:"0.82rem",flex:1}}>{entry.text}</span>
                           }
-                          <div style={{display:"flex",flexDirection:"column",gap:"3px",marginLeft:"auto"}}>
-                            <button onClick={()=>move(id,-1)} disabled={i===0} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.8rem"}}>▲</button>
-                            <button onClick={()=>move(id,1)} disabled={i===ranking.length-1} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.8rem"}}>▼</button>
+                          <div style={{display:"flex",flexDirection:"column",gap:"2px",marginLeft:"auto"}}>
+                            <button onClick={()=>move(id,-1)} disabled={i===0} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"3px",padding:"1px 7px",cursor:"pointer",fontSize:"0.8rem"}}>▲</button>
+                            <button onClick={()=>move(id,1)} disabled={i===ranking.length-1} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"3px",padding:"1px 7px",cursor:"pointer",fontSize:"0.8rem"}}>▼</button>
                           </div>
-                          <button onClick={()=>removeFromRanking(id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.75rem"}}>✕</button>
+                          <button onClick={()=>removeFromRanking(id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 7px",cursor:"pointer",fontSize:"0.72rem"}}>✕</button>
                         </div>
                       );
                     })}
                   </div>
                 )}
-                <div style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"8px"}}>
-                  {ranking.length===0?"CLICK TO RANK (in order of preference)":"UNRANKED — click to add to your ranking"}
+                <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"8px"}}>
+                  {ranking.length===0?"TAP TO RANK (in order of preference)":"UNRANKED — tap to add to your ranking"}
                 </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"10px"}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
                   {unranked.map(entry=>(
                     <div key={entry.id} onClick={()=>addToRanking(entry.id)}
-                      style={{cursor:"pointer",border:`1px solid ${C.border}`,borderRadius:"8px",overflow:"hidden",transition:"border-color 0.2s",background:C.surface}}
-                      onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-                      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                      style={{cursor:"pointer",border:`1px solid ${C.border}`,borderRadius:"8px",overflow:"hidden",background:C.surface}}>
                       {type==="logo"
-                        ? <img src={entry.url} alt={`Logo ${entry.id}`} onClick={(ev)=>{ev.stopPropagation();setLightbox(entry.url);}} style={{width:"100px",height:"100px",objectFit:"cover",display:"block"}}/>
-                        : <div style={{padding:"12px 16px",color:C.cream,fontSize:"0.85rem",maxWidth:"220px"}}>{entry.text}</div>
+                        ? <img src={entry.url} alt={`Logo ${entry.id}`} onClick={(ev)=>{ev.stopPropagation();setLightbox(entry.url);}} style={{width:"85px",height:"85px",objectFit:"cover",display:"block"}}/>
+                        : <div style={{padding:"10px 12px",color:C.cream,fontSize:"0.8rem",maxWidth:"200px"}}>{entry.text}</div>
                       }
-                      {type==="logo"&&<div style={{textAlign:"center",padding:"4px",color:C.muted,fontSize:"0.7rem"}}>+ rank</div>}
+                      {type==="logo"&&<div style={{textAlign:"center",padding:"3px",color:C.muted,fontSize:"0.65rem"}}>+ rank</div>}
                     </div>
                   ))}
                 </div>
@@ -814,36 +800,34 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             <div>
               {lightbox&&(
                 <div onClick={()=>setLightbox(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                  <img src={lightbox} alt="Full size" style={{maxWidth:"90vw",maxHeight:"90vh",objectFit:"contain",borderRadius:"8px"}}/>
-                  <div style={{position:"absolute",top:"20px",right:"24px",color:"white",fontSize:"1.5rem"}}>✕</div>
+                  <img src={lightbox} alt="Full size" style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:"8px"}}/>
+                  <div style={{position:"absolute",top:"16px",right:"16px",color:"white",fontSize:"1.5rem"}}>✕</div>
                 </div>
               )}
-              <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"6px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
-                🗳 Vote — 2026 Logo & Motto
-              </h2>
-              <p style={{color:C.muted,fontSize:"0.78rem",marginBottom:"20px"}}>{totalVoters} member{totalVoters!==1?"s":""} have voted so far.</p>
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"4px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>🗳 Vote — 2026 Logo & Motto</h2>
+              <p style={{color:C.muted,fontSize:"0.75rem",marginBottom:"16px"}}>{totalVoters} member{totalVoters!==1?"s":""} have voted so far.</p>
               {alreadyVoted ? (
                 <div>
-                  <div style={{...cardSt,borderColor:C.green+"55",background:"#0d1f0d",marginBottom:"24px",padding:"16px 20px"}}>
+                  <div style={{...cardSt,borderColor:C.green+"55",background:"#0d1f0d",marginBottom:"20px",padding:"14px 16px"}}>
                     <p style={{color:C.greenLight,margin:0,fontWeight:"bold"}}>✓ Your vote has been recorded!</p>
-                    <p style={{color:C.muted,fontSize:"0.8rem",margin:"6px 0 0"}}>Voting is locked — one vote per member.</p>
+                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"4px 0 0"}}>Voting is locked — one vote per member.</p>
                   </div>
                   <Results/>
                 </div>
               ) : (
                 <div>
-                  {isAdmin&&<div style={{marginBottom:"24px"}}><Results/><hr style={{borderColor:C.border,margin:"24px 0"}}/></div>}
-                  <div style={{...cardSt,marginBottom:"28px"}}>
-                    <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",margin:"0 0 14px"}}>STEP 1 — RANK THE LOGOS</h3>
-                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 16px",lineHeight:"1.6"}}>Click logos to add them to your ranking. Use ▲▼ to reorder. Click image to enlarge.</p>
+                  {isAdmin&&<div style={{marginBottom:"20px"}}><Results/><hr style={{borderColor:C.border,margin:"20px 0"}}/></div>}
+                  <div style={{...cardSt,marginBottom:"20px"}}>
+                    <h3 style={{color:C.accentLight,fontSize:"0.88rem",letterSpacing:"0.06em",margin:"0 0 10px"}}>STEP 1 — RANK THE LOGOS</h3>
+                    <p style={{color:C.muted,fontSize:"0.75rem",margin:"0 0 12px",lineHeight:"1.5"}}>Tap logos to rank them. Use ▲▼ to reorder. Tap image to enlarge.</p>
                     <RankList entries={LOGO_ENTRIES} ranking={logoRanking} setRanking={setLogoRanking} type="logo"/>
                   </div>
-                  <div style={{...cardSt,marginBottom:"28px"}}>
-                    <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",margin:"0 0 14px"}}>STEP 2 — RANK THE MOTTOS</h3>
-                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 16px",lineHeight:"1.6"}}>Click mottos to add them to your ranking. Use ▲▼ to reorder.</p>
+                  <div style={{...cardSt,marginBottom:"20px"}}>
+                    <h3 style={{color:C.accentLight,fontSize:"0.88rem",letterSpacing:"0.06em",margin:"0 0 10px"}}>STEP 2 — RANK THE MOTTOS</h3>
+                    <p style={{color:C.muted,fontSize:"0.75rem",margin:"0 0 12px",lineHeight:"1.5"}}>Tap mottos to rank them. Use ▲▼ to reorder.</p>
                     <RankList entries={MOTTO_ENTRIES} ranking={mottoRanking} setRanking={setMottoRanking} type="motto"/>
                   </div>
-                  <button onClick={submitVote} style={{...btnSt(),padding:"13px 36px",fontSize:"0.95rem"}}>Submit My Vote 🗳</button>
+                  <button onClick={submitVote} style={{...btnSt(),padding:"12px 32px",fontSize:"0.9rem",width:"100%"}}>Submit My Vote 🗳</button>
                 </div>
               )}
             </div>
@@ -852,88 +836,79 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
         {tab==="record"&&isAdmin&&(
           <div>
-            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
-            <div style={{...cardSt,marginBottom:"16px"}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px"}}>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
+            <div style={{...cardSt,marginBottom:"12px"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
                 <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
                 <div><label style={lbSt}>📍 VENUE</label><select style={inputSt} value={gameVenue} onChange={e=>setGameVenue(e.target.value)}>{venues.map(v=><option key={v.id}>{v.name}</option>)}</select></div>
                 <div><label style={lbSt}>DATE</label><input style={inputSt} type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}/></div>
               </div>
             </div>
-            <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
-              <p style={{margin:0,color:C.muted,fontSize:"0.77rem",lineHeight:"1.7"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. <strong style={{color:C.accentLight}}>Absences are automatic</strong> — eligible players not in a group get 1 pt on submit.</p>
+            <div style={{...cardSt,marginBottom:"12px",background:C.surface}}>
+              <p style={{margin:0,color:C.muted,fontSize:"0.75rem",lineHeight:"1.6"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. Absent players get 1 pt automatically.</p>
             </div>
             {absentPreview.length>0&&(
-              <div style={{...cardSt,marginBottom:"16px",borderColor:C.red+"44",background:"#1a0f0f"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}><span style={{color:C.red,fontSize:"0.8rem"}}>◌</span><span style={{color:C.red,fontSize:"0.8rem",fontWeight:"bold",letterSpacing:"0.06em"}}>WILL BE MARKED ABSENT</span></div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>{absentPreview.map(name=><span key={name} style={{background:C.red+"22",border:`1px solid ${C.red}44`,color:C.red,borderRadius:"4px",padding:"3px 9px",fontSize:"0.8rem"}}>{name}</span>)}</div>
-                <p style={{margin:"8px 0 0",color:C.muted,fontSize:"0.74rem"}}>Add them to a group to include in this week's scoring.</p>
+              <div style={{...cardSt,marginBottom:"12px",borderColor:C.red+"44",background:"#1a0f0f"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"6px"}}><span style={{color:C.red,fontSize:"0.8rem"}}>◌</span><span style={{color:C.red,fontSize:"0.78rem",fontWeight:"bold"}}>WILL BE MARKED ABSENT</span></div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>{absentPreview.map(name=><span key={name} style={{background:C.red+"22",border:`1px solid ${C.red}44`,color:C.red,borderRadius:"4px",padding:"2px 8px",fontSize:"0.78rem"}}>{name}</span>)}</div>
               </div>
             )}
             {groups.map((grp,gi)=>(
-              <div key={grp.id} style={{...cardSt,marginBottom:"12px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
-                  <span style={{color:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>Group {gi+1}</span>
-                  <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
-                    <span style={{color:C.muted,fontSize:"0.73rem"}}>{grp.players.filter(r=>r.playerId&&r.position).length} players</span>
-                    {groups.length>1&&<button onClick={()=>removeGroup(grp.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"5px",padding:"3px 8px",cursor:"pointer",fontSize:"0.73rem",fontFamily:"Georgia,serif"}}>Remove</button>}
-                  </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 120px 60px 26px",gap:"7px",marginBottom:"5px"}}>
-                  <div style={{color:C.muted,fontSize:"0.67rem",letterSpacing:"0.08em"}}>PLAYER</div><div style={{color:C.muted,fontSize:"0.67rem",letterSpacing:"0.08em"}}>POSITION</div><div style={{color:C.muted,fontSize:"0.67rem",letterSpacing:"0.08em"}}>PTS</div><div/>
+              <div key={grp.id} style={{...cardSt,marginBottom:"10px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                  <span style={{color:C.accentLight,fontWeight:"bold",fontSize:"0.85rem"}}>Group {gi+1}</span>
+                  {groups.length>1&&<button onClick={()=>removeGroup(grp.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>}
                 </div>
                 {grp.players.map((row,ri)=>{
                   const pts=row.position?calcPoints(parseInt(row.position),grp.players.length):"—";
                   return(
-                    <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 120px 60px 26px",gap:"7px",marginBottom:"6px",alignItems:"center"}}>
-                      <select style={inputSt} value={row.playerId} onChange={e=>updateGroupRow(grp.id,ri,"playerId",e.target.value)}><option value="">Select player…</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                    <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 100px 40px 26px",gap:"6px",marginBottom:"6px",alignItems:"center"}}>
+                      <select style={inputSt} value={row.playerId} onChange={e=>updateGroupRow(grp.id,ri,"playerId",e.target.value)}><option value="">Player…</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
                       <select style={inputSt} value={row.position} onChange={e=>updateGroupRow(grp.id,ri,"position",e.target.value)}><option value="">Place…</option>{Array.from({length:grp.players.length},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}{n===1?"st":n===2?"nd":n===3?"rd":"th"}</option>)}</select>
-                      <div style={{textAlign:"center",color:C.accent,fontWeight:"bold"}}>{pts}</div>
+                      <div style={{textAlign:"center",color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{pts}</div>
                       <button onClick={()=>removeRowFromGroup(grp.id,ri)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"1rem",padding:"2px"}}>✕</button>
                     </div>
                   );
                 })}
-                <button onClick={()=>addRowToGroup(grp.id)} style={{...btnSt(C.green,true),padding:"6px 12px",fontSize:"0.77rem",marginTop:"4px"}}>+ Add Player</button>
+                <button onClick={()=>addRowToGroup(grp.id)} style={{...btnSt(C.green,true),padding:"6px 12px",fontSize:"0.75rem",marginTop:"4px"}}>+ Add Player</button>
               </div>
             ))}
-            <button onClick={addGroup} style={{...btnSt(C.blue,true),marginBottom:"20px"}}>+ Add Group</button>
-            <div style={{...cardSt,marginBottom:"20px",borderColor:C.gold+"55"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px"}}><span style={{fontSize:"1.1rem"}}>⭐</span><span style={{color:C.gold,fontWeight:"bold",fontSize:"0.9rem"}}>Shot of the Day (SOTD)</span><span style={{color:C.muted,fontSize:"0.75rem"}}>— each award = +1 bonus pt</span></div>
+            <button onClick={addGroup} style={{...btnSt(C.blue,true),marginBottom:"16px"}}>+ Add Group</button>
+            <div style={{...cardSt,marginBottom:"16px",borderColor:C.gold+"55"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"10px"}}><span style={{fontSize:"1rem"}}>⭐</span><span style={{color:C.gold,fontWeight:"bold",fontSize:"0.85rem"}}>Shot of the Day</span><span style={{color:C.muted,fontSize:"0.72rem"}}>+1 bonus pt each</span></div>
               {sotdEntries.map((row,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 100px 26px",gap:"8px",marginBottom:"7px",alignItems:"center"}}>
-                  <select style={inputSt} value={row.playerId} onChange={e=>updateSotdRow(i,"playerId",e.target.value)}><option value="">Select player…</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 26px",gap:"6px",marginBottom:"6px",alignItems:"center"}}>
+                  <select style={inputSt} value={row.playerId} onChange={e=>updateSotdRow(i,"playerId",e.target.value)}><option value="">Player…</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
                   <input style={inputSt} type="number" min="1" max="10" value={row.count} onChange={e=>updateSotdRow(i,"count",e.target.value)} placeholder="# awards"/>
                   <button onClick={()=>removeSotdRow(i)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"1rem",padding:"2px"}}>✕</button>
                 </div>
               ))}
-              <button onClick={addSotdRow} style={{...btnSt(C.gold),padding:"6px 12px",fontSize:"0.77rem",marginTop:"2px"}}>+ Add SOTD Award</button>
+              <button onClick={addSotdRow} style={{...btnSt(C.gold),padding:"6px 12px",fontSize:"0.75rem"}}>+ Add SOTD</button>
             </div>
-            <button onClick={submitGames} style={{...btnSt(),padding:"12px 32px",fontSize:"0.9rem"}}>Submit Week {gameWeek} Results</button>
+            <button onClick={submitGames} style={{...btnSt(),padding:"12px",fontSize:"0.9rem",width:"100%"}}>Submit Week {gameWeek} Results</button>
           </div>
         )}
 
         {tab==="history"&&isAdmin&&(
           <div>
-            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Score History — click any entry to edit</h2>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Score History — tap to edit</h2>
             {players.length===0&&<p style={{color:C.muted}}>No data yet.</p>}
             {Array.from({length:maxWk},(_,i)=>maxWk-i).map(wk=>{
               const hasData=players.some(p=>(weeklyGames[p.id]?.[wk]||[]).length>0);
               if(!hasData) return null;
               return(
-                <div key={wk} style={{marginBottom:"18px"}}>
-                  <div style={{color:C.accentLight,fontSize:"0.82rem",fontWeight:"bold",letterSpacing:"0.1em",marginBottom:"8px"}}>WEEK {wk}</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+                <div key={wk} style={{marginBottom:"16px"}}>
+                  <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",letterSpacing:"0.1em",marginBottom:"6px"}}>WEEK {wk}</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
                     {players.map(p=>(weeklyGames[p.id]?.[wk]||[]).map((g,gi)=>(
                       <div key={`${p.id}-${gi}`} onClick={()=>openEdit(p.id,wk,gi,g)}
-                        style={{...cardSt,padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 80px 70px 70px 60px 60px",alignItems:"center",gap:"8px",cursor:"pointer",transition:"border-color 0.15s"}}
-                        onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent+"77"}
-                        onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-                        <span style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>{p.name}</span>
-                        <span style={{color:C.muted,fontSize:"0.76rem",background:C.surface,padding:"2px 7px",borderRadius:"4px",textAlign:"center"}}>{g.label}</span>
-                        <span style={{textAlign:"center",color:C.muted,fontSize:"0.76rem"}}>{g.absent?"Absent":g.position?`${g.position}${[,"st","nd","rd"][g.position]||"th"} / ${g.groupSize}`:"—"}</span>
-                        <span style={{textAlign:"center",color:C.accent,fontWeight:"bold"}}>{g.pts} pts</span>
-                        <span style={{textAlign:"center",color:g.sotd>0?C.gold:C.muted,fontSize:"0.84rem"}}>{g.sotd>0?`⭐+${g.sotd}`:"—"}</span>
-                        <span style={{textAlign:"right",color:C.muted,fontSize:"0.72rem"}}>✎ edit</span>
+                        style={{...cardSt,padding:"9px 12px",display:"flex",alignItems:"center",gap:"8px",cursor:"pointer"}}>
+                        <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold",flex:1}}>{p.name}</span>
+                        <span style={{color:C.muted,fontSize:"0.72rem",background:C.surface,padding:"1px 6px",borderRadius:"4px"}}>{g.label}</span>
+                        <span style={{color:C.muted,fontSize:"0.72rem"}}>{g.absent?"Absent":g.position?`${g.position}/${g.groupSize}`:"—"}</span>
+                        <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{g.pts}pt</span>
+                        {g.sotd>0&&<span style={{color:C.gold,fontSize:"0.78rem"}}>⭐+{g.sotd}</span>}
+                        <span style={{color:C.muted,fontSize:"0.7rem"}}>✎</span>
                       </div>
                     )))}
                   </div>
@@ -944,45 +919,44 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         )}
 
         {tab==="players"&&isAdmin&&(
-          <div style={{maxWidth:"460px"}}>
-            <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Manage Players</h2>
-            <div style={{...cardSt,marginBottom:"16px"}}>
-              <p style={{color:C.muted,fontSize:"0.8rem",margin:"0 0 13px",lineHeight:"1.6"}}>Mid-season joiners get <strong style={{color:C.accent}}>1 pt</strong> auto-assigned for pre-join weeks.</p>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 100px",gap:"10px",marginBottom:"10px"}}>
-                <div><label style={lbSt}>PLAYER NAME</label><input style={inputSt} placeholder="Full name…" value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addPlayer()}/></div>
-                <div><label style={lbSt}>JOINED WEEK</label><select style={inputSt} value={newWeek} onChange={e=>setNewWeek(parseInt(e.target.value))}>{weekOptions.map(w=><option key={w} value={w}>Wk {w}</option>)}</select></div>
+          <div>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Manage Players</h2>
+            <div style={{...cardSt,marginBottom:"14px"}}>
+              <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 10px",lineHeight:"1.5"}}>Mid-season joiners get <strong style={{color:C.accent}}>1 pt</strong> auto-assigned for pre-join weeks.</p>
+              <div style={{display:"flex",gap:"8px",marginBottom:"8px"}}>
+                <div style={{flex:1}}><label style={lbSt}>PLAYER NAME</label><input style={inputSt} placeholder="Full name…" value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addPlayer()}/></div>
+                <div style={{width:"90px"}}><label style={lbSt}>JOINED WK</label><select style={inputSt} value={newWeek} onChange={e=>setNewWeek(parseInt(e.target.value))}>{weekOptions.map(w=><option key={w} value={w}>Wk {w}</option>)}</select></div>
               </div>
-              <button style={{...btnSt(),width:"100%",padding:"11px"}} onClick={addPlayer}>Add Player to League</button>
+              <button style={{...btnSt(),width:"100%",padding:"10px"}} onClick={addPlayer}>Add Player</button>
             </div>
             {players.length===0&&<p style={{color:C.muted,fontSize:"0.84rem"}}>No players yet!</p>}
-            <div style={{display:"flex",flexDirection:"column",gap:"7px"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
               {players.map(p=>(
-                <div key={p.id} style={{...cardSt,padding:"11px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                <div key={p.id} style={{...cardSt,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
                     {p.imageUrl
-                      ? <img src={p.imageUrl} alt={p.name} style={{width:"38px",height:"38px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.accent}`}}/>
-                      : <div style={{width:"38px",height:"38px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.1rem"}}>👤</div>
+                      ? <img src={p.imageUrl} alt={p.name} style={{width:"36px",height:"36px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.accent}`}}/>
+                      : <div style={{width:"36px",height:"36px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1rem"}}>👤</div>
                     }
                     <div>
-                      <span style={{color:C.cream,fontSize:"0.9rem"}}>{p.name}</span>
-                      {p.joinedWeek>1&&<span style={{fontSize:"0.63rem",color:C.accent,background:C.accent+"22",padding:"1px 6px",borderRadius:"3px",marginLeft:"7px"}}>Wk {p.joinedWeek}</span>}
-                      <div>
-                        <label style={{fontSize:"0.7rem",color:C.muted,cursor:"pointer",textDecoration:"underline"}}>
-                          {p.imageUrl ? "Change photo" : "Upload photo"}
-                          <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
-                            const file = e.target.files[0];
-                            if(!file) return;
-                            const url = await uploadImage(file);
-                            const newPlayers = players.map(pl=>pl.id===p.id?{...pl,imageUrl:url}:pl);
-                            persist({...appState,players:newPlayers});
-                          }}/>
-                        </label>
+                      <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                        <span style={{color:C.cream,fontSize:"0.88rem"}}>{p.name}</span>
+                        {p.joinedWeek>1&&<span style={{fontSize:"0.6rem",color:C.accent,background:C.accent+"22",padding:"1px 5px",borderRadius:"3px"}}>Wk {p.joinedWeek}</span>}
                       </div>
+                      <label style={{fontSize:"0.68rem",color:C.muted,cursor:"pointer",textDecoration:"underline"}}>
+                        {p.imageUrl ? "Change photo" : "Upload photo"}
+                        <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                          const file = e.target.files[0]; if(!file) return;
+                          const url = await uploadImage(file);
+                          const newPlayers = players.map(pl=>pl.id===p.id?{...pl,imageUrl:url}:pl);
+                          persist({...appState,players:newPlayers});
+                        }}/>
+                      </label>
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:"10px",alignItems:"center"}}>
-                    <span style={{color:C.muted,fontSize:"0.8rem"}}>{totalPts(p.id,weeklyGames)} pts</span>
-                    <button onClick={()=>removePlayer(p.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"5px",padding:"3px 9px",cursor:"pointer",fontSize:"0.74rem",fontFamily:"Georgia,serif"}}>Remove</button>
+                  <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                    <span style={{color:C.muted,fontSize:"0.78rem"}}>{totalPts(p.id,weeklyGames)}pt</span>
+                    <button onClick={()=>removePlayer(p.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>
                   </div>
                 </div>
               ))}
