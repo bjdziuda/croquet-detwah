@@ -861,7 +861,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
             </div>
             <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
-                      return(
+              <p style={{margin:0,color:C.muted,fontSize:"0.77rem",lineHeight:"1.7"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. <strong style={{color:C.accentLight}}>Absences are automatic</strong> — eligible players not in a group get 1 pt on submit.</p>
+            </div>
                         <div key={id} style={{...cardSt,padding:"10px 12px",marginBottom:"6px",display:"flex",alignItems:"center",gap:"10px",border:`1px solid ${C.accent}44`}}>
                           <span style={{color:C.accent,fontWeight:"bold",fontSize:"1rem",minWidth:"24px"}}>#{i+1}</span>
                           {type==="logo"
@@ -893,13 +894,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       }
                     </div>
                   ))}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"12px"}}>
-                <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
-                <div><label style={lbSt}>📍 VENUE</label><select style={inputSt} value={gameVenue} onChange={e=>setGameVenue(e.target.value)}>{venues.map(v=><option key={v.id}>{v.name}</option>)}</select></div>
-                <div><label style={lbSt}>DATE</label><input style={inputSt} type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}/></div>
-              </div>
-            </div>
-            <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
+                <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
               <p style={{margin:0,color:C.muted,fontSize:"0.77rem",lineHeight:"1.7"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. <strong style={{color:C.accentLight}}>Absences are automatic</strong> — eligible players not in a group get 1 pt on submit.</p>
             </div>
             {absentPreview.length>0&&(
