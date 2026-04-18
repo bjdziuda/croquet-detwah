@@ -751,7 +751,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           );
 
-          
+          const RankList = ({entries, ranking, setRanking, type}) => {
+            const unranked = entries.filter(e=>!ranking.includes(e.id));
             const move = (id, dir) => {
               const idx = ranking.indexOf(id);
               if(idx===-1) return;
@@ -850,7 +851,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         })()}
 
         {tab==="record"&&isAdmin&&(
-              const idx = ranking.indexOf(id);
               if(idx===-1) return;
               const next = [...ranking];
               const swap = idx+dir;
@@ -903,37 +903,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 </div>
               </div>
             );
-          };
-
-          
-                <div>
-                  <div style={{...cardSt,borderColor:C.green+"55",background:"#0d1f0d",marginBottom:"24px",padding:"16px 20px"}}>
-                    <p style={{color:C.greenLight,margin:0,fontWeight:"bold"}}>✓ Your vote has been recorded!</p>
-                    <p style={{color:C.muted,fontSize:"0.8rem",margin:"6px 0 0"}}>Voting is locked — one vote per member.</p>
-                  </div>
-                  <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",marginBottom:"16px"}}>LIVE RESULTS — LOGO</h3>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:"12px",marginBottom:"28px"}}>
-                    {logoResults.map((e,i)=>(
-                      <div key={e.id} style={{...cardSt,padding:"10px",textAlign:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
-                        <img src={e.url} alt="" style={{width:"80px",height:"80px",objectFit:"cover",borderRadius:"6px",display:"block",marginBottom:"6px"}}/>
-                        <div style={{color:i===0?C.gold:C.muted,fontSize:"0.75rem",fontWeight:i===0?"bold":"normal"}}>{i===0?"🏆 ":""}{e.votes} vote{e.votes!==1?"s":""}</div>
-                        {e.eliminated&&<div style={{color:C.red,fontSize:"0.65rem"}}>eliminated</div>}
-                      </div>
-                    ))}
-                  </div>
-                  <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",marginBottom:"12px"}}>LIVE RESULTS — MOTTO</h3>
-                  <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
-                    {mottoResults.map((e,i)=>(
-                      <div key={e.id} style={{...cardSt,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
-                        <span style={{color:i===0?C.gold:C.cream,fontSize:"0.88rem"}}>{i===0?"🏆 ":""}{e.text}</span>
-                        <span style={{color:C.muted,fontSize:"0.8rem",marginLeft:"12px",whiteSpace:"nowrap"}}>{e.votes} vote{e.votes!==1?"s":""}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              
-
-{tab==="record"&&isAdmin&&(
+          {tab==="record"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
             <div style={{...cardSt,marginBottom:"16px"}}>
