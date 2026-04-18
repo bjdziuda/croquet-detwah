@@ -71,7 +71,46 @@ const Medal = ({rank}) => {
 };
 
 const DEFAULT_VENUES = ["Oakfield Lawn","Hartwell Green","Manor Gardens","Riverside Court","The Club Grounds"];
+const const LOGO_ENTRIES = [
+  {id:"l1", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519749/PXL_20260410_015458287_2_h91xei.jpg"},
+  {id:"l2", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519749/PXL_20260410_015504518_2_lpxsd6.jpg"},
+  {id:"l3", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519749/PXL_20260410_015512610_2_o9kzmb.jpg"},
+  {id:"l4", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519749/PXL_20260410_015520310_2_aep7in.jpg"},
+  {id:"l5", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519749/PXL_20260410_015528435_2_tllc6k.jpg"},
+  {id:"l6", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519749/PXL_20260410_015540983_2_pv7ltp.jpg"},
+  {id:"l7", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519750/PXL_20260410_015547725_2_nvtdq8.jpg"},
+  {id:"l8", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519750/PXL_20260410_015559748_2_vd589h.jpg"},
+  {id:"l9", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519750/PXL_20260410_015609453_2_ofhxbj.jpg"},
+  {id:"l10", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519750/IMG-20260412-WA0002_thg5l4.jpg"},
+  {id:"l11", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519750/IMG-20260412-WA0005_2_clpfkx.jpg"},
+  {id:"l12", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519750/PXL_20260410_015356733_2_yz0urh.jpg"},
+  {id:"l13", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519751/PXL_20260410_015411003_2_qdli7a.jpg"},
+  {id:"l14", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519751/PXL_20260410_015416204_2_jbkdlo.jpg"},
+  {id:"l15", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519751/PXL_20260410_015421084_2_u2tede.jpg"},
+  {id:"l16", url:"https://res.cloudinary.com/dr3pitbr2/image/upload/v1776519751/PXL_20260410_015617402_2_xrgdbw.jpg"},
+];
+
+const MOTTO_ENTRIES = [
+  {id:"m1",  text:"Not Your Grandma's Croquet"},
+  {id:"m2",  text:"Only Champions Play"},
+  {id:"m3",  text:"C'est dur d'etre nul — It's hard to be miserable"},
+  {id:"m4",  text:"Sucks to suck"},
+  {id:"m5",  text:"The excitement of croquet is considered bad for the heart"},
+  {id:"m6",  text:"Liberté, égalité, Croquet"},
+  {id:"m7",  text:"Through the wickets we go!"},
+  {id:"m8",  text:"Ponder the Orb"},
+  {id:"m9",  text:"What's Crotay?"},
+  {id:"m10", text:"Who's turn is it?"},
+  {id:"m11", text:"Suck to Suck"},
+  {id:"m12", text:"Nothing But a Mallet in the back and tinned fish in the front"},
+];
+
 const EMPTY_STATE = {
+  players: [], weeklyGames: {}, totalWeeks: 1,
+  leagueName: "Croquet De-Twah", leagueLogo: null,
+  venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
+  votes: {},
+}; = {
   players: [], weeklyGames: {}, totalWeeks: 1,
   leagueName: "Croquet De-Twah", leagueLogo: null,
   venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
@@ -223,6 +262,13 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [editModal, setEditModal]   = useState(null);
   const [editPos, setEditPos]       = useState("");
   const [editSotd, setEditSotd]     = useState(0);
+
+  const [logoRanking, setLogoRanking]   = useState([]);
+  const [mottoRanking, setMottoRanking] = useState([]);
+  const [voteSubmitted, setVoteSubmitted] = useState(false);
+
+  const votes = appState.votes || {};
+  const myVote = votes[user?.name] || null;
 
   const notify = msg => { setNote(msg); setTimeout(()=>setNote(""),3500); };
   const maxWk  = Math.max(totalWeeks,...players.map(p=>p.joinedWeek||1),1);
@@ -380,7 +426,9 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"18px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],
+  const const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["vote","🗳 Vote"],
+    ...(isAdmin?[["record","✦ Record Week"],["history","◷ History"],["players","✤ Players"]]:[])
+  ];=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],
     ...(isAdmin?[["record","✦ Record Week"],["history","◷ History"],["players","✤ Players"]]:[])
   ];
 
