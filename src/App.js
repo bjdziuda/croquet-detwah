@@ -263,6 +263,9 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [mottoRanking, setMottoRanking] = useState([]);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [editingProfileName, setEditingProfileName] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileWeek, setProfileWeek] = useState(1);
 
   const votes = appState.votes || {};
 
@@ -921,9 +924,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         {tab==="profile"&&(()=>{
           const myPlayer = players.find(p=>p.name===user.name);
           const myStats = myPlayer ? standings.find(s=>s.id===myPlayer.id) : null;
-          const [editingProfileName, setEditingProfileName] = useState(false);
-          const [profileName, setProfileName] = useState(myPlayer?.name||"");
-          const [profileWeek, setProfileWeek] = useState(myPlayer?.joinedWeek||1);
+          
 
           if(!myPlayer) return (
             <div>
