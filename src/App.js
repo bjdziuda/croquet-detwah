@@ -707,6 +707,148 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
         {tab==="vote"&&(()=>{
           const alreadyVoted = !!votes[user.name];
+          const canSeeResults = isAdmin || alreadyVoted;
+          const logoResults = runRCV(LOGO_ENTRIES, votes, "logo");
+          const mottoResults = runRCV(MOTTO_ENTRIES, votes, "motto");
+          const totalVoters = Object.keys(votes).length;
+          const [lightbox, setLightbox] = React.useState(null);
+
+          const Results = () => (
+            <div>
+              <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",marginBottom:"16px"}}>LIVE RESULTS — LOGO</h3>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"12px",marginBottom:"28px"}}>
+                {logoResults.map((e,i)=>(
+                  <div key={e.id} style={{...cardSt,padding:"10px",textAlign:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
+                    <img src={e.url} alt="" onClick={()=>setLightbox(e.url)} style={{width:"80px",height:"80px",objectFit:"cover",borderRadius:"6px",display:"block",marginBottom:"6px",cursor:"pointer"}}/>
+                    <div style={{color:i===0?C.gold:C.muted,fontSize:"0.75rem",fontWeight:i===0?"bold":"normal"}}>{i===0?"🏆 ":""}{e.votes} vote{e.votes!==1?"s":""}</div>
+                    {e.eliminated&&<div style={{color:C.red,fontSize:"0.65rem"}}>eliminated</div>}
+                  </div>
+                ))}
+              </div>
+              <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",marginBottom:"12px"}}>LIVE RESULTS — MOTTO</h3>
+              <div style={{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"28px"}}>
+                {mottoResults.map((e,i)=>(
+                  <div key={e.id} style={{...cardSt,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
+                    <span style={{color:i===0?C.gold:C.cream,fontSize:"0.88rem"}}>{i===0?"🏆 ":""}{e.text}</span>
+                    <span style={{color:C.muted,fontSize:"0.8rem",marginLeft:"12px",whiteSpace:"nowrap"}}>{e.votes} vote{e.votes!==1?"s":""}</span>
+                  </div>
+                ))}
+              </div>
+              {isAdmin&&totalVoters>0&&(
+                <div style={{...cardSt,borderColor:C.red+"44"}}>
+                  <h3 style={{color:C.red,fontSize:"0.85rem",letterSpacing:"0.06em",margin:"0 0 12px"}}>⚙ ADMIN — MANAGE VOTES</h3>
+                  <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                    {Object.entries(votes).map(([name,v])=>(
+                      <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.surface,borderRadius:"6px"}}>
+                        <span style={{color:C.cream,fontSize:"0.85rem"}}>{name}</span>
+                        <span style={{color:C.muted,fontSize:"0.75rem",marginRight:"12px"}}>{new Date(v.submittedAt).toLocaleDateString()}</span>
+                        <button onClick={()=>{const nv={...votes};delete nv[name];update({votes:nv});notify(`Vote from ${name} deleted.`);}} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 10px",cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif"}}>Delete</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+
+          const RankList = ({entries, ranking, setRanking, type}) => {
+            const unranked = entries.filter(e=>!ranking.includes(e.id));
+            const move = (id, dir) => {
+              const idx = ranking.indexOf(id);
+              if(idx===-1) return;
+              const next = [...ranking];
+              const swap = idx+dir;
+              if(swap<0||swap>=next.length) return;
+              [next[idx],next[swap]]=[next[swap],next[idx]];
+              setRanking(next);
+            };
+            const addToRanking = id => setRanking(prev=>[...prev,id]);
+            const removeFromRanking = id => setRanking(prev=>prev.filter(x=>x!==id));
+            return (
+              <div>
+                {ranking.length>0&&(
+                  <div style={{marginBottom:"16px"}}>
+                    <div style={{color:C.accent,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"8px"}}>YOUR RANKING</div>
+                    {ranking.map((id,i)=>{
+                      const entry=entries.find(e=>e.id===id);
+                      if(!entry) return null;
+                      return(
+                        <div key={id} style={{...cardSt,padding:"10px 12px",marginBottom:"6px",display:"flex",alignItems:"center",gap:"10px",border:`1px solid ${C.accent}44`}}>
+                          <span style={{color:C.accent,fontWeight:"bold",fontSize:"1rem",minWidth:"24px"}}>#{i+1}</span>
+                          {type==="logo"
+                            ? <img src={entry.url} alt={`Logo ${id}`} onClick={()=>setLightbox(entry.url)} style={{width:"60px",height:"60px",objectFit:"cover",borderRadius:"6px",cursor:"pointer"}}/>
+                            : <span style={{color:C.cream,fontSize:"0.88rem",flex:1}}>{entry.text}</span>
+                          }
+                          <div style={{display:"flex",flexDirection:"column",gap:"3px",marginLeft:"auto"}}>
+                            <button onClick={()=>move(id,-1)} disabled={i===0} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.8rem"}}>▲</button>
+                            <button onClick={()=>move(id,1)} disabled={i===ranking.length-1} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.8rem"}}>▼</button>
+                          </div>
+                          <button onClick={()=>removeFromRanking(id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.75rem"}}>✕</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"8px"}}>
+                  {ranking.length===0?"CLICK TO RANK (in order of preference)":"UNRANKED — click to add to your ranking"}
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"10px"}}>
+                  {unranked.map(entry=>(
+                    <div key={entry.id} onClick={()=>addToRanking(entry.id)}
+                      style={{cursor:"pointer",border:`1px solid ${C.border}`,borderRadius:"8px",overflow:"hidden",transition:"border-color 0.2s",background:C.surface}}
+                      onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+                      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                      {type==="logo"
+                        ? <img src={entry.url} alt={`Logo ${entry.id}`} onClick={(ev)=>{ev.stopPropagation();setLightbox(entry.url);}} style={{width:"100px",height:"100px",objectFit:"cover",display:"block"}}/>
+                        : <div style={{padding:"12px 16px",color:C.cream,fontSize:"0.85rem",maxWidth:"220px"}}>{entry.text}</div>
+                      }
+                      {type==="logo"&&<div style={{textAlign:"center",padding:"4px",color:C.muted,fontSize:"0.7rem"}}>+ rank</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          };
+
+          return (
+            <div>
+              {lightbox&&(
+                <div onClick={()=>setLightbox(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                  <img src={lightbox} alt="Full size" style={{maxWidth:"90vw",maxHeight:"90vh",objectFit:"contain",borderRadius:"8px"}}/>
+                  <div style={{position:"absolute",top:"20px",right:"24px",color:"white",fontSize:"1.5rem"}}>✕</div>
+                </div>
+              )}
+              <h2 style={{color:C.cream,fontSize:"1.1rem",letterSpacing:"0.08em",marginBottom:"6px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
+                🗳 Vote — 2026 Logo & Motto
+              </h2>
+              <p style={{color:C.muted,fontSize:"0.78rem",marginBottom:"20px"}}>{totalVoters} member{totalVoters!==1?"s":""} have voted so far.</p>
+              {alreadyVoted ? (
+                <div>
+                  <div style={{...cardSt,borderColor:C.green+"55",background:"#0d1f0d",marginBottom:"24px",padding:"16px 20px"}}>
+                    <p style={{color:C.greenLight,margin:0,fontWeight:"bold"}}>✓ Your vote has been recorded!</p>
+                    <p style={{color:C.muted,fontSize:"0.8rem",margin:"6px 0 0"}}>Voting is locked — one vote per member.</p>
+                  </div>
+                  <Results/>
+                </div>
+              ) : (
+                <div>
+                  {isAdmin&&<div style={{marginBottom:"24px"}}><Results/><hr style={{borderColor:C.border,margin:"24px 0"}}/></div>}
+                  <div style={{...cardSt,marginBottom:"28px"}}>
+                    <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",margin:"0 0 14px"}}>STEP 1 — RANK THE LOGOS</h3>
+                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 16px",lineHeight:"1.6"}}>Click logos to add them to your ranking. Use ▲▼ to reorder. Click image to enlarge.</p>
+                    <RankList entries={LOGO_ENTRIES} ranking={logoRanking} setRanking={setLogoRanking} type="logo"/>
+                  </div>
+                  <div style={{...cardSt,marginBottom:"28px"}}>
+                    <h3 style={{color:C.accentLight,fontSize:"0.95rem",letterSpacing:"0.06em",margin:"0 0 14px"}}>STEP 2 — RANK THE MOTTOS</h3>
+                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 16px",lineHeight:"1.6"}}>Click mottos to add them to your ranking. Use ▲▼ to reorder.</p>
+                    <RankList entries={MOTTO_ENTRIES} ranking={mottoRanking} setRanking={setMottoRanking} type="motto"/>
+                  </div>
+                  <button onClick={submitVote} style={{...btnSt(),padding:"13px 36px",fontSize:"0.95rem"}}>Submit My Vote 🗳</button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
           const logoResults = runRCV(LOGO_ENTRIES, votes, "logo");
           const mottoResults = runRCV(MOTTO_ENTRIES, votes, "motto");
           const totalVoters = Object.keys(votes).length;
