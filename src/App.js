@@ -398,6 +398,42 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     notify(names.length>0?`Week ${wk} recorded! Auto-absent: ${names.join(", ")}`:`Week ${wk} results recorded!`);
   };
 
+  const submitVote = () => {
+    if(logoRanking.length===0||mottoRanking.length===0){notify("Please rank at least one logo and one motto!");return;}
+    const newVotes={...votes,[user.name]:{logoRanking,mottoRanking,submittedAt:new Date().toISOString()}};
+    update({votes:newVotes});
+    setVoteSubmitted(true);
+    notify("Your vote has been recorded! 🗳");
+  };
+
+  const runRCV = (entries, votes, type) => {
+    const ballots = Object.values(votes).map(v => v[type==="logo"?"logoRanking":"mottoRanking"]).filter(b=>b&&b.length>0);
+    if(ballots.length===0) return entries.map(e=>({...e,votes:0,eliminated:false}));
+    let remaining = entries.map(e=>e.id);
+    while(remaining.length>1) {
+      const counts={};
+      remaining.forEach(id=>{counts[id]=0;});
+      ballots.forEach(ballot=>{
+        const top=ballot.find(id=>remaining.includes(id));
+        if(top) counts[top]=(counts[top]||0)+1;
+      });
+      const total=Object.values(counts).reduce((a,b)=>a+b,0);
+      const winner=remaining.find(id=>counts[id]>total/2);
+      if(winner) break;
+      const minVotes=Math.min(...remaining.map(id=>counts[id]||0));
+      const toEliminate=remaining.filter(id=>(counts[id]||0)===minVotes);
+      remaining=remaining.filter(id=>!toEliminate.includes(id));
+    }
+    const finalCounts={};
+    remaining.forEach(id=>{finalCounts[id]=0;});
+    const ballots2=Object.values(votes).map(v=>v[type==="logo"?"logoRanking":"mottoRanking"]).filter(b=>b&&b.length>0);
+    ballots2.forEach(ballot=>{
+      const top=ballot.find(id=>remaining.includes(id));
+      if(top) finalCounts[top]=(finalCounts[top]||0)+1;
+    });
+    return entries.map(e=>({...e,votes:finalCounts[e.id]||0,eliminated:!remaining.includes(e.id)})).sort((a,b)=>b.votes-a.votes);
+  };
+
   const openEdit=(pid,week,gameIdx,game)=>{setEditModal({pid,week,gameIdx,game});setEditPos(game.position?String(game.position):"");setEditSotd(game.sotd||0);};
   const saveEdit=()=>{
     if(!editModal) return;
