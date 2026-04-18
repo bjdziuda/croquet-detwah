@@ -863,7 +863,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
               <p style={{margin:0,color:C.muted,fontSize:"0.77rem",lineHeight:"1.7"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. <strong style={{color:C.accentLight}}>Absences are automatic</strong> — eligible players not in a group get 1 pt on submit.</p>
             </div>
-                        <div key={id} style={{...cardSt,padding:"10px 12px",marginBottom:"6px",display:"flex",alignItems:"center",gap:"10px",border:`1px solid ${C.accent}44`}}>
                           <span style={{color:C.accent,fontWeight:"bold",fontSize:"1rem",minWidth:"24px"}}>#{i+1}</span>
                           {type==="logo"
                             ? <img src={entry.url} alt={`Logo ${id}`} style={{width:"60px",height:"60px",objectFit:"cover",borderRadius:"6px"}}/>
@@ -893,11 +892,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                         : <div style={{padding:"12px 16px",color:C.cream,fontSize:"0.85rem",maxWidth:"220px"}}>{entry.text}</div>
                       }
                     </div>
-                  ))}
-                <div style={{...cardSt,marginBottom:"16px",background:C.surface}}>
-              <p style={{margin:0,color:C.muted,fontSize:"0.77rem",lineHeight:"1.7"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. <strong style={{color:C.accentLight}}>Absences are automatic</strong> — eligible players not in a group get 1 pt on submit.</p>
-            </div>
-            {absentPreview.length>0&&(
+                  {absentPreview.length>0&&(
               <div style={{...cardSt,marginBottom:"16px",borderColor:C.red+"44",background:"#1a0f0f"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}><span style={{color:C.red,fontSize:"0.8rem"}}>◌</span><span style={{color:C.red,fontSize:"0.8rem",fontWeight:"bold",letterSpacing:"0.06em"}}>WILL BE MARKED ABSENT</span></div>
                 <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>{absentPreview.map(name=><span key={name} style={{background:C.red+"22",border:`1px solid ${C.red}44`,color:C.red,borderRadius:"4px",padding:"3px 9px",fontSize:"0.8rem"}}>{name}</span>)}</div>
