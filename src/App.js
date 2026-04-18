@@ -422,9 +422,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"18px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["vote","🗳 Vote"],
-    ...(isAdmin?[["record","✦ Record Week"],["history","◷ History"],["players","✤ Players"]]:[])
-  ];=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],
+  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["vote","🗳 Vote"],
     ...(isAdmin?[["record","✦ Record Week"],["history","◷ History"],["players","✤ Players"]]:[])
   ];
 
