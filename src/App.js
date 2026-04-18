@@ -864,10 +864,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <p style={{margin:0,color:C.muted,fontSize:"0.77rem",lineHeight:"1.7"}}><strong style={{color:C.accentLight}}>Scoring:</strong> 1st = group size pts, last = 0. <strong style={{color:C.accentLight}}>Absences are automatic</strong> — eligible players not in a group get 1 pt on submit.</p>
             </div>
             {absentPreview.length>0&&(
-                        ? <img src={entry.url} alt={`Logo ${entry.id}`} style={{width:"100px",height:"100px",objectFit:"cover",display:"block"}}/>
-                        : <div style={{padding:"12px 16px",color:C.cream,fontSize:"0.85rem",maxWidth:"220px"}}>{entry.text}</div>
-                      }
-                    </div>
                   {absentPreview.length>0&&(
               <div style={{...cardSt,marginBottom:"16px",borderColor:C.red+"44",background:"#1a0f0f"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}><span style={{color:C.red,fontSize:"0.8rem"}}>◌</span><span style={{color:C.red,fontSize:"0.8rem",fontWeight:"bold",letterSpacing:"0.06em"}}>WILL BE MARKED ABSENT</span></div>
