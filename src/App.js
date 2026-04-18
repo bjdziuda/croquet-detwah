@@ -851,9 +851,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         })()}
 
         {tab==="record"&&isAdmin&&(
-            return (
-              <div>
-                {ranking.length>0&&(
+          <div>
                   <div style={{marginBottom:"16px"}}>
                     <div style={{color:C.accent,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"8px"}}>YOUR RANKING</div>
                     {ranking.map((id,i)=>{
