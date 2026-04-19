@@ -110,14 +110,16 @@ const EMPTY_STATE = {
   leagueName: "Croquet De-Twah", leagueLogo: null,
   venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
   votes: {},
+  joinCode: "croquet2026",
 };
 
-function LoginScreen({onLogin}) {
+function LoginScreen({onLogin, joinCode}) {
   const [mode, setMode]         = useState("choose");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [viewerName, setViewerName] = useState("");
   const [err, setErr]           = useState("");
+  const [joinCodeInput, setJoinCodeInput] = useState("");
 
   const tryAdmin = () => {
     const match = DEFAULT_ADMINS.find(a => a.username===username.trim() && a.password===password);
@@ -126,7 +128,13 @@ function LoginScreen({onLogin}) {
   };
   const tryViewer = () => {
     if (!viewerName.trim()) { setErr("Please enter your name."); return; }
-    onLogin({name:viewerName.trim(), role:"viewer"});
+    if(joinCodeInput.trim() && joinCodeInput.trim()===joinCode) {
+      onLogin({name:viewerName.trim(), role:"self-register"});
+    } else if(joinCodeInput.trim() && joinCodeInput.trim()!==joinCode) {
+      setErr("Invalid join code.");
+    } else {
+      onLogin({name:viewerName.trim(), role:"viewer"});
+    }
   };
 
   const iSt = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",color:C.text,padding:"12px 14px",fontSize:"0.95rem",fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"};
@@ -161,10 +169,11 @@ function LoginScreen({onLogin}) {
         )}
         {mode==="viewer" && (
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"24px"}}>
-            <h2 style={{color:C.greenLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>VIEW AS GUEST</h2>
+            <h2 style={{color:C.greenLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>JOIN / VIEW</h2>
             {err&&<div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"6px",padding:"10px 14px",color:C.red,fontSize:"0.82rem",marginBottom:"16px"}}>{err}</div>}
-            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
-            <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>View League →</button>
+            <div style={{marginBottom:"14px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
+            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>JOIN CODE <span style={{color:C.muted,fontWeight:"normal"}}>(optional — to register as a player)</span></label><input style={iSt} value={joinCodeInput} onChange={e=>{setJoinCodeInput(e.target.value);setErr("");}} placeholder="Enter join code…"/></div>
+            <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>Enter League →</button>
             <button onClick={()=>{setMode("choose");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
           </div>
         )}
@@ -225,7 +234,15 @@ export default function App() {
       Loading league data…
     </div>
   );
-  if (!user) return <LoginScreen onLogin={setUser}/>;
+  if (!user) return <LoginScreen onLogin={(u)=>{
+    if(u.role==="self-register") {
+      const id=Date.now();
+      persist({...appState,players:[...appState.players,{id,name:u.name,joinedWeek:1}],weeklyGames:{...appState.weeklyGames,[id]:{}}});
+      setUser({name:u.name,role:"viewer"});
+    } else {
+      setUser(u);
+    }
+  }} joinCode={appState?.joinCode||"croquet2026"}/>;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>setUser(null)} uploadImage={uploadImage}/>;
 }
 
