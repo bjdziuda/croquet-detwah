@@ -120,6 +120,7 @@ function LoginScreen({onLogin, joinCode}) {
   const [viewerName, setViewerName] = useState("");
   const [err, setErr]           = useState("");
   const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [showJoinCode, setShowJoinCode] = useState(false);
 
   const tryAdmin = () => {
     const match = DEFAULT_ADMINS.find(a => a.username===username.trim() && a.password===password);
