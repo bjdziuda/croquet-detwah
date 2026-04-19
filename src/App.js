@@ -617,6 +617,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 <div key={p.id} style={{background:i===0&&p.pts>0?`linear-gradient(135deg,#1e3018,#253d20)`:C.card,border:`1px solid ${i===0&&p.pts>0?C.accent+"55":C.border}`,borderRadius:"9px",padding:"10px 12px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
                     <Medal rank={i+1}/>
+                    {p.imageUrl
+                      ? <img src={p.imageUrl} alt={p.name} style={{width:"32px",height:"32px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${i===0&&p.pts>0?C.accent:C.border}`}}/>
+                      : <div style={{width:"32px",height:"32px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.9rem",flexShrink:0}}>👤</div>
+                    }
                     <span style={{fontWeight:"bold",color:i===0&&p.pts>0?C.accentLight:C.cream,fontSize:"0.95rem",flex:1}}>{p.name}</span>
                     {p.joinedWeek>1&&<span style={{fontSize:"0.6rem",color:C.accent,background:C.accent+"22",padding:"1px 5px",borderRadius:"3px"}}>Wk {p.joinedWeek}</span>}
                     <span style={{color:C.accent,fontWeight:"bold",fontSize:"1.1rem"}}>{p.pts}</span>
@@ -665,6 +669,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <div style={{marginBottom:"10px"}}><label style={lbSt}>VENUE NAME</label><input style={inputSt} placeholder="e.g. Riverside Park Lawn" value={venueForm.name} onChange={e=>setVenueForm(f=>({...f,name:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addVenue()}/></div>
               <div style={{marginBottom:"10px"}}><label style={lbSt}>YOUR RATING</label><StarRating value={venueForm.rating} onChange={r=>setVenueForm(f=>({...f,rating:r}))} size={28}/></div>
               <div style={{marginBottom:"12px"}}><label style={lbSt}>YOUR COMMENTS</label><textarea style={textareaSt} placeholder="Surface quality, parking, facilities…" value={venueForm.comment} onChange={e=>setVenueForm(f=>({...f,comment:e.target.value}))}/></div>
+              <div style={{marginBottom:"14px",display:"flex",alignItems:"center",gap:"10px"}}>
+                <input type="checkbox" id="venueGrill" checked={venueForm.hasGrill||false} onChange={e=>setVenueForm(f=>({...f,hasGrill:e.target.checked}))} style={{width:"18px",height:"18px",cursor:"pointer",accentColor:C.accent}}/>
+                <label htmlFor="venueGrill" style={{color:C.cream,fontSize:"0.85rem",cursor:"pointer"}}>🔥 Has grills / BBQ facilities</label>
+              </div>
               <button style={{...btnSt(C.green,true),width:"100%",padding:"10px"}} onClick={addVenue}>Add Venue</button>
             </div>
             {sortedVenues.length===0&&<p style={{color:C.muted}}>No venues yet!</p>}
@@ -684,7 +692,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                           : <div style={{width:"40px",height:"40px",borderRadius:"6px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.2rem",flexShrink:0}}>📍</div>
                         }
                         <div style={{minWidth:0}}>
-                          <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"0.9rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                            <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"0.9rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</div>
+                            {v.hasGrill&&<span style={{fontSize:"0.75rem"}} title="Has grills">🔥</span>}
+                          </div>
                           <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"2px",flexWrap:"wrap"}}>
                             <StarRating value={Math.round(avgRating)} size={13}/>
                             <span style={{color:C.muted,fontSize:"0.7rem"}}>{avgRating>0?`${displayRating}/5`:"Unrated"}{totalReviews>0&&` · ${totalReviews}`}</span>
