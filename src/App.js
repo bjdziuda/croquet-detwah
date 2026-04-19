@@ -128,12 +128,15 @@ function LoginScreen({onLogin, joinCode}) {
   };
   const tryViewer = () => {
     if (!viewerName.trim()) { setErr("Please enter your name."); return; }
-    if(joinCodeInput.trim() && joinCodeInput.trim()===joinCode) {
-      onLogin({name:viewerName.trim(), role:"self-register"});
-    } else if(joinCodeInput.trim() && joinCodeInput.trim()!==joinCode) {
-      setErr("Invalid join code.");
+    const name = viewerName.trim();
+    if(joinCodeInput.trim()) {
+      if(joinCodeInput.trim()===joinCode) {
+        onLogin({name, role:"self-register"});
+      } else {
+        setErr("Invalid join code.");
+      }
     } else {
-      onLogin({name:viewerName.trim(), role:"viewer"});
+      onLogin({name, role:"viewer"});
     }
   };
 
@@ -172,10 +175,16 @@ function LoginScreen({onLogin, joinCode}) {
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"24px"}}>
             <h2 style={{color:C.greenLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>🏑 PLAYER LOGIN</h2>
             {err&&<div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"6px",padding:"10px 14px",color:C.red,fontSize:"0.82rem",marginBottom:"16px"}}>{err}</div>}
-            <div style={{marginBottom:"14px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
-            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>JOIN CODE</label><input style={iSt} value={joinCodeInput} onChange={e=>{setJoinCodeInput(e.target.value);setErr("");}} placeholder="Enter join code…" onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
+            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
+            {!showJoinCode&&<p onClick={()=>setShowJoinCode(true)} style={{color:C.muted,fontSize:"0.75rem",textAlign:"center",cursor:"pointer",textDecoration:"underline",marginBottom:"16px"}}>New player? Register with a join code</p>}
+            {showJoinCode&&(
+              <div style={{marginBottom:"20px"}}>
+                <label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>JOIN CODE</label>
+                <input style={iSt} value={joinCodeInput} onChange={e=>{setJoinCodeInput(e.target.value);setErr("");}} placeholder="Enter join code…" onKeyDown={e=>e.key==="Enter"&&tryViewer()}/>
+              </div>
+            )}
             <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>Enter League →</button>
-            <button onClick={()=>{setMode("choose");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
+            <button onClick={()=>{setMode("choose");setErr("");setShowJoinCode(false);}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
           </div>
         )}
         {mode==="viewer" && (
@@ -246,9 +255,14 @@ export default function App() {
   );
   if (!user) return <LoginScreen onLogin={(u)=>{
     if(u.role==="self-register") {
-      const id=Date.now();
-      persist({...appState,players:[...appState.players,{id,name:u.name,joinedWeek:1}],weeklyGames:{...appState.weeklyGames,[id]:{}}});
-      setUser({name:u.name,role:"viewer"});
+      const existing = appState.players.find(p=>p.name.toLowerCase()===u.name.toLowerCase());
+      if(existing) {
+        setUser({name:existing.name,role:"viewer"});
+      } else {
+        const id=Date.now();
+        persist({...appState,players:[...appState.players,{id,name:u.name,joinedWeek:1}],weeklyGames:{...appState.weeklyGames,[id]:{}}});
+        setUser({name:u.name,role:"viewer"});
+      }
     } else {
       setUser(u);
     }
