@@ -535,7 +535,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             <h3 style={{color:C.cream,margin:"0 0 18px",fontSize:"1rem"}}>Edit Venue</h3>
             <div style={{marginBottom:"14px"}}><label style={lbSt}>VENUE NAME</label><input style={inputSt} value={editVenue.name} onChange={e=>setEditVenue(v=>({...v,name:e.target.value}))}/></div>
             <div style={{marginBottom:"14px"}}><label style={lbSt}>OFFICIAL RATING</label><StarRating value={editVenue.rating} onChange={r=>setEditVenue(v=>({...v,rating:r}))} size={28}/></div>
-            <div style={{marginBottom:"20px"}}><label style={lbSt}>OFFICIAL NOTES</label><textarea style={textareaSt} value={editVenue.comment} onChange={e=>setEditVenue(v=>({...v,comment:e.target.value}))} placeholder="Notes about the venue…"/></div>
+            <div style={{marginBottom:"14px"}}><label style={lbSt}>OFFICIAL NOTES</label><textarea style={textareaSt} value={editVenue.comment} onChange={e=>setEditVenue(v=>({...v,comment:e.target.value}))} placeholder="Notes about the venue…"/></div>
+            <div style={{marginBottom:"20px",display:"flex",alignItems:"center",gap:"10px"}}>
+              <input type="checkbox" id="editVenueGrill" checked={editVenue.hasGrill||false} onChange={e=>setEditVenue(v=>({...v,hasGrill:e.target.checked}))} style={{width:"18px",height:"18px",cursor:"pointer",accentColor:C.accent}}/>
+              <label htmlFor="editVenueGrill" style={{color:C.cream,fontSize:"0.85rem",cursor:"pointer"}}>🔥 Has grills / BBQ facilities</label>
+            </div>
             <div style={{display:"flex",gap:"8px"}}>
               <button style={{...btnSt(),flex:1}} onClick={saveVenueEdit}>Save Changes</button>
               <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 14px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>setEditVenue(null)}>Cancel</button>
@@ -696,7 +700,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                             <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"0.9rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</div>
                           </div>
                           <div style={{marginTop:"3px"}}>
-                            {v.hasGrill
+                            {v.hasGrill===true
                               ? <span style={{color:C.accent,fontSize:"0.72rem"}}>🔥 Grills available</span>
                               : <span style={{color:C.muted,fontSize:"0.72rem"}}>🚫 No grills</span>
                             }
