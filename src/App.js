@@ -182,9 +182,8 @@ function LoginScreen({onLogin, joinCode}) {
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"24px"}}>
             <h2 style={{color:C.greenLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>JOIN / VIEW</h2>
             {err&&<div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"6px",padding:"10px 14px",color:C.red,fontSize:"0.82rem",marginBottom:"16px"}}>{err}</div>}
-            <div style={{marginBottom:"14px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
-            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>JOIN CODE <span style={{color:C.muted,fontWeight:"normal"}}>(optional — to register as a player)</span></label><input style={iSt} value={joinCodeInput} onChange={e=>{setJoinCodeInput(e.target.value);setErr("");}} placeholder="Enter join code…"/></div>
-            <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>Enter League →</button>
+            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
+            <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>View League →</button>
             <button onClick={()=>{setMode("choose");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
           </div>
         )}
