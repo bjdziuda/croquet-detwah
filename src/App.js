@@ -694,7 +694,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                         <div style={{minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                             <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"0.9rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</div>
-                            {v.hasGrill&&<span style={{fontSize:"0.75rem"}} title="Has grills">🔥</span>}
+                          </div>
+                          <div style={{marginTop:"3px"}}>
+                            {v.hasGrill
+                              ? <span style={{color:C.accent,fontSize:"0.72rem"}}>🔥 Grills available</span>
+                              : <span style={{color:C.muted,fontSize:"0.72rem"}}>🚫 No grills</span>
+                            }
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"2px",flexWrap:"wrap"}}>
                             <StarRating value={Math.round(avgRating)} size={13}/>
