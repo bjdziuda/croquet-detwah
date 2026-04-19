@@ -151,9 +151,10 @@ function LoginScreen({onLogin, joinCode}) {
         {mode==="choose" && (
           <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
             <button onClick={()=>setMode("admin")} style={{...bSt(),padding:"16px"}}>🔐 Admin Login</button>
-            <button onClick={()=>setMode("viewer")} style={{...bSt(C.green),padding:"16px",color:C.text}}>👁 View as Guest</button>
-            <p style={{color:C.muted,fontSize:"0.75rem",textAlign:"center",margin:"4px 0 0",lineHeight:"1.6"}}>
-              Admins manage scores, players & weeks.<br/>Guests view standings and can rate venues.
+            <button onClick={()=>setMode("player")} style={{...bSt(C.green),padding:"16px",color:C.text}}>🏑 Player Login</button>
+            <button onClick={()=>setMode("viewer")} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.muted,padding:"12px 20px",fontFamily:"Georgia,serif",fontSize:"0.85rem",cursor:"pointer"}}>👁 View as Guest</button>
+            <p style={{color:C.muted,fontSize:"0.72rem",textAlign:"center",margin:"0",lineHeight:"1.6"}}>
+              Players use their name + join code to register.<br/>Guests can browse but won't have a profile.
             </p>
           </div>
         )}
@@ -164,6 +165,16 @@ function LoginScreen({onLogin, joinCode}) {
             <div style={{marginBottom:"14px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>USERNAME</label><input style={iSt} value={username} onChange={e=>{setUsername(e.target.value);setErr("");}} placeholder="Enter username" onKeyDown={e=>e.key==="Enter"&&tryAdmin()}/></div>
             <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>PASSWORD</label><input style={iSt} type="password" value={password} onChange={e=>{setPassword(e.target.value);setErr("");}} placeholder="Enter password" onKeyDown={e=>e.key==="Enter"&&tryAdmin()}/></div>
             <button style={bSt()} onClick={tryAdmin}>Sign In</button>
+            <button onClick={()=>{setMode("choose");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
+          </div>
+        )}
+        {mode==="player" && (
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"24px"}}>
+            <h2 style={{color:C.greenLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>🏑 PLAYER LOGIN</h2>
+            {err&&<div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"6px",padding:"10px 14px",color:C.red,fontSize:"0.82rem",marginBottom:"16px"}}>{err}</div>}
+            <div style={{marginBottom:"14px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
+            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>JOIN CODE</label><input style={iSt} value={joinCodeInput} onChange={e=>{setJoinCodeInput(e.target.value);setErr("");}} placeholder="Enter join code…" onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
+            <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>Enter League →</button>
             <button onClick={()=>{setMode("choose");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
           </div>
         )}
