@@ -746,11 +746,41 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               {isAdmin&&totalVoters>0&&(
                 <div style={{...cardSt,borderColor:C.red+"44"}}>
                   <h3 style={{color:C.red,fontSize:"0.82rem",letterSpacing:"0.06em",margin:"0 0 10px"}}>⚙ MANAGE VOTES</h3>
-                  <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
                     {Object.entries(votes).map(([name,v])=>(
-                      <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",background:C.surface,borderRadius:"6px"}}>
-                        <span style={{color:C.cream,fontSize:"0.82rem"}}>{name}</span>
-                        <button onClick={()=>{const nv={...votes};delete nv[name];update({votes:nv});notify(`Vote from ${name} deleted.`);}} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Delete</button>
+                      <div key={name} style={{background:C.surface,borderRadius:"6px",padding:"10px 12px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                          <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold"}}>{name}</span>
+                          <button onClick={()=>{const nv={...votes};delete nv[name];update({votes:nv});notify(`Vote from ${name} deleted.`);}} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Delete</button>
+                        </div>
+                        <div style={{marginBottom:"6px"}}>
+                          <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"4px"}}>LOGO RANKING</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>
+                            {(v.logoRanking||[]).map((id,i)=>{
+                              const entry=LOGO_ENTRIES.find(e=>e.id===id);
+                              return entry?(
+                                <div key={id} style={{display:"flex",alignItems:"center",gap:"3px",background:C.card,borderRadius:"4px",padding:"2px 6px"}}>
+                                  <span style={{color:C.accent,fontSize:"0.65rem",fontWeight:"bold"}}>#{i+1}</span>
+                                  <img src={entry.url} alt="" style={{width:"20px",height:"20px",objectFit:"cover",borderRadius:"2px"}}/>
+                                </div>
+                              ):null;
+                            })}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"4px"}}>MOTTO RANKING</div>
+                          <div style={{display:"flex",flexDirection:"column",gap:"2px"}}>
+                            {(v.mottoRanking||[]).map((id,i)=>{
+                              const entry=MOTTO_ENTRIES.find(e=>e.id===id);
+                              return entry?(
+                                <div key={id} style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                                  <span style={{color:C.accent,fontSize:"0.65rem",fontWeight:"bold",minWidth:"20px"}}>#{i+1}</span>
+                                  <span style={{color:C.muted,fontSize:"0.72rem"}}>{entry.text}</span>
+                                </div>
+                              ):null;
+                            })}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
