@@ -132,7 +132,7 @@ function LoginScreen({onLogin, joinCode}) {
     const name = viewerName.trim();
     if(joinCodeInput.trim()) {
       if(joinCodeInput.trim()===joinCode) {
-        onLogin({name, role:"self-register"});
+        onLogin({name, role:"self-register", onError:(msg)=>setErr(msg)});
       } else {
         setErr("Invalid join code.");
       }
@@ -258,7 +258,8 @@ export default function App() {
     if(u.role==="self-register") {
       const existing = appState.players.find(p=>p.name.toLowerCase()===u.name.toLowerCase());
       if(existing) {
-        setUser({name:existing.name,role:"viewer"});
+        u.onError("That name is already taken — please choose a different name or log in as a Guest with that name.");
+        return;
       } else {
         const id=Date.now();
         persist({...appState,players:[...appState.players,{id,name:u.name,joinedWeek:1}],weeklyGames:{...appState.weeklyGames,[id]:{}}});
