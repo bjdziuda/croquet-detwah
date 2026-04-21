@@ -111,9 +111,10 @@ const EMPTY_STATE = {
   venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
   votes: {},
   joinCode: "croquet2026",
+  nextVenueId: null,
 };
 
-function LoginScreen({onLogin, joinCode}) {
+function LoginScreen({onLogin, joinCode, nextMatch}) {
   const [mode, setMode]         = useState("choose");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -147,11 +148,30 @@ function LoginScreen({onLogin, joinCode}) {
   return (
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"24px"}}>
       <div style={{maxWidth:"400px",width:"100%"}}>
-        <div style={{textAlign:"center",marginBottom:"36px"}}>
+        <div style={{textAlign:"center",marginBottom:"24px"}}>
           <div style={{fontSize:"3.5rem",marginBottom:"12px"}}>🔵</div>
           <h1 style={{color:C.cream,fontSize:"2rem",margin:"0 0 6px",letterSpacing:"0.05em",fontWeight:"bold"}}>Croquet De-Twah</h1>
           <p style={{color:C.muted,fontSize:"0.85rem",margin:0,letterSpacing:"0.08em",textTransform:"uppercase"}}>2026 Season</p>
         </div>
+        {nextMatch&&(
+          <div style={{background:C.card,border:`1px solid ${C.accent}44`,borderRadius:"12px",padding:"14px 16px",marginBottom:"24px"}}>
+            <div style={{color:C.accent,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"8px"}}>NEXT MATCH</div>
+            <div style={{display:"flex",gap:"12px",alignItems:"center"}}>
+              {nextMatch.imageUrl
+                ? <img src={nextMatch.imageUrl} alt={nextMatch.name} style={{width:"56px",height:"56px",borderRadius:"8px",objectFit:"cover",flexShrink:0}}/>
+                : <div style={{width:"56px",height:"56px",borderRadius:"8px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.5rem",flexShrink:0}}>📍</div>
+              }
+              <div style={{flex:1}}>
+                <div style={{color:C.cream,fontWeight:"bold",fontSize:"0.95rem",marginBottom:"2px"}}>{nextMatch.name}</div>
+                <div style={{color:C.accentLight,fontSize:"0.8rem",marginBottom:"4px"}}>📅 {nextMatch.date} · 6:30pm</div>
+                <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                  <StarRating value={Math.round(nextMatch.avgRating||0)} size={12}/>
+                  <span style={{color:nextMatch.hasGrill?C.accent:C.muted,fontSize:"0.72rem"}}>{nextMatch.hasGrill?"🔥 Grills":"🚫 No grills"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {mode==="choose" && (
           <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
             <button onClick={()=>setMode("admin")} style={{...bSt(),padding:"16px"}}>🔐 Admin Login</button>
@@ -254,6 +274,29 @@ export default function App() {
       Loading league data…
     </div>
   );
+  const getNextMonday = () => {
+    const now = new Date();
+    const seasonStart = new Date("2025-05-04");
+    const start = now > seasonStart ? now : seasonStart;
+    const day = start.getDay();
+    const daysUntilMonday = day===1 ? 7 : (8-day)%7||7;
+    const next = new Date(start);
+    next.setDate(start.getDate() + daysUntilMonday);
+    return next.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  };
+
+  const nextVenue = appState?.nextVenueId
+    ? appState.venues?.find(v=>v.id===appState.nextVenueId)
+    : null;
+
+  const nextMatch = nextVenue ? {
+    ...nextVenue,
+    avgRating: nextVenue.reviews?.length
+      ? (nextVenue.reviews.reduce((s,r)=>s+r.rating,0)+(nextVenue.rating||0))/(nextVenue.reviews.length+(nextVenue.rating>0?1:0))
+      : nextVenue.rating||0,
+    date: getNextMonday(),
+  } : null;
+
   if (!user) return <LoginScreen onLogin={(u)=>{
     if(u.role==="self-register") {
       const existing = appState.players.find(p=>p.name.toLowerCase()===u.name.toLowerCase());
@@ -268,7 +311,7 @@ export default function App() {
     } else {
       setUser(u);
     }
-  }} joinCode={appState?.joinCode||"croquet2026"}/>;
+  }} joinCode={appState?.joinCode||"croquet2026"} nextMatch={nextMatch}/>;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>setUser(null)} uploadImage={uploadImage}/>;
 }
 
@@ -594,6 +637,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             {/* Right controls */}
             <div style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
               {isAdmin&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"6px 10px",fontSize:"0.72rem"}}>+Wk</button>}
+              {isAdmin&&<select value={appState.nextVenueId||""} onChange={e=>update({nextVenueId:e.target.value?parseInt(e.target.value):null})} style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:"6px",color:C.accent,padding:"4px 6px",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                <option value="">📍 Set venue</option>
+                {venues.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>}
               <div style={{textAlign:"right"}}>
                 <span style={{background:isAdmin?C.accent+"33":C.green+"22",border:`1px solid ${isAdmin?C.accent+"55":C.green+"44"}`,borderRadius:"12px",padding:"2px 7px",fontSize:"0.65rem",color:isAdmin?C.accentLight:C.greenLight,display:"block"}}>{isAdmin?"⚙ ADMIN":"👁 GUEST"}</span>
                 <div style={{color:C.muted,fontSize:"0.65rem",marginTop:"1px"}}>{user.name}</div>
