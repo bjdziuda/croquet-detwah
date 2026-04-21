@@ -275,7 +275,7 @@ export default function App() {
     </div>
   );
   const getMatchDate = (weekNum) => {
-    const seasonStart = new Date("2026-05-04");
+    const seasonStart = new Date(2026, 4, 4); // May 4 2026 - using local time to avoid timezone issues
     const matchDate = new Date(seasonStart);
     matchDate.setDate(seasonStart.getDate() + (weekNum - 1) * 7);
     return matchDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
