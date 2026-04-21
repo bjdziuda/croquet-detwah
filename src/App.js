@@ -274,19 +274,15 @@ export default function App() {
       Loading league data…
     </div>
   );
-  const getNextMonday = () => {
-    const now = new Date();
-    const seasonStart = new Date("2025-05-04");
-    const start = now > seasonStart ? now : seasonStart;
-    const day = start.getDay();
-    const daysUntilMonday = day===1 ? 7 : (8-day)%7||7;
-    const next = new Date(start);
-    next.setDate(start.getDate() + daysUntilMonday);
-    return next.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  const getMatchDate = (weekNum) => {
+    const seasonStart = new Date("2026-05-04");
+    const matchDate = new Date(seasonStart);
+    matchDate.setDate(seasonStart.getDate() + (weekNum - 1) * 7);
+    return matchDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
   };
 
   const nextVenue = appState?.nextVenueId
-    ? appState.venues?.find(v=>v.id===appState.nextVenueId)
+    ? appState.venues?.find(v=>String(v.id)===String(appState.nextVenueId))
     : null;
 
   const nextMatch = nextVenue ? {
@@ -294,7 +290,7 @@ export default function App() {
     avgRating: nextVenue.reviews?.length
       ? (nextVenue.reviews.reduce((s,r)=>s+r.rating,0)+(nextVenue.rating||0))/(nextVenue.reviews.length+(nextVenue.rating>0?1:0))
       : nextVenue.rating||0,
-    date: getNextMonday(),
+    date: getMatchDate(appState.nextMatchWeek||1),
   } : null;
 
   if (!user) return <LoginScreen onLogin={(u)=>{
@@ -637,10 +633,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             {/* Right controls */}
             <div style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
               {isAdmin&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"6px 10px",fontSize:"0.72rem"}}>+Wk</button>}
-              {isAdmin&&<select value={appState.nextVenueId||""} onChange={e=>update({nextVenueId:e.target.value?parseInt(e.target.value):null})} style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:"6px",color:C.accent,padding:"4px 6px",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
-                <option value="">📍 Set venue</option>
-                {venues.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>}
+              {isAdmin&&<div style={{display:"flex",gap:"4px",alignItems:"center"}}>
+                <select value={appState.nextMatchWeek||1} onChange={e=>update({nextMatchWeek:parseInt(e.target.value)})} style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:"6px",color:C.accent,padding:"4px 6px",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                  {Array.from({length:20},(_,i)=>i+1).map(w=><option key={w} value={w}>Wk {w}</option>)}
+                </select>
+                <select value={appState.nextVenueId||""} onChange={e=>update({nextVenueId:e.target.value?parseInt(e.target.value):null})} style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:"6px",color:C.accent,padding:"4px 6px",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                  <option value="">📍 Set venue</option>
+                  {venues.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </div>}
               <div style={{textAlign:"right"}}>
                 <span style={{background:isAdmin?C.accent+"33":C.green+"22",border:`1px solid ${isAdmin?C.accent+"55":C.green+"44"}`,borderRadius:"12px",padding:"2px 7px",fontSize:"0.65rem",color:isAdmin?C.accentLight:C.greenLight,display:"block"}}>{isAdmin?"⚙ ADMIN":"👁 GUEST"}</span>
                 <div style={{color:C.muted,fontSize:"0.65rem",marginTop:"1px"}}>{user.name}</div>
