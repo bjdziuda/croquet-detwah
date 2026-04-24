@@ -6,7 +6,7 @@ import CroquetGame from './CroquetGame';
 import ParkTracer  from './ParkTracer';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCwD4CXsZ91eD83ZKwn1s3lTHHt8Lyqfpw",
+  apiKey: "AIzaSyCwD4CXsZ91eD83ZKwn1s3lTHHt8Lyqfpw", // netlify-secrets-ignore
   authDomain: "croquet-detwah.firebaseapp.com",
   projectId: "croquet-detwah",
   storageBucket: "croquet-detwah.firebasestorage.app",
