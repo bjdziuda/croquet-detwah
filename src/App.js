@@ -2,6 +2,8 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import CroquetGame from './CroquetGame';
+import ParkTracer  from './ParkTracer';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCwD4CXsZ91eD83ZKwn1s3lTHHt8Lyqfpw",
@@ -14,6 +16,7 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
+window._croquetDB = db;
 const LEAGUE_DOC = doc(db, "league", "data");
 
 const CLOUDINARY_CLOUD = "dr3pitbr2";
@@ -543,6 +546,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
   const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["vote","🗳 Vote"],["profile","👤 Profile"],
+    ...(user?.role==="superadmin"?[["minigame","⛳ Mini-Game"],["tracer","🗺 Park Tracer"]]:[]),
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[])
   ];
 
@@ -657,6 +661,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       </div>
 
       {note&&<div style={{background:C.accent,color:C.bg,textAlign:"center",padding:"8px",fontSize:"0.85rem",fontWeight:"bold"}}>{note}</div>}
+      <CommissionerOverlays tab={tab} user={user} setTab={setTab}/>
 
       <div style={{maxWidth:"1020px",margin:"0 auto",padding:"16px 10px"}}>
 
@@ -1226,4 +1231,35 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       </div>
     </div>
   );
+}
+// ── Commissioner-only overlays ──────────────────────────────────────────────
+
+function CommissionerOverlays({tab, user, setTab}) {
+  if(user?.role!=="superadmin") return null;
+  const backBtn = (
+    <button
+      onClick={()=>setTab("standings")}
+      style={{position:"absolute",top:8,right:8,zIndex:510,
+        background:"rgba(0,0,0,0.75)",color:"#e8d080",
+        border:"1px solid #2a4a2a",borderRadius:6,
+        padding:"5px 14px",cursor:"pointer",
+        fontFamily:"Georgia,serif",fontSize:12,letterSpacing:1}}>
+      ← League
+    </button>
+  );
+  if(tab==="minigame") return(
+    <div style={{position:"fixed",inset:0,zIndex:500}}>
+      {backBtn}
+      <CroquetGame
+        currentPlayer={{id:"commissioner",name:"Commissioner"}}
+        isCommissioner={true}/>
+    </div>
+  );
+  if(tab==="tracer") return(
+    <div style={{position:"fixed",inset:0,zIndex:500}}>
+      {backBtn}
+      <ParkTracer/>
+    </div>
+  );
+  return null;
 }
