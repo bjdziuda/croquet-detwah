@@ -114,6 +114,7 @@ const EMPTY_STATE = {
   votes: {},
   joinCode: "croquet2026",
   nextVenueId: null,
+  pastSeasons: {},
 };
 
 function LoginScreen({onLogin, joinCode, nextMatch}) {
@@ -544,9 +545,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["vote","🗳 Vote"],["profile","👤 Profile"],
+  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["profile","👤 Profile"],
+    ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
+    ["logo","🏆 League Logo"],
     ...(user?.role==="superadmin"?[["minigame","⛳ Mini-Game"]]:[]),
-    ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[])
   ];
 
   return (
@@ -814,173 +816,109 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           </div>
         )}
+        {tab==="logo"&&(
+          <div style={{maxWidth:"600px",margin:"0 auto",padding:"32px 16px",fontFamily:"Georgia,serif",overflowY:"auto"}}>
 
-        {tab==="vote"&&(()=>{
-          const alreadyVoted = !!votes[user.name];
-          const logoResults = runRCV(LOGO_ENTRIES, votes, "logo");
-          const mottoResults = runRCV(MOTTO_ENTRIES, votes, "motto");
-          const totalVoters = Object.keys(votes).length;
-
-          const Results = () => (
-            <div>
-              <h3 style={{color:C.accentLight,fontSize:"0.9rem",letterSpacing:"0.06em",marginBottom:"12px"}}>LIVE RESULTS — LOGO</h3>
-              <div style={{display:"flex",flexWrap:"wrap",gap:"8px",marginBottom:"20px"}}>
-                {logoResults.map((e,i)=>(
-                  <div key={e.id} style={{...cardSt,padding:"8px",textAlign:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
-                    <img src={e.url} alt="" onClick={()=>setLightbox(e.url)} style={{width:"70px",height:"70px",objectFit:"cover",borderRadius:"6px",display:"block",marginBottom:"4px",cursor:"pointer"}}/>
-                    <div style={{color:i===0?C.gold:C.muted,fontSize:"0.7rem",fontWeight:i===0?"bold":"normal"}}>{i===0?"🏆 ":""}{e.votes}v</div>
-                  </div>
-                ))}
-              </div>
-              <h3 style={{color:C.accentLight,fontSize:"0.9rem",letterSpacing:"0.06em",marginBottom:"10px"}}>LIVE RESULTS — MOTTO</h3>
-              <div style={{display:"flex",flexDirection:"column",gap:"6px",marginBottom:"20px"}}>
-                {mottoResults.map((e,i)=>(
-                  <div key={e.id} style={{...cardSt,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:e.eliminated?0.4:1,border:`1px solid ${i===0?C.gold+"66":C.border}`}}>
-                    <span style={{color:i===0?C.gold:C.cream,fontSize:"0.82rem"}}>{i===0?"🏆 ":""}{e.text}</span>
-                    <span style={{color:C.muted,fontSize:"0.75rem",marginLeft:"8px",whiteSpace:"nowrap"}}>{e.votes}v</span>
-                  </div>
-                ))}
-              </div>
-              {isAdmin&&totalVoters>0&&(
-                <div style={{...cardSt,borderColor:C.red+"44"}}>
-                  <h3 style={{color:C.red,fontSize:"0.82rem",letterSpacing:"0.06em",margin:"0 0 10px"}}>⚙ MANAGE VOTES</h3>
-                  <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-                    {Object.entries(votes).map(([name,v])=>(
-                      <div key={name} style={{background:C.surface,borderRadius:"6px",padding:"10px 12px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
-                          <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold"}}>{name}</span>
-                          <button onClick={()=>{const nv={...votes};delete nv[name];update({votes:nv});notify(`Vote from ${name} deleted.`);}} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Delete</button>
-                        </div>
-                        <div style={{marginBottom:"6px"}}>
-                          <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"4px"}}>LOGO RANKING</div>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>
-                            {(v.logoRanking||[]).map((id,i)=>{
-                              const entry=LOGO_ENTRIES.find(e=>e.id===id);
-                              return entry?(
-                                <div key={id} style={{display:"flex",alignItems:"center",gap:"3px",background:C.card,borderRadius:"4px",padding:"2px 6px"}}>
-                                  <span style={{color:C.accent,fontSize:"0.65rem",fontWeight:"bold"}}>#{i+1}</span>
-                                  <img src={entry.url} alt="" style={{width:"20px",height:"20px",objectFit:"cover",borderRadius:"2px"}}/>
-                                </div>
-                              ):null;
-                            })}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"4px"}}>MOTTO RANKING</div>
-                          <div style={{display:"flex",flexDirection:"column",gap:"2px"}}>
-                            {(v.mottoRanking||[]).map((id,i)=>{
-                              const entry=MOTTO_ENTRIES.find(e=>e.id===id);
-                              return entry?(
-                                <div key={id} style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                                  <span style={{color:C.accent,fontSize:"0.65rem",fontWeight:"bold",minWidth:"20px"}}>#{i+1}</span>
-                                  <span style={{color:C.muted,fontSize:"0.72rem"}}>{entry.text}</span>
-                                </div>
-                              ):null;
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div style={{textAlign:"center",marginBottom:"36px"}}>
+              <div style={{fontSize:"2.5rem",marginBottom:"8px"}}>🏆</div>
+              <h2 style={{color:C.cream,fontSize:"1.4rem",letterSpacing:"0.08em",margin:"0 0 6px",fontWeight:"bold"}}>
+                League Honours
+              </h2>
+              <p style={{color:C.muted,fontSize:"0.78rem",margin:0,letterSpacing:"0.06em"}}>
+                Logo & motto winners by season
+              </p>
             </div>
-          );
 
-          const RankList = ({entries, ranking, setRanking, type}) => {
-            const unranked = entries.filter(e=>!ranking.includes(e.id));
-            const move = (id, dir) => {
-              const idx = ranking.indexOf(id);
-              if(idx===-1) return;
-              const next = [...ranking];
-              const swap = idx+dir;
-              if(swap<0||swap>=next.length) return;
-              [next[idx],next[swap]]=[next[swap],next[idx]];
-              setRanking(next);
-            };
-            const addToRanking = id => setRanking(prev=>[...prev,id]);
-            const removeFromRanking = id => setRanking(prev=>prev.filter(x=>x!==id));
-            return (
-              <div>
-                {ranking.length>0&&(
-                  <div style={{marginBottom:"14px"}}>
-                    <div style={{color:C.accent,fontSize:"0.68rem",letterSpacing:"0.1em",marginBottom:"6px"}}>YOUR RANKING</div>
-                    {ranking.map((id,i)=>{
-                      const entry=entries.find(e=>e.id===id);
-                      if(!entry) return null;
-                      return(
-                        <div key={id} style={{...cardSt,padding:"8px 10px",marginBottom:"5px",display:"flex",alignItems:"center",gap:"8px",border:`1px solid ${C.accent}44`}}>
-                          <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.9rem",minWidth:"22px"}}>#{i+1}</span>
-                          {type==="logo"
-                            ? <img src={entry.url} alt={`Logo ${id}`} onClick={()=>setLightbox(entry.url)} style={{width:"50px",height:"50px",objectFit:"cover",borderRadius:"5px",cursor:"pointer"}}/>
-                            : <span style={{color:C.cream,fontSize:"0.82rem",flex:1}}>{entry.text}</span>
-                          }
-                          <div style={{display:"flex",flexDirection:"column",gap:"2px",marginLeft:"auto"}}>
-                            <button onClick={()=>move(id,-1)} disabled={i===0} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"3px",padding:"1px 7px",cursor:"pointer",fontSize:"0.8rem"}}>▲</button>
-                            <button onClick={()=>move(id,1)} disabled={i===ranking.length-1} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"3px",padding:"1px 7px",cursor:"pointer",fontSize:"0.8rem"}}>▼</button>
-                          </div>
-                          <button onClick={()=>removeFromRanking(id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 7px",cursor:"pointer",fontSize:"0.72rem"}}>✕</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"8px"}}>
-                  {ranking.length===0?"TAP TO RANK (in order of preference)":"UNRANKED — tap to add to your ranking"}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
-                  {unranked.map(entry=>(
-                    <div key={entry.id} onClick={()=>addToRanking(entry.id)}
-                      style={{cursor:"pointer",border:`1px solid ${C.border}`,borderRadius:"8px",overflow:"hidden",background:C.surface}}>
-                      {type==="logo"
-                        ? <img src={entry.url} alt={`Logo ${entry.id}`} onClick={(ev)=>{ev.stopPropagation();setLightbox(entry.url);}} style={{width:"85px",height:"85px",objectFit:"cover",display:"block"}}/>
-                        : <div style={{padding:"10px 12px",color:C.cream,fontSize:"0.8rem",maxWidth:"200px"}}>{entry.text}</div>
-                      }
-                      {type==="logo"&&<div style={{textAlign:"center",padding:"3px",color:C.muted,fontSize:"0.65rem"}}>+ rank</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          };
+            {/* 2026 Season */}
+            <div style={{color:C.accent,fontSize:"0.7rem",letterSpacing:"0.14em",marginBottom:"12px",textAlign:"center"}}>2026 SEASON</div>
 
-          return (
-            <div>
-              {lightbox&&(
-                <div onClick={()=>setLightbox(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                  <img src={lightbox} alt="Full size" style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:"8px"}}/>
-                  <div style={{position:"absolute",top:"16px",right:"16px",color:"white",fontSize:"1.5rem"}}>✕</div>
-                </div>
-              )}
-              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"4px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>🗳 Vote — 2026 Logo & Motto</h2>
-              <p style={{color:C.muted,fontSize:"0.75rem",marginBottom:"16px"}}>{totalVoters} member{totalVoters!==1?"s":""} have voted so far.</p>
-              {alreadyVoted ? (
-                <div>
-                  <div style={{...cardSt,borderColor:C.green+"55",background:"#0d1f0d",marginBottom:"20px",padding:"14px 16px"}}>
-                    <p style={{color:C.greenLight,margin:0,fontWeight:"bold"}}>✓ Your vote has been recorded!</p>
-                    <p style={{color:C.muted,fontSize:"0.78rem",margin:"4px 0 0"}}>Voting is locked — one vote per member.</p>
-                  </div>
-                  <Results/>
-                </div>
-              ) : (
-                <div>
-                  {isAdmin&&<div style={{marginBottom:"20px"}}><Results/><hr style={{borderColor:C.border,margin:"20px 0"}}/></div>}
-                  <div style={{...cardSt,marginBottom:"20px"}}>
-                    <h3 style={{color:C.accentLight,fontSize:"0.88rem",letterSpacing:"0.06em",margin:"0 0 10px"}}>STEP 1 — RANK THE LOGOS</h3>
-                    <p style={{color:C.muted,fontSize:"0.75rem",margin:"0 0 12px",lineHeight:"1.5"}}>Tap logos to rank them. Use ▲▼ to reorder. Tap image to enlarge.</p>
-                    <RankList entries={LOGO_ENTRIES} ranking={logoRanking} setRanking={setLogoRanking} type="logo"/>
-                  </div>
-                  <div style={{...cardSt,marginBottom:"20px"}}>
-                    <h3 style={{color:C.accentLight,fontSize:"0.88rem",letterSpacing:"0.06em",margin:"0 0 10px"}}>STEP 2 — RANK THE MOTTOS</h3>
-                    <p style={{color:C.muted,fontSize:"0.75rem",margin:"0 0 12px",lineHeight:"1.5"}}>Tap mottos to rank them. Use ▲▼ to reorder.</p>
-                    <RankList entries={MOTTO_ENTRIES} ranking={mottoRanking} setRanking={setMottoRanking} type="motto"/>
-                  </div>
-                  <button onClick={submitVote} style={{...btnSt(),padding:"12px 32px",fontSize:"0.9rem",width:"100%"}}>Submit My Vote 🗳</button>
-                </div>
-              )}
+            <div style={{...cardSt,border:`1px solid ${C.accent}55`,marginBottom:"14px",textAlign:"center"}}>
+              <div style={{color:C.accent,fontSize:"0.65rem",letterSpacing:"0.12em",marginBottom:"12px"}}>OFFICIAL LEAGUE LOGO</div>
+              <img
+                src={LOGO_ENTRIES.find(e=>e.id==="l10")?.url}
+                alt="2026 Logo"
+                onClick={()=>setLightbox(LOGO_ENTRIES.find(e=>e.id==="l10")?.url)}
+                style={{maxWidth:"240px",width:"100%",borderRadius:"10px",
+                  border:`2px solid ${C.accent}`,cursor:"pointer",
+                  boxShadow:"0 4px 24px rgba(0,0,0,0.5)",marginBottom:"12px"}}
+              />
+              <div style={{color:C.accentLight,fontSize:"0.95rem",fontWeight:"bold"}}>🥇 Steve D.</div>
+              <div style={{color:C.muted,fontSize:"0.72rem",marginTop:"3px"}}>Logo design · 2026</div>
             </div>
-          );
-        })()}
+
+            <div style={{...cardSt,border:`1px solid ${C.green}55`,marginBottom:"32px",textAlign:"center"}}>
+              <div style={{color:C.greenLight,fontSize:"0.65rem",letterSpacing:"0.12em",marginBottom:"12px"}}>OFFICIAL LEAGUE MOTTO</div>
+              <div style={{color:C.cream,fontSize:"1.2rem",fontStyle:"italic",lineHeight:"1.6",marginBottom:"12px"}}>
+                "Nothing But a Mallet in the back<br/>and tinned fish in the front"
+              </div>
+              <div style={{color:C.greenLight,fontSize:"0.95rem",fontWeight:"bold"}}>🥇 Mark C.</div>
+              <div style={{color:C.muted,fontSize:"0.72rem",marginTop:"3px"}}>Motto · 2026</div>
+            </div>
+
+            {/* 2025 Season */}
+            <div style={{color:C.accent,fontSize:"0.7rem",letterSpacing:"0.14em",marginBottom:"12px",textAlign:"center"}}>2025 SEASON</div>
+
+            <div style={{...cardSt,border:`1px solid ${C.accent}55`,marginBottom:"14px",textAlign:"center"}}>
+              <div style={{color:C.accent,fontSize:"0.65rem",letterSpacing:"0.12em",marginBottom:"12px"}}>OFFICIAL LEAGUE LOGO</div>
+              {appState.pastSeasons?.["2025"]?.logoUrl
+                ? <img src={appState.pastSeasons["2025"].logoUrl} alt="2025 Logo"
+                    onClick={()=>setLightbox(appState.pastSeasons["2025"].logoUrl)}
+                    style={{maxWidth:"240px",width:"100%",borderRadius:"10px",
+                      border:`2px solid ${C.accent}`,cursor:"pointer",
+                      boxShadow:"0 4px 24px rgba(0,0,0,0.5)",marginBottom:"12px"}}/>
+                : isAdmin
+                  ? <label style={{display:"block",background:C.surface,border:`1px dashed ${C.border}`,
+                      borderRadius:"8px",padding:"24px",cursor:"pointer",marginBottom:"12px",color:C.muted,fontSize:"0.78rem"}}>
+                      📁 Upload 2025 logo
+                      <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                        const file=e.target.files[0]; if(!file) return;
+                        const url=await uploadImage(file);
+                        update({pastSeasons:{...appState.pastSeasons,["2025"]:{...(appState.pastSeasons?.["2025"]||{}),logoUrl:url}}});
+                        notify("2025 logo uploaded!");
+                      }}/>
+                    </label>
+                  : <div style={{color:C.border,fontSize:"0.78rem",padding:"20px",fontStyle:"italic"}}>Coming soon</div>
+              }
+              {appState.pastSeasons?.["2025"]?.logoWinner
+                ? <div style={{color:C.accentLight,fontSize:"0.95rem",fontWeight:"bold"}}>🥇 {appState.pastSeasons["2025"].logoWinner}</div>
+                : isAdmin && <input placeholder="Logo winner name…"
+                    style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",
+                      padding:"6px 10px",color:C.text,fontSize:"0.82rem",fontFamily:"Georgia,serif",
+                      width:"100%",boxSizing:"border-box",textAlign:"center",outline:"none"}}
+                    onBlur={e=>{if(e.target.value.trim())
+                      update({pastSeasons:{...appState.pastSeasons,["2025"]:{...(appState.pastSeasons?.["2025"]||{}),logoWinner:e.target.value.trim()}}});
+                    }}/>
+              }
+            </div>
+
+            <div style={{...cardSt,border:`1px solid ${C.green}55`,marginBottom:"14px",textAlign:"center"}}>
+              <div style={{color:C.greenLight,fontSize:"0.65rem",letterSpacing:"0.12em",marginBottom:"12px"}}>OFFICIAL LEAGUE MOTTO</div>
+              {appState.pastSeasons?.["2025"]?.motto
+                ? <div style={{color:C.cream,fontSize:"1.2rem",fontStyle:"italic",lineHeight:"1.6",marginBottom:"12px"}}>
+                    "{appState.pastSeasons["2025"].motto}"
+                  </div>
+                : isAdmin && <textarea placeholder="Enter 2025 motto…"
+                    style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",
+                      padding:"8px 10px",color:C.text,fontSize:"0.85rem",fontFamily:"Georgia,serif",
+                      width:"100%",boxSizing:"border-box",resize:"vertical",minHeight:"60px",outline:"none"}}
+                    onBlur={e=>{if(e.target.value.trim())
+                      update({pastSeasons:{...appState.pastSeasons,["2025"]:{...(appState.pastSeasons?.["2025"]||{}),motto:e.target.value.trim()}}});
+                    }}/>
+              }
+              {appState.pastSeasons?.["2025"]?.mottoWinner
+                ? <div style={{color:C.greenLight,fontSize:"0.95rem",fontWeight:"bold"}}>🥇 {appState.pastSeasons["2025"].mottoWinner}</div>
+                : isAdmin && <input placeholder="Motto winner name…"
+                    style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",
+                      padding:"6px 10px",color:C.text,fontSize:"0.82rem",fontFamily:"Georgia,serif",
+                      width:"100%",boxSizing:"border-box",textAlign:"center",outline:"none",marginTop:"8px"}}
+                    onBlur={e=>{if(e.target.value.trim())
+                      update({pastSeasons:{...appState.pastSeasons,["2025"]:{...(appState.pastSeasons?.["2025"]||{}),mottoWinner:e.target.value.trim()}}});
+                    }}/>
+              }
+            </div>
+
+          </div>
+        )}
 
         {tab==="record"&&isAdmin&&(
           <div>
