@@ -562,7 +562,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
   const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["profile","👤 Profile"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
-    ["logo","🏆 League Logo"],
+    ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["minigame","⛳ Mini-Game"]]:[]),
   ];
 
@@ -1277,7 +1277,7 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
             {gold?(
               s.logoUrl
                 ?<img src={s.logoUrl} alt="logo" onClick={()=>setLightbox(s.logoUrl)}
-                    style={{width:"100%",maxWidth:"150px",borderRadius:"10px",objectFit:"contain",
+                    style={{width:"100%",maxWidth:"220px",borderRadius:"10px",objectFit:"contain",
                       border:`1px solid ${cardCol}55`,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",cursor:"pointer"}}/>
                 :(isAdmin&&<label style={{width:"120px",height:"120px",background:C.surface,
                     border:`1px dashed ${cardCol}66`,borderRadius:"10px",display:"flex",
@@ -1293,7 +1293,7 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
                   </label>)
             ):(
               s.motto
-                ?<div style={{fontSize:"0.82rem",fontStyle:"italic",color:C.cream,
+                ?<div style={{fontSize:"1.05rem",fontStyle:"italic",color:C.cream,
                     lineHeight:"1.6",padding:"0 4px"}}>"{s.motto}"</div>
                 :<div style={{fontSize:"0.75rem",color:C.muted,fontStyle:"italic",padding:"20px 0"}}>
                     No motto set yet
