@@ -132,7 +132,7 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, joinCode, nextMatch}) {
+function LoginScreen({onLogin, joinCode, nextMatch, leagueLogo}) {
   const [mode, setMode]         = useState("choose");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -167,7 +167,9 @@ function LoginScreen({onLogin, joinCode, nextMatch}) {
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"24px"}}>
       <div style={{maxWidth:"400px",width:"100%"}}>
         <div style={{textAlign:"center",marginBottom:"24px"}}>
-          <div style={{fontSize:"3.5rem",marginBottom:"12px"}}>🔵</div>
+          <div style={{fontSize:"3.5rem",marginBottom:"12px",width:"60px",height:"60px",borderRadius:"50%",overflow:"hidden",margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {leagueLogo?<img src={leagueLogo} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span>🔵</span>}
+          </div>
           <h1 style={{color:C.cream,fontSize:"2rem",margin:"0 0 6px",letterSpacing:"0.05em",fontWeight:"bold"}}>Croquet De-Twah</h1>
           <p style={{color:C.muted,fontSize:"0.85rem",margin:0,letterSpacing:"0.08em",textTransform:"uppercase"}}>2026 Season</p>
         </div>
@@ -325,7 +327,7 @@ export default function App() {
     } else {
       setUser(u);
     }
-  }} joinCode={appState?.joinCode||"croquet2026"} nextMatch={nextMatch}/>;
+  }} joinCode={appState?.joinCode||"croquet2026"} nextMatch={nextMatch} leagueLogo={appState?.leagueLogo}/>;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>setUser(null)} uploadImage={uploadImage}/>;
 }
 
@@ -639,7 +641,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               onMouseEnter={e=>{if(isAdmin){e.currentTarget.style.borderColor=C.accent;}}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}>
               {leagueLogo?<img src={leagueLogo} alt="logo" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.3rem",lineHeight:1}}>🔵</span>}
-{isAdmin&&<label style={{position:"absolute",bottom:0,right:0,background:C.accent,borderRadius:"50%",width:"16px",height:"16px",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:"0.5rem"}}>📷<input type="file" accept="image/*" style={{display:"none"}} onChange={handleLogoUpload}/></label>}
+{isAdmin&&<>
+  <label style={{position:"absolute",bottom:0,right:0,background:C.accent,borderRadius:"50%",width:"16px",height:"16px",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:"0.5rem"}}>📷<input type="file" accept="image/*" style={{display:"none"}} onChange={handleLogoUpload}/></label>
+  <div onClick={e=>{e.stopPropagation();setShowPhotoPicker(true);}} style={{position:"absolute",top:0,left:0,right:0,bottom:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0)",borderRadius:"50%",cursor:"pointer"}} title="Choose from existing photos"/>
+</>}
             </div>
             <input ref={logoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleLogoUpload}/>
             {/* Title */}
@@ -684,7 +689,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       </div>
 
       {note&&<div style={{background:C.accent,color:C.bg,textAlign:"center",padding:"8px",fontSize:"0.85rem",fontWeight:"bold"}}>{note}</div>}
-      {showPhotoPicker&&<CloudinaryPicker onSelect={url=>update({leagueLogo:url})} onClose={()=>setShowPhotoPicker(false)}/>}
+      {showPhotoPicker&&<CloudinaryPicker appState={appState} onSelect={url=>update({leagueLogo:url})} onClose={()=>setShowPhotoPicker(false)}/>}
       <CommissionerOverlays tab={tab} user={user} setTab={setTab} appState={appState} isAdmin={isAdmin}/>
 
       <div style={{maxWidth:"1020px",margin:"0 auto",padding:"16px 10px"}}>
@@ -1279,9 +1284,8 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
         padding:"20px 8px 18px",textAlign:"center",flex:1,minWidth:"240px",maxWidth:"300px"}}>
         <div style={{fontSize:"0.6rem",letterSpacing:"0.14em",color:cardCol,
           fontWeight:"bold",marginBottom:"10px"}}>{label}</div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"2px"}}>
-          <div style={{flexShrink:0,opacity:0.92}} dangerouslySetInnerHTML={{__html:branch}}/>
-          <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"8px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",gap:"8px"}}>
             {gold?(
               s.logoUrl
                 ?<img src={s.logoUrl} alt="logo" onClick={()=>setLightbox(s.logoUrl)}
@@ -1308,8 +1312,7 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
                   </div>
             )}
           </div>
-          <div style={{flexShrink:0,opacity:0.92,transform:"scaleX(-1)"}}
-            dangerouslySetInnerHTML={{__html:branch}}/>
+          
         </div>
         {(gold?s.logoWinner:s.mottoWinner)&&(
           <div style={{fontSize:"0.9rem",fontWeight:"bold",color:C.cream,marginTop:"8px"}}>
@@ -1489,9 +1492,11 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
 }
 
 // ── Cloudinary photo picker ──────────────────────────────────────────────────
-function CloudinaryPicker({onSelect, onClose}) {
+function CloudinaryPicker({onSelect, onClose, appState}) {
   const allImages = [
     ...LOGO_ENTRIES.map(e=>({url:e.url,label:"Logo entry"})),
+    ...(appState?.players||[]).filter(p=>p.imageUrl).map(p=>({url:p.imageUrl,label:p.name})),
+    ...(appState?.venues||[]).filter(v=>v.imageUrl).map(v=>({url:v.imageUrl,label:v.name})),
   ];
 
   return(
