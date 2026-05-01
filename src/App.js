@@ -3,8 +3,6 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import CroquetGame from './CroquetGame';
-import CroquetGame from './CroquetGame';
-import ParkTracer  from './ParkTracer';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCwD4CXsZ91eD83ZKwn1s3lTHHt8Lyqfpw", // netlify-secrets-ignore
