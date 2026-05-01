@@ -563,7 +563,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["profile","👤 Profile"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
     ["logo","🏆 League Honours"],
-    ...(user?.role==="superadmin"?[["minigame","⛳ Mini-Game"]]:[]),
+    ...(user?[["minigame","⛳ Mini-Game"]]:[]),
   ];
 
   return (
@@ -1483,7 +1483,6 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
 // ── Commissioner-only overlays ──────────────────────────────────────────────
 
 function CommissionerOverlays({tab, user, setTab, appState, isAdmin}) {
-  if(user?.role!=="superadmin"&&!isAdmin) return null;
   if(tab!=="minigame") return null;
 
   const leagueMember = appState?.players?.find(p=>p.name===user.name);
