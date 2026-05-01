@@ -115,6 +115,21 @@ const EMPTY_STATE = {
   joinCode: "croquet2026",
   nextVenueId: null,
   pastSeasons: {},
+  leagueHonours: {
+    seasons: {
+      "2026":{ logoWinner:"", motto:"", mottoWinner:"", logoUrl:"" },
+      "2025":{ logoWinner:"", motto:"", mottoWinner:"", logoUrl:"" },
+    },
+    awards: {
+      "2026":[{title:"League Champion",recipient:"",pinned:true},{title:"Shot of the Day",recipient:""},{title:"Most Improved",recipient:""}],
+      "2025":[{title:"League Champion",recipient:"",pinned:true},{title:"Shot of the Day",recipient:""},{title:"Most Improved",recipient:""}],
+      "2024":[{title:"League Champion",recipient:"",pinned:true}],
+      "2023":[{title:"League Champion",recipient:"",pinned:true}],
+      "2022":[{title:"League Champion",recipient:"",pinned:true}],
+      "2021":[{title:"League Champion",recipient:"",pinned:true}],
+      "2020":[{title:"League Champion",recipient:"",pinned:true}],
+    },
+  },
 };
 
 function LoginScreen({onLogin, joinCode, nextMatch}) {
@@ -817,6 +832,21 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           </div>
         )}
         {tab==="logo"&&(
+          <div style={{maxWidth:"700px",margin:"0 auto",padding:"16px 10px"}}>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",
+              marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
+              🏆 League Honours
+            </h2>
+            <LeagueHonours
+              appState={appState}
+              update={update}
+              uploadImage={uploadImage}
+              isAdmin={isAdmin}
+              setLightbox={setLightbox}/>
+          </div>
+        )}
+
+        {tab==="logo_old"&&(
           <div style={{maxWidth:"600px",margin:"0 auto",padding:"32px 16px",fontFamily:"Georgia,serif",overflowY:"auto"}}>
 
             <div style={{textAlign:"center",marginBottom:"36px"}}>
@@ -1169,6 +1199,287 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     </div>
   );
 }
+// ── League Honours helpers ────────────────────────────────────────────────────
+function laurelBranchSVG(col, W, H) {
+  const N=16; const parts=[];
+  const x0=W/2,y0=H*0.97,x3=W/2,y3=H*0.03;
+  const bow=-W*0.65;
+  const x1=W/2+bow,y1=H*0.72,x2=W/2+bow,y2=H*0.28;
+  function bez(t,a,b,c,d){const u=1-t;return u*u*u*a+3*u*u*t*b+3*u*t*t*c+t*t*t*d;}
+  function bezT(t,a,b,c,d){const u=1-t;return 3*(u*u*(b-a)+2*u*t*(c-b)+t*t*(d-c));}
+  for(let i=0;i<N;i++){
+    const t=i/(N-1);
+    const sx=bez(t,x0,x1,x2,x3),sy=bez(t,y0,y1,y2,y3);
+    const tx=bezT(t,x0,x1,x2,x3),ty=bezT(t,y0,y1,y2,y3);
+    const stemAngle=Math.atan2(ty,tx);
+    const side2=(i%2===0)?1:-1;
+    const perpAngle=stemAngle+Math.PI/2;
+    const lx=sx+Math.cos(perpAngle)*3*side2,ly=sy+Math.sin(perpAngle)*3*side2;
+    const leafBaseAngle=stemAngle+(side2>0?Math.PI/2:-Math.PI/2);
+    const fan=(1-t)*0.25;
+    const leafAngle=leafBaseAngle+(side2>0?fan:-fan);
+    const siz=0.75+Math.sin(t*Math.PI)*0.25;
+    const lLen=22*siz,lWid=14*siz,lw2=lWid/2;
+    const leafPath=`M 0,0 C ${lw2},${-lLen*0.1} ${lw2*1.1},${-lLen*0.5} 0,${-lLen} C ${-lw2*1.1},${-lLen*0.5} ${-lw2},${-lLen*0.1} 0,0`;
+    const rotateDeg=(leafAngle*180/Math.PI)+90;
+    const shade=0.78+Math.sin(t*Math.PI)*0.18;
+    parts.push(`<g transform="translate(${lx.toFixed(1)},${ly.toFixed(1)}) rotate(${rotateDeg.toFixed(1)})"><path d="${leafPath}" fill="${col}" opacity="${shade.toFixed(2)}"/><line x1="0" y1="0" x2="0" y2="${(-lLen*0.85).toFixed(1)}" stroke="rgba(0,0,0,0.18)" stroke-width="1"/></g>`);
+  }
+  parts.push(`<path d="M${x0},${y0} C${x1},${y1} ${x2},${y2} ${x3},${y3}" stroke="${col}" stroke-width="2" fill="none" opacity="0.45"/>`);
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`;
+}
+
+function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
+  const [honoursTab, setHonoursTab] = useState("contest");
+  const [season,     setSeason]     = useState("2026");
+  const [openYears,  setOpenYears]  = useState({"2026":true});
+
+  const lh = appState.leagueHonours || {seasons:{},awards:{}};
+  const CONTEST_YEARS=["2026","2025"];
+  const ALL_YEARS=["2026","2025","2024","2023","2022","2021","2020"];
+
+  const updateLH=(patch)=>{
+    update({leagueHonours:{...lh,...patch}});
+  };
+  const updateSeason=(yr,patch)=>{
+    updateLH({seasons:{...lh.seasons,[yr]:{...(lh.seasons?.[yr]||{}),...patch}}});
+  };
+  const updateAwards=(yr,newList)=>{
+    updateLH({awards:{...lh.awards,[yr]:newList}});
+  };
+
+  const col={contest:"#c9a84c",awards:"#5a9a50"};
+  const BW=90,BH=340;
+
+  const tabBtn=(id,label)=>(
+    <button key={id} onClick={()=>setHonoursTab(id)} style={{
+      background:"none",border:"none",
+      borderBottom:`2px solid ${honoursTab===id?C.accent:"transparent"}`,
+      padding:"9px 20px",fontFamily:"Georgia,serif",fontSize:"0.82rem",
+      color:honoursTab===id?C.accentLight:C.muted,cursor:"pointer",
+      fontWeight:honoursTab===id?"bold":"normal",
+    }}>{label}</button>
+  );
+
+  const ContestCard=({yr,gold})=>{
+    const s=lh.seasons?.[yr]||{};
+    const cardCol=gold?"#c9a84c":"#5a9a50";
+    const branch=laurelBranchSVG(cardCol,BW,BH);
+    const label=gold?"OFFICIAL LEAGUE LOGO":"OFFICIAL LEAGUE MOTTO";
+    return(
+      <div style={{background:C.card,border:`1px solid ${cardCol}55`,borderRadius:"14px",
+        padding:"20px 8px 18px",textAlign:"center",flex:1,minWidth:"240px",maxWidth:"300px"}}>
+        <div style={{fontSize:"0.6rem",letterSpacing:"0.14em",color:cardCol,
+          fontWeight:"bold",marginBottom:"10px"}}>{label}</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"2px"}}>
+          <div style={{flexShrink:0,opacity:0.92}} dangerouslySetInnerHTML={{__html:branch}}/>
+          <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"8px"}}>
+            {gold?(
+              s.logoUrl
+                ?<img src={s.logoUrl} alt="logo" onClick={()=>setLightbox(s.logoUrl)}
+                    style={{width:"100%",maxWidth:"150px",borderRadius:"10px",objectFit:"contain",
+                      border:`1px solid ${cardCol}55`,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",cursor:"pointer"}}/>
+                :(isAdmin&&<label style={{width:"120px",height:"120px",background:C.surface,
+                    border:`1px dashed ${cardCol}66`,borderRadius:"10px",display:"flex",
+                    flexDirection:"column",alignItems:"center",justifyContent:"center",
+                    gap:"6px",cursor:"pointer"}}>
+                    <span style={{fontSize:"1.5rem"}}>📁</span>
+                    <span style={{fontSize:"0.65rem",color:cardCol}}>Upload logo</span>
+                    <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                      const file=e.target.files[0];if(!file)return;
+                      const url=await uploadImage(file);
+                      updateSeason(yr,{logoUrl:url});
+                    }}/>
+                  </label>)
+            ):(
+              s.motto
+                ?<div style={{fontSize:"0.82rem",fontStyle:"italic",color:C.cream,
+                    lineHeight:"1.6",padding:"0 4px"}}>"{s.motto}"</div>
+                :<div style={{fontSize:"0.75rem",color:C.muted,fontStyle:"italic",padding:"20px 0"}}>
+                    No motto set yet
+                  </div>
+            )}
+          </div>
+          <div style={{flexShrink:0,opacity:0.92,transform:"scaleX(-1)"}}
+            dangerouslySetInnerHTML={{__html:branch}}/>
+        </div>
+        {(gold?s.logoWinner:s.mottoWinner)&&(
+          <div style={{fontSize:"0.9rem",fontWeight:"bold",color:C.cream,marginTop:"8px"}}>
+            🥇 {gold?s.logoWinner:s.mottoWinner}
+          </div>
+        )}
+        <div style={{fontSize:"0.7rem",color:C.muted,marginTop:"3px"}}>{yr} Season</div>
+      </div>
+    );
+  };
+
+  return(
+    <div>
+      {/* Sub-tabs */}
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:"20px"}}>
+        {tabBtn("contest","Contest Winners")}
+        {tabBtn("awards","Awards")}
+      </div>
+
+      {/* ── Contest Winners ── */}
+      {honoursTab==="contest"&&(
+        <div>
+          {/* Season selector */}
+          <div style={{display:"flex",gap:"6px",marginBottom:"20px",justifyContent:"center"}}>
+            {CONTEST_YEARS.map(yr=>(
+              <button key={yr} onClick={()=>setSeason(yr)} style={{
+                padding:"6px 16px",borderRadius:"6px",cursor:"pointer",
+                fontFamily:"Georgia,serif",fontSize:"0.8rem",
+                background:season===yr?C.accent:C.surface,
+                color:season===yr?C.bg:C.muted,
+                border:`1px solid ${season===yr?C.accent:C.border}`,
+              }}>{yr} Season</button>
+            ))}
+          </div>
+
+          {/* Cards */}
+          <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:"16px",marginBottom:"20px"}}>
+            <ContestCard yr={season} gold={true}/>
+            <ContestCard yr={season} gold={false}/>
+          </div>
+
+          {/* Edit fields — admin only */}
+          {isAdmin&&(
+            <div style={{background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:"10px",padding:"14px 16px"}}>
+              <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"12px"}}>
+                EDIT {season} CONTEST WINNERS
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                <div>
+                  <label style={{color:C.muted,fontSize:"0.68rem",display:"block",marginBottom:"3px"}}>Logo winner</label>
+                  <input value={lh.seasons?.[season]?.logoWinner||""}
+                    onChange={e=>updateSeason(season,{logoWinner:e.target.value})}
+                    placeholder="e.g. Steve D."
+                    style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"6px",
+                      padding:"7px 10px",color:C.text,fontSize:"0.82rem",
+                      fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                </div>
+                <div>
+                  <label style={{color:C.muted,fontSize:"0.68rem",display:"block",marginBottom:"3px"}}>Motto winner</label>
+                  <input value={lh.seasons?.[season]?.mottoWinner||""}
+                    onChange={e=>updateSeason(season,{mottoWinner:e.target.value})}
+                    placeholder="e.g. Mark C."
+                    style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"6px",
+                      padding:"7px 10px",color:C.text,fontSize:"0.82rem",
+                      fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                </div>
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={{color:C.muted,fontSize:"0.68rem",display:"block",marginBottom:"3px"}}>Motto text</label>
+                  <textarea value={lh.seasons?.[season]?.motto||""}
+                    onChange={e=>updateSeason(season,{motto:e.target.value})}
+                    placeholder="Enter the season motto…" rows={2}
+                    style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"6px",
+                      padding:"7px 10px",color:C.text,fontSize:"0.82rem",resize:"vertical",
+                      fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Awards ── */}
+      {honoursTab==="awards"&&(
+        <div>
+          {ALL_YEARS.map(yr=>{
+            const list=lh.awards?.[yr]||[{title:"League Champion",recipient:"",pinned:true}];
+            const champ=list[0];
+            const rest=list.slice(1);
+            const isOpen=openYears[yr];
+            return(
+              <div key={yr} style={{marginBottom:"10px"}}>
+                <div onClick={()=>setOpenYears(p=>({...p,[yr]:!p[yr]}))}
+                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                    cursor:"pointer",padding:"10px 14px",background:C.surface,
+                    border:`1px solid ${C.border}`,borderRadius:"8px",marginBottom:"6px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                    <span style={{color:C.cream,fontSize:"0.9rem",fontWeight:"bold"}}>{yr}</span>
+                    {champ.recipient&&<span style={{color:C.muted,fontSize:"0.75rem"}}>
+                      🏆 {champ.recipient}
+                    </span>}
+                  </div>
+                  <span style={{color:C.muted,fontSize:"0.75rem"}}>{isOpen?"▲":"▼"}</span>
+                </div>
+                {isOpen&&(
+                  <div style={{border:`1px solid ${C.border}`,borderRadius:"10px",overflow:"hidden"}}>
+                    {/* League Champion */}
+                    <div style={{background:C.card,padding:"12px 16px",
+                      display:"flex",alignItems:"center",gap:"12px"}}>
+                      <span style={{fontSize:"1.2rem"}}>🏆</span>
+                      <div style={{flex:1}}>
+                        <div style={{color:"#c9a84c",fontSize:"0.62rem",letterSpacing:"0.1em",marginBottom:"3px"}}>
+                          LEAGUE CHAMPION
+                        </div>
+                        {isAdmin
+                          ?<input value={champ.recipient||""} placeholder="Champion name…"
+                              onChange={e=>{const nl=[...list];nl[0]={...nl[0],recipient:e.target.value};updateAwards(yr,nl);}}
+                              style={{border:"none",background:"transparent",padding:0,
+                                color:C.cream,fontSize:"0.88rem",fontWeight:"bold",
+                                fontFamily:"Georgia,serif",width:"100%",outline:"none"}}/>
+                          :<span style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>
+                              {champ.recipient||"—"}
+                            </span>
+                        }
+                      </div>
+                    </div>
+                    {/* Other awards */}
+                    <div style={{borderTop:`1px solid ${C.border}`}}>
+                      {rest.map((a,ri)=>(
+                        <div key={ri} style={{display:"flex",alignItems:"center",gap:"10px",
+                          padding:"9px 14px",borderBottom:`1px solid ${C.border}`}}>
+                          <span style={{fontSize:"0.9rem"}}>🎖</span>
+                          {isAdmin?(
+                            <>
+                              <input value={a.title} placeholder="Award name…"
+                                onChange={e=>{const nl=[...list];nl[ri+1]={...nl[ri+1],title:e.target.value};updateAwards(yr,nl);}}
+                                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,
+                                  borderRadius:"5px",padding:"5px 8px",color:C.text,
+                                  fontSize:"0.78rem",fontFamily:"Georgia,serif",outline:"none"}}/>
+                              <input value={a.recipient} placeholder="Recipient…"
+                                onChange={e=>{const nl=[...list];nl[ri+1]={...nl[ri+1],recipient:e.target.value};updateAwards(yr,nl);}}
+                                style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,
+                                  borderRadius:"5px",padding:"5px 8px",color:C.text,
+                                  fontSize:"0.78rem",fontFamily:"Georgia,serif",outline:"none"}}/>
+                              <button onClick={()=>{const nl=[...list];nl.splice(ri+1,1);updateAwards(yr,nl);}}
+                                style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.9rem"}}>✕</button>
+                            </>
+                          ):(
+                            <div style={{flex:1}}>
+                              <span style={{color:C.muted,fontSize:"0.78rem"}}>{a.title}</span>
+                              {a.recipient&&<span style={{color:C.cream,fontSize:"0.78rem",marginLeft:"8px",fontWeight:"bold"}}>{a.recipient}</span>}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {isAdmin&&(
+                        <div style={{padding:"8px 14px"}}>
+                          <button onClick={()=>updateAwards(yr,[...list,{title:"",recipient:""}])}
+                            style={{width:"100%",padding:"6px",borderRadius:"6px",
+                              border:`1px dashed ${C.border}`,background:"none",
+                              fontFamily:"Georgia,serif",fontSize:"0.75rem",
+                              color:C.muted,cursor:"pointer"}}>
+                            + Add Award
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Commissioner-only overlays ──────────────────────────────────────────────
 
 function CommissionerOverlays({tab, user, setTab, appState, isAdmin}) {
