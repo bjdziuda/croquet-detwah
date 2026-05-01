@@ -10,63 +10,6 @@ const DETROIT_PARKS = [
     startPeg:{x:380,y:880}, finishPeg:{x:380,y:80},
     perimeter:[],
   },
-  {
-    // Real shape: 2.5mi E-W island in Detroit River. Blunt west end (MacArthur
-    // Bridge), tapers to point at east (William Livingstone lighthouse).
-    // North shore nearly straight; south shore has a southward bulge at center.
-    id:"belle_isle", name:"Belle Isle", icon:"🏝️",
-    bounds:{w:760,h:960},
-    startPeg:{x:380,y:562}, finishPeg:{x:380,y:398},
-    perimeter:[
-      {x:40,y:485},{x:57,y:549},{x:97,y:594},{x:172,y:619},{x:254,y:635},
-      {x:346,y:642},{x:439,y:640},{x:531,y:631},{x:616,y:613},{x:678,y:585},
-      {x:715,y:542},{x:720,y:485},{x:708,y:428},{x:666,y:386},{x:596,y:350},
-      {x:511,y:325},{x:419,y:318},{x:324,y:327},{x:235,y:347},{x:153,y:373},
-      {x:87,y:407},{x:51,y:444},{x:40,y:485},
-    ],
-  },
-  {
-    // Real shape: ~30 acre park in SW Detroit. Bounded by Clark St (E),
-    // W Vernor Hwy (S), Scotten Ave (W), Vermont St (N). DEFINING FEATURE:
-    // Michigan Ave cuts diagonally NE→SW across the NW corner, creating
-    // a hexagonal shape — NOT a simple rectangle.
-    id:"clark_park", name:"Clark Park", icon:"⚽",
-    bounds:{w:760,h:960},
-    startPeg:{x:380,y:818}, finishPeg:{x:380,y:142},
-    perimeter:[
-      {x:572,y:62},{x:720,y:62},{x:720,y:898},
-      {x:40,y:898},{x:40,y:497},{x:225,y:263},
-      {x:386,y:112},{x:572,y:62},
-    ],
-  },
-  {
-    // Real shape: NW Detroit park bounded by Woodward Ave (E — straight edge),
-    // McNichols Rd (N), irregular W and S boundary. Wider at north, tapers SW.
-    id:"palmer_park", name:"Palmer Park", icon:"🌳",
-    bounds:{w:760,h:960},
-    startPeg:{x:380,y:590}, finishPeg:{x:380,y:370},
-    perimeter:[
-      {x:117,y:336},{x:307,y:290},{x:556,y:290},{x:680,y:336},
-      {x:720,y:395},{x:720,y:569},{x:657,y:639},{x:485,y:670},
-      {x:327,y:666},{x:183,y:639},{x:69,y:569},{x:40,y:461},
-      {x:69,y:375},{x:117,y:336},
-    ],
-  },
-  {
-    // Real shape: ~170 acre park on east side near E Jefferson & Conner.
-    // D-shaped — roughly flat on east (Conner St), curved on west side.
-    // Wider in middle, narrower at N and S ends.
-    id:"chandler_park", name:"Chandler Park", icon:"🏞️",
-    bounds:{w:760,h:960},
-    startPeg:{x:380,y:725}, finishPeg:{x:380,y:235},
-    perimeter:[
-      {x:220,y:177},{x:381,y:155},{x:567,y:166},{x:670,y:230},
-      {x:714,y:335},{x:720,y:553},{x:706,y:681},{x:637,y:756},
-      {x:498,y:794},{x:345,y:805},{x:198,y:786},{x:82,y:726},
-      {x:40,y:628},{x:43,y:380},{x:82,y:260},{x:151,y:204},
-      {x:220,y:177},
-    ],
-  },
 ];
 
 // ─── COURSE ──────────────────────────────────────────────────────────────────
@@ -109,6 +52,7 @@ function inGateLane(bx,by,w){
   const r=(w.angle*Math.PI)/180;
   return Math.abs((bx-w.x)*Math.cos(r)+(by-w.y)*Math.sin(r))<WICKET_HALF-WICKET_POST*0.5+2;
 }
+// eslint-disable-next-line no-unused-vars
 function rectHit(rx,ry,rw,rh,px,py){return px>=rx&&px<=rx+rw&&py>=ry&&py<=ry+rh;}
 
 // Point-in-rotated-ellipse test
@@ -132,8 +76,8 @@ function drawCourt(ctx,course,cam){
   const{w,h}=course.bounds;
   const sc=cam.scale;
   const hasPoly=course.perimeter&&course.perimeter.length>2;
+  const rng=(seed)=>{let s=seed;return()=>{s=(s*1664525+1013904223)&0xffffffff;return(s>>>0)/0xffffffff;};};
 
-  // Helper: build path for the court shape (polygon or rect)
   const courtPath=()=>{
     ctx.beginPath();
     if(hasPoly){
@@ -147,37 +91,82 @@ function drawCourt(ctx,course,cam){
     ctx.closePath();
   };
 
-  // ── Rough uncut grass background (entire canvas) ──────────────────────────
-  ctx.fillStyle="#3a6e30";ctx.fillRect(0,0,CW,CH);
-  const rng=(seed)=>{let s=seed;return()=>{s=(s*1664525+1013904223)&0xffffffff;return(s>>>0)/0xffffffff;};};
-  const rand=rng(42);
+  // ── Rough uncut background ────────────────────────────────────────────────
+  ctx.fillStyle="#2e5828"; ctx.fillRect(0,0,CW,CH);
+
+  // Rough grass — longer, more varied tufts outside the court
+  const randOuter=rng(42);
   ctx.save();
-  for(let i=0;i<340;i++){
-    const gx=rand()*CW,gy=rand()*CH;
-    const gl=3+rand()*6,ga=rand()*Math.PI*2;
-    ctx.strokeStyle=`rgba(${rand()>.5?50:30},${80+rand()*40},${rand()>.5?25:15},${0.35+rand()*.25})`;
-    ctx.lineWidth=0.8+rand()*0.8;
-    ctx.beginPath();ctx.moveTo(gx,gy);ctx.lineTo(gx+Math.cos(ga)*gl,gy+Math.sin(ga)*gl);ctx.stroke();
+  for(let i=0;i<500;i++){
+    const gx=randOuter()*CW, gy=randOuter()*CH;
+    const gl=4+randOuter()*9, ga=(randOuter()-.15)*Math.PI;
+    const bright=randOuter()>.6;
+    ctx.strokeStyle=`rgba(${bright?45:25},${bright?95:65},${bright?20:10},${0.5+randOuter()*.35})`;
+    ctx.lineWidth=0.7+randOuter()*.9;
+    ctx.beginPath(); ctx.moveTo(gx,gy);
+    ctx.lineTo(gx+Math.cos(ga)*gl,gy+Math.sin(ga)*gl); ctx.stroke();
   }
   ctx.restore();
 
-  // ── Court lawn fill (clipped to shape) ────────────────────────────────────
+  // ── Court lawn ────────────────────────────────────────────────────────────
   ctx.save();
   courtPath();
-  ctx.shadowColor="rgba(0,0,0,0.45)";ctx.shadowBlur=20;
-  ctx.fillStyle="#5faa4e";ctx.fill();ctx.shadowBlur=0;
-  ctx.clip(); // all following draws clipped to court shape
+  ctx.shadowColor="rgba(0,0,0,0.5)"; ctx.shadowBlur=22;
+  ctx.fillStyle="#5aaa48"; ctx.fill(); ctx.shadowBlur=0;
+  ctx.clip();
 
-  // Mow stripes inside the shape
-  for(let sy=0;sy<h;sy+=70){
-    const p1=w2c(0,sy,cam),p2=w2c(w,sy,cam),p3=w2c(w,sy+70,cam),p4=w2c(0,sy+70,cam);
-    ctx.beginPath();ctx.moveTo(p1.cx,p1.cy);ctx.lineTo(p2.cx,p2.cy);
-    ctx.lineTo(p3.cx,p3.cy);ctx.lineTo(p4.cx,p4.cy);ctx.closePath();
-    ctx.fillStyle=Math.floor(sy/70)%2===0?"rgba(0,0,0,0.06)":"rgba(255,255,255,0.04)";ctx.fill();
+  // Mow stripes — alternating light/dark bands
+  for(let sy=0;sy<h;sy+=60){
+    const p1=w2c(0,sy,cam),p2=w2c(w,sy,cam),p3=w2c(w,sy+60,cam),p4=w2c(0,sy+60,cam);
+    ctx.beginPath(); ctx.moveTo(p1.cx,p1.cy); ctx.lineTo(p2.cx,p2.cy);
+    ctx.lineTo(p3.cx,p3.cy); ctx.lineTo(p4.cx,p4.cy); ctx.closePath();
+    ctx.fillStyle=Math.floor(sy/60)%2===0?"rgba(0,0,0,0.07)":"rgba(255,255,255,0.04)"; ctx.fill();
   }
+
+  // ── Grass tufts scattered across the court ────────────────────────────────
+  // Seeded so they don't flicker. Drawn in world coords, clipped to court.
+  const randG=rng(137);
+  const tufts=Math.round(500*cam.scale*cam.scale); // more tufts when zoomed in
+  for(let i=0;i<Math.min(tufts,800);i++){
+    // Distribute tufts across world space
+    const wx2=randG()*w, wy2=randG()*h;
+    const sp=w2c(wx2,wy2,cam);
+    const bladeCount=2+Math.floor(randG()*3); // 2-4 blades per tuft
+    for(let b=0;b<bladeCount;b++){
+      const offsetX=(randG()-.5)*5*cam.scale;
+      const offsetY=(randG()-.5)*5*cam.scale;
+      const bx=sp.cx+offsetX, by=sp.cy+offsetY;
+      const angle=-Math.PI*0.5+(randG()-.5)*1.1; // mostly upward, some lean
+      const len=(2+randG()*4)*cam.scale;
+      const curl=(randG()-.5)*0.6; // blade curl at tip
+      const bright=randG()>.55;
+      const alpha=0.25+randG()*.35;
+      ctx.strokeStyle=bright
+        ?`rgba(100,180,60,${alpha})`
+        :`rgba(40,110,30,${alpha})`;
+      ctx.lineWidth=Math.max(0.4,0.6*cam.scale);
+      ctx.beginPath();
+      ctx.moveTo(bx,by);
+      // Slightly curved blade
+      ctx.quadraticCurveTo(
+        bx+Math.cos(angle+curl)*len*0.5,
+        by+Math.sin(angle+curl)*len*0.5,
+        bx+Math.cos(angle+curl)*len,
+        by+Math.sin(angle+curl)*len
+      );
+      ctx.stroke();
+    }
+    // Occasional darker shadow patch at tuft base
+    if(randG()>.7){
+      ctx.fillStyle=`rgba(0,0,0,${0.06+randG()*.06})`;
+      ctx.beginPath(); ctx.ellipse(sp.cx,sp.cy,3*cam.scale,1.5*cam.scale,0,0,Math.PI*2);
+      ctx.fill();
+    }
+  }
+
   ctx.restore();
 
-  // ── Ragged grass fringe along the court edge ──────────────────────────────
+  // ── Ragged grass fringe along court edge ──────────────────────────────────
   const perimPts = hasPoly
     ? course.perimeter.map(pt=>w2c(pt.x,pt.y,cam))
     : (()=>{const tl=w2c(0,0,cam),tr=w2c(w,0,cam),br=w2c(w,h,cam),bl=w2c(0,h,cam);return[tl,tr,br,bl,tl];})();
@@ -186,25 +175,33 @@ function drawCourt(ctx,course,cam){
   for(let seg=0;seg<perimPts.length-1;seg++){
     const pa=perimPts[seg],pb=perimPts[seg+1];
     const segLen=d2(pa.cx,pa.cy,pb.cx,pb.cy);
-    const steps=Math.round(segLen/6);
+    const steps=Math.round(segLen/5);
     if(steps<1)continue;
     const nx=-(pb.cy-pa.cy)/Math.max(1,segLen);
     const ny= (pb.cx-pa.cx)/Math.max(1,segLen);
     for(let i=0;i<steps;i++){
       const t2=i/steps;
-      const ex=pa.cx+(pb.cx-pa.cx)*t2,ey=pa.cy+(pb.cy-pa.cy)*t2;
-      const inset=1+rand2()*3,tl2=4+rand2()*5;
-      ctx.strokeStyle=`rgba(30,80,20,${0.4+rand2()*.35})`;
-      ctx.lineWidth=0.9+rand2()*.6;
-      ctx.beginPath();ctx.moveTo(ex+nx*inset,ey+ny*inset);
-      ctx.lineTo(ex+nx*(inset+tl2)+(rand2()-.5)*2,ey+ny*(inset+tl2)+(rand2()-.5)*2);ctx.stroke();
+      const ex=pa.cx+(pb.cx-pa.cx)*t2, ey=pa.cy+(pb.cy-pa.cy)*t2;
+      const jitter=(rand2()-.5)*3;
+      const inset=0+rand2()*2, len=5+rand2()*8;
+      const lean=(rand2()-.5)*0.7;
+      const bright=rand2()>.5;
+      ctx.strokeStyle=`rgba(${bright?35:20},${bright?90:60},${bright?18:10},${0.45+rand2()*.4})`;
+      ctx.lineWidth=0.7+rand2()*.7;
+      ctx.beginPath();
+      ctx.moveTo(ex+nx*inset+jitter,ey+ny*inset);
+      ctx.quadraticCurveTo(
+        ex+nx*(inset+len*.5)+lean*4, ey+ny*(inset+len*.5)+lean*4,
+        ex+nx*(inset+len)+jitter*1.5, ey+ny*(inset+len)
+      );
+      ctx.stroke();
     }
   }
   ctx.restore();
 
   // ── Boundary line ─────────────────────────────────────────────────────────
   courtPath();
-  ctx.strokeStyle="rgba(255,255,255,0.9)";ctx.lineWidth=Math.max(2,2.5*sc);ctx.stroke();
+  ctx.strokeStyle="rgba(255,255,255,0.88)"; ctx.lineWidth=Math.max(2,2.5*sc); ctx.stroke();
 }
 
 // Seeded RNG for stable noise
@@ -542,20 +539,34 @@ function drawZones(ctx,course,cam){
     const cp=w2c(cx2,cy2,cam);
     const maxRpx=maxR*cam.scale;
 
-    // Clip all drawing to the zone polygon
+    // Clip all drawing to the zone polygon (rounded or sharp)
     ctx.save();
     ctx.beginPath();
-    const fp=w2c(zone.points[0].x,zone.points[0].y,cam);
-    ctx.moveTo(fp.cx,fp.cy);
-    zone.points.slice(1).forEach(pt=>{const p=w2c(pt.x,pt.y,cam);ctx.lineTo(p.cx,p.cy);});
+    const screenPts = zone.points.map(pt=>w2c(pt.x,pt.y,cam));
+    if(zone.rounded && screenPts.length>=3){
+      // Splined path — quadratic bezier through midpoints, vertices as control points
+      const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+      const n=screenPts.length;
+      const p=(i)=>[screenPts[((i%n)+n)%n].cx, screenPts[((i%n)+n)%n].cy];
+      const m0=mid(p(n-1),p(0));
+      ctx.moveTo(m0[0],m0[1]);
+      for(let i=0;i<n;i++){
+        const cp=p(i), mn=mid(p(i),p(i+1));
+        ctx.quadraticCurveTo(cp[0],cp[1],mn[0],mn[1]);
+      }
+    } else {
+      const fp2=screenPts[0];
+      ctx.moveTo(fp2.cx,fp2.cy);
+      screenPts.slice(1).forEach(pt=>ctx.lineTo(pt.cx,pt.cy));
+    }
     ctx.closePath();
     ctx.clip();
 
     if(zone.surface==="water"){
       // Re-draw path for fill (clip already set)
       ctx.beginPath();
-      ctx.moveTo(fp.cx,fp.cy);
-      zone.points.slice(1).forEach(pt=>{const p=w2c(pt.x,pt.y,cam);ctx.lineTo(p.cx,p.cy);});
+      ctx.moveTo(screenPts[0].cx,screenPts[0].cy);
+      screenPts.slice(1).forEach(pt=>ctx.lineTo(pt.cx,pt.cy));
       ctx.closePath();
       const wg=ctx.createRadialGradient(cp.cx-maxRpx*.2,cp.cy-maxRpx*.15,maxRpx*.05,cp.cx,cp.cy,maxRpx*1.1);
       wg.addColorStop(0,"#72c8e8");wg.addColorStop(0.4,"#2f80b8");wg.addColorStop(1,"#0f3060");
@@ -569,32 +580,80 @@ function drawZones(ctx,course,cam){
       }
 
     } else if(zone.surface==="mound"){
-      // Radial hill gradient — bright sunlit peak at center, dark shadowed edges
-      const mg=ctx.createRadialGradient(cp.cx-maxRpx*.1,cp.cy-maxRpx*.12,maxRpx*.02,cp.cx,cp.cy,maxRpx*1.05);
-      mg.addColorStop(0.0, "rgba(230,245,160,0.95)"); // bright sunlit peak
-      mg.addColorStop(0.2, "rgba(190,220,120,0.9)");
-      mg.addColorStop(0.5, "rgba(130,175,75,0.85)");
-      mg.addColorStop(0.75,"rgba(75,120,40,0.8)");
-      mg.addColorStop(1.0, "rgba(30,65,15,0.75)");  // dark shadowed base
-      ctx.fillRect(cp.cx-maxRpx*1.2,cp.cy-maxRpx*1.2,maxRpx*2.4,maxRpx*2.4);
+      // ── Multi-layer radial hill ───────────────────────────────────────────
+      // Base grass colour — slightly yellower/browner than flat lawn
+      ctx.fillStyle="rgba(80,130,45,0.9)";
+      ctx.fillRect(cp.cx-maxRpx*1.5,cp.cy-maxRpx*1.5,maxRpx*3,maxRpx*3);
+
+      // Main hill gradient — bright sunlit peak, dark shadowed base
+      // Light source from upper-left
+      const lightX=cp.cx-maxRpx*.18, lightY=cp.cy-maxRpx*.22;
+      const mg=ctx.createRadialGradient(lightX,lightY,maxRpx*.03,cp.cx,cp.cy,maxRpx*1.08);
+      mg.addColorStop(0.0,"rgba(240,255,180,0.92)"); // bright sunlit peak
+      mg.addColorStop(0.12,"rgba(210,240,140,0.85)");
+      mg.addColorStop(0.3, "rgba(165,215,90,0.8)");
+      mg.addColorStop(0.55,"rgba(100,160,50,0.75)");
+      mg.addColorStop(0.78,"rgba(55,110,25,0.7)");
+      mg.addColorStop(1.0, "rgba(20,60,10,0.65)"); // dark shadowed base
       ctx.fillStyle=mg;
-      ctx.fillRect(cp.cx-maxRpx*1.2,cp.cy-maxRpx*1.2,maxRpx*2.4,maxRpx*2.4);
+      ctx.fillRect(cp.cx-maxRpx*1.5,cp.cy-maxRpx*1.5,maxRpx*3,maxRpx*3);
 
-      // Contour rings — concentric circles fading out from center
-      ctx.strokeStyle="rgba(60,100,20,0.28)"; ctx.lineWidth=Math.max(0.5,0.7*cam.scale);
-      const rings=5;
-      for(let r=1;r<=rings;r++){
+      // Shadow wedge on the opposite side from light — gives 3D depth
+      const shadowAngle=Math.PI*.25; // SE shadow (light from NW)
+      const sg=ctx.createRadialGradient(
+        cp.cx+Math.cos(shadowAngle)*maxRpx*.3, cp.cy+Math.sin(shadowAngle)*maxRpx*.3, maxRpx*.2,
+        cp.cx+Math.cos(shadowAngle)*maxRpx*.6, cp.cy+Math.sin(shadowAngle)*maxRpx*.6, maxRpx
+      );
+      sg.addColorStop(0,"rgba(0,0,0,0)");
+      sg.addColorStop(1,"rgba(0,20,0,0.38)");
+      ctx.fillStyle=sg;
+      ctx.fillRect(cp.cx-maxRpx*1.5,cp.cy-maxRpx*1.5,maxRpx*3,maxRpx*3);
+
+      // Topo contour rings — concentric, elliptical to follow hill shape
+      ctx.lineWidth=Math.max(0.5,0.8*cam.scale);
+      const rings=6;
+      for(let r=1;r<rings;r++){
         const frac=r/rings;
-        ctx.globalAlpha=1-frac*.4;
-        ctx.beginPath();ctx.arc(cp.cx,cp.cy,maxRpx*frac,0,Math.PI*2);ctx.stroke();
+        // Rings shift slightly toward shadow side for realistic hill silhouette
+        const offX=cp.cx+Math.cos(shadowAngle)*maxRpx*frac*.08;
+        const offY=cp.cy+Math.sin(shadowAngle)*maxRpx*frac*.08;
+        const alpha=0.12+frac*.1;
+        ctx.strokeStyle=`rgba(40,80,15,${alpha})`;
+        ctx.globalAlpha=1;
+        ctx.beginPath();
+        ctx.ellipse(offX,offY,maxRpx*frac,maxRpx*frac*.78,shadowAngle*.15,0,Math.PI*2);
+        ctx.stroke();
       }
-      ctx.globalAlpha=1;
 
-      // Highlight at the peak (small bright spot, top-left light source)
-      const hg=ctx.createRadialGradient(cp.cx-maxRpx*.1,cp.cy-maxRpx*.12,0,cp.cx-maxRpx*.08,cp.cy-maxRpx*.1,maxRpx*.3);
-      hg.addColorStop(0,"rgba(255,255,220,0.55)");hg.addColorStop(1,"rgba(255,255,220,0)");
+      // Grass texture streaks on the slope — follow the fall direction
+      const randM=seededRng(zone.points[0].x*31+zone.points[0].y*17);
+      ctx.lineWidth=Math.max(0.4,0.55*cam.scale);
+      for(let i=0;i<60;i++){
+        const a=randM()*Math.PI*2;
+        const dist=randM()*maxRpx*.85;
+        const sx=cp.cx+Math.cos(a)*dist, sy=cp.cy+Math.sin(a)*dist;
+        // Blades lean away from center (downhill)
+        const bladeAngle=a+(randM()-.5)*0.6;
+        const blen=(1.5+randM()*3)*cam.scale;
+        const alpha=0.15+randM()*.2;
+        ctx.strokeStyle=`rgba(${randM()>.5?55:30},${randM()>.5?100:70},${20},${alpha})`;
+        ctx.beginPath();
+        ctx.moveTo(sx,sy);
+        ctx.quadraticCurveTo(
+          sx+Math.cos(bladeAngle)*blen*.5, sy+Math.sin(bladeAngle)*blen*.5,
+          sx+Math.cos(bladeAngle)*blen, sy+Math.sin(bladeAngle)*blen
+        );
+        ctx.stroke();
+      }
+
+      // Sunlit highlight at peak — small soft glow
+      const hg=ctx.createRadialGradient(lightX,lightY,0,lightX,lightY,maxRpx*.35);
+      hg.addColorStop(0,"rgba(255,255,200,0.5)");
+      hg.addColorStop(0.5,"rgba(255,255,200,0.12)");
+      hg.addColorStop(1,"rgba(255,255,200,0)");
       ctx.fillStyle=hg;
-      ctx.fillRect(cp.cx-maxRpx*1.2,cp.cy-maxRpx*1.2,maxRpx*2.4,maxRpx*2.4);
+      ctx.fillRect(cp.cx-maxRpx*1.5,cp.cy-maxRpx*1.5,maxRpx*3,maxRpx*3);
+      ctx.globalAlpha=1;
 
     } else if(zone.surface==="gravel"){
       ctx.fillStyle="rgba(155,135,105,0.75)";
@@ -623,11 +682,20 @@ function drawZones(ctx,course,cam){
 
     ctx.restore(); // remove clip
 
-    // Zone outline (drawn outside clip so it's fully visible)
+    // Zone outline (drawn outside clip)
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(fp.cx,fp.cy);
-    zone.points.slice(1).forEach(pt=>{const p=w2c(pt.x,pt.y,cam);ctx.lineTo(p.cx,p.cy);});
+    if(zone.rounded && screenPts.length>=3){
+      const mid=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+      const n=screenPts.length;
+      const p2=(i)=>[screenPts[((i%n)+n)%n].cx, screenPts[((i%n)+n)%n].cy];
+      const m0=mid(p2(n-1),p2(0));
+      ctx.moveTo(m0[0],m0[1]);
+      for(let i=0;i<n;i++){const cp=p2(i),mn=mid(p2(i),p2(i+1));ctx.quadraticCurveTo(cp[0],cp[1],mn[0],mn[1]);}
+    } else {
+      ctx.moveTo(screenPts[0].cx,screenPts[0].cy);
+      screenPts.slice(1).forEach(pt=>ctx.lineTo(pt.cx,pt.cy));
+    }
     ctx.closePath();
     ctx.strokeStyle = zone.surface==="water" ? "rgba(100,180,240,0.65)"
                     : zone.surface==="mound"  ? "rgba(120,170,60,0.55)"
@@ -974,7 +1042,9 @@ function EditorView({course, setCourse}){
   const [selected,     setSelState]   = useState(null);
   const [angle,        setAngleState] = useState(0);
   const [activePreset, setPresetState]= useState(null);
-  const [zoneSurface,  setZoneSurface]= useState("water");
+  const [zoneSurface,   setZoneSurface]  = useState("water");
+  const [gridSnap,      setGridSnapState]= useState(0);
+  const [zoneRounded,   setZoneRounded]  = useState(false);
   const [showJSON,     setShowJSON]   = useState(false);
   const [courseName,   setCourseName] = useState(course.name);
 
@@ -1115,16 +1185,22 @@ function EditorView({course, setCourse}){
   },[]);
 
   // zoneSurfaceRef must live before the canvas events closure that captures it
-  const zoneSurfaceRef = useRef("water");
+  const zoneSurfaceRef  = useRef("water");
+  const gridSnapRef     = useRef(0);   // 0=off, 10, 20, 40
+  const zoneRoundedRef  = useRef(false);
 
   // ── Canvas events (registered once, read from refs) ───────────────────────
   useEffect(()=>{
     const canvas=canvasRef.current; if(!canvas) return;
 
+    const snap=(v)=>{ const g=gridSnapRef.current; return g>0?Math.round(v/g)*g:Math.round(v); };
+
     const onDown=e=>{
       e.preventDefault();
       const wp=getWP(e); if(!wp) return;
-      const{x:wx,y:wy}=wp, c=courseRef.current, t=toolRef.current;
+      const{x:wx0,y:wy0}=wp;
+      const wx=snap(wx0), wy=snap(wy0);
+      const c=courseRef.current, t=toolRef.current;
 
       // ── IMAGE PLACEMENT — place pending uploaded image ─────────────────────
       const pendingImg = pendingImgRef.current;
@@ -1162,7 +1238,7 @@ function EditorView({course, setCourse}){
         if(pp.length>2&&d2(wx,wy,pp[0].x,pp[0].y)<(28/ED_CAM.scale)){
           // Close zone → commit
           const surface=zoneSurfaceRef.current||"water";
-          const newZone={points:[...pp],surface,slopeAngle:surface==="slope"?0:undefined};
+          const newZone={points:[...pp],surface,rounded:zoneRoundedRef.current};
           setCourseRef.current(prev=>({...prev,zones:[...(prev.zones||[]),newZone]}));
           perimRef.current=[];
         } else {
@@ -1288,6 +1364,8 @@ function EditorView({course, setCourse}){
 
   // zoneSurface needs a ref too so the canvas event closure can read it
   const handleZoneSurface = v => { zoneSurfaceRef.current=v; setZoneSurface(v); };
+  const handleGridSnap    = v => { gridSnapRef.current=v;    setGridSnapState(v); };
+  const handleZoneRounded = v => { zoneRoundedRef.current=v; setZoneRounded(v); };
 
   const selWicket = selected?.type==="wicket" ? course.wickets[selected.index] : null;
   const selObs    = selected?.type==="obstacle" ? course.obstacles[selected.index] : null;
@@ -1362,6 +1440,19 @@ function EditorView({course, setCourse}){
             value={courseName} onChange={e=>setCourseName(e.target.value)} onBlur={()=>setCourse(c=>({...c,name:courseName}))}/>
         </div>
 
+        {/* Grid snap — always visible */}
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{color:"#3a6030",fontSize:10}}>SNAP:</span>
+          {[["Off",0],["10",10],["20",20],["40",40]].map(([l,v])=>(
+            <button key={l} onClick={()=>{setGridSnapState(v);gridSnapRef.current=v;}} style={{
+              padding:"2px 6px",borderRadius:3,cursor:"pointer",fontSize:10,fontFamily:"Georgia,serif",
+              background:gridSnap===v?"#1e3a1e":"#172512",
+              color:gridSnap===v?"#e8d080":"#608060",
+              border:`1.5px solid ${gridSnap===v?"#50a050":"#243820"}`,
+            }}>{l}</button>
+          ))}
+        </div>
+
         {/* Wicket angle when placing */}
         {tool==="wicket"&&<div style={{display:"flex",alignItems:"center",gap:5}}>
           <span style={{color:"#3a6030",fontSize:10}}>ANGLE</span>
@@ -1369,7 +1460,7 @@ function EditorView({course, setCourse}){
           <span style={{color:"#80a080",fontSize:11}}>{angle}°</span>
         </div>}
 
-        {/* Zone tool — surface picker */}
+        {/* Zone tool — surface picker + options */}
         {tool==="perim"&&<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           <span style={{color:"#3a6030",fontSize:10}}>FILL:</span>
           {SURFACE_TYPES.map(s=>(
@@ -1379,6 +1470,24 @@ function EditorView({course, setCourse}){
               color:zoneSurface===s.id?"#fff":"#608060",
               border:`1.5px solid ${zoneSurface===s.id?"rgba(255,255,255,0.3)":"#243820"}`,
             }}>{s.label}</button>
+          ))}
+          <div style={{width:1,height:16,background:"#2a4a2a"}}/>
+          {/* Rounded corners toggle */}
+          <button onClick={()=>{const v=!zoneRounded;setZoneRounded(v);zoneRoundedRef.current=v;}} style={{
+            padding:"2px 8px",borderRadius:3,cursor:"pointer",fontSize:10,fontFamily:"Georgia,serif",
+            background:zoneRounded?"#1e4a3a":"#172512",
+            color:zoneRounded?"#60e0b0":"#608060",
+            border:`1.5px solid ${zoneRounded?"#40a080":"#243820"}`,
+          }}>⌒ {zoneRounded?"Rounded":"Sharp"}</button>
+          {/* Grid snap */}
+          <span style={{color:"#3a6030",fontSize:10}}>SNAP:</span>
+          {[["Off",0],["10",10],["20",20],["40",40]].map(([l,v])=>(
+            <button key={l} onClick={()=>{setGridSnapState(v);gridSnapRef.current=v;}} style={{
+              padding:"2px 6px",borderRadius:3,cursor:"pointer",fontSize:10,fontFamily:"Georgia,serif",
+              background:gridSnap===v?"#1e3a1e":"#172512",
+              color:gridSnap===v?"#e8d080":"#608060",
+              border:`1.5px solid ${gridSnap===v?"#50a050":"#243820"}`,
+            }}>{l}</button>
           ))}
           <span style={{color:"#60a060",fontSize:10}}>{perimRef.current.length>0?`${perimRef.current.length} pts — click ✕ to close`:"Click to add points"}</span>
           {course.zones?.length>0&&<button onClick={()=>setCourse(c=>({...c,zones:[]}))} style={{background:"#3a1010",color:"#ff8080",border:"1px solid #6a2020",borderRadius:3,padding:"1px 6px",cursor:"pointer",fontSize:10,fontFamily:"Georgia,serif"}}>Clear zones</button>}
@@ -1446,15 +1555,9 @@ function EditorView({course, setCourse}){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// FIREBASE HELPERS
+// DATA HELPERS — local state stubs (Firebase wired in on Netlify via window._croquetDB)
 // ═══════════════════════════════════════════════════════════════════════════════
-// Reads window._croquetDB set by parent App.js:
-//   import { db } from './firebase';
-//   window._croquetDB = db;
 
-const getDB = () => window._croquetDB || null;
-
-// ISO week id — e.g. "2026-W17"
 const getWeekId = () => {
   const d=new Date();
   const thu=new Date(d); thu.setDate(d.getDate()-(d.getDay()+6)%7+3);
@@ -1464,20 +1567,16 @@ const getWeekId = () => {
   return `${y}-W${String(week).padStart(2,"0")}`;
 };
 
-// Next Monday 6:30pm from now
 const getNextMonday630 = () => {
-  const d=new Date();
-  const day=d.getDay(); // 0=Sun,1=Mon...
+  const d=new Date(), day=d.getDay();
   const daysAhead=day===1?7:(8-day)%7||7;
-  const next=new Date(d);
-  next.setDate(d.getDate()+daysAhead);
-  next.setHours(18,30,0,0);
+  const next=new Date(d); next.setDate(d.getDate()+daysAhead); next.setHours(18,30,0,0);
   return next;
 };
 
 const isWeeklyActive = (info) => {
   if(!info?.course) return false;
-  if(!info.expiresAt) return true; // legacy — assume active
+  if(!info.expiresAt) return true;
   const exp=info.expiresAt?.toDate?.() || new Date(info.expiresAt);
   return new Date() < exp;
 };
@@ -1488,82 +1587,121 @@ const fmtExpiry = (info) => {
   return exp.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
 };
 
-async function fsImport() {
-  return import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
-}
+// Local in-memory store — replaced by Firestore on Netlify
+const _localStore = { weeklyCourse:null, scores:[], pastCourses:[], submitted:new Set(), savedCourses:[] };
 
-async function loadWeeklyCourse() {
-  const db=getDB(); if(!db)return null;
-  try {
-    const{doc,getDoc}=await fsImport();
-    const snap=await getDoc(doc(db,"weeklyGame","current"));
-    return snap.exists()?snap.data():null;
-  } catch(e){ console.warn("Firestore loadWeeklyCourse",e); return null; }
-}
-
-async function publishWeeklyCourse(course) {
-  const db=getDB(); if(!db)return false;
-  try {
-    const{doc,setDoc,collection,serverTimestamp}=await fsImport();
-    const wid=getWeekId();
-    const expiresAt=getNextMonday630();
-    const data={ course, weekId:wid, publishedAt:serverTimestamp(), expiresAt };
-    // Write to current + history
-    await setDoc(doc(db,"weeklyGame","current"),data);
-    await setDoc(doc(collection(db,"weeklyGame","history","weeks"),wid),data);
-    return true;
-  } catch(e){ console.warn("Firestore publishWeeklyCourse",e); return false; }
-}
-
-async function loadPastCourses() {
-  const db=getDB(); if(!db)return [];
-  try {
-    const{collection,getDocs,query,orderBy}=await fsImport();
-    const wid=getWeekId();
-    const q=query(collection(db,"weeklyGame","history","weeks"),orderBy("publishedAt","desc"));
-    const snap=await getDocs(q);
-    // Exclude current week from past list
-    return snap.docs.map(d=>d.data()).filter(d=>d.weekId!==wid);
-  } catch(e){ console.warn("Firestore loadPastCourses",e); return []; }
-}
-
-// Check if a player has already submitted a score this week
-async function hasPlayerSubmitted(playerId) {
-  const db=getDB(); if(!db)return false;
-  try {
-    const{doc,getDoc}=await fsImport();
-    const snap=await getDoc(doc(db,"weeklyScores",getWeekId(),"scores",playerId));
-    return snap.exists();
-  } catch(e){ return false; }
-}
-
-// Submit score — uses player ID as doc ID so only one score per player per week
+async function loadWeeklyCourse()            { return _localStore.weeklyCourse; }
+async function publishWeeklyCourse(course)   { _localStore.weeklyCourse={course,weekId:getWeekId(),expiresAt:getNextMonday630()}; _localStore.pastCourses=[_localStore.weeklyCourse,..._localStore.pastCourses]; return true; }
+async function loadPastCourses()             { return _localStore.pastCourses; }
+async function hasPlayerSubmitted(playerId)  { return _localStore.submitted.has(playerId); }
+async function loadScores()                  { return [..._localStore.scores].sort((a,b)=>a.strokes-b.strokes); }
 async function submitScore(playerId, playerName, strokes, courseName) {
-  const db=getDB(); if(!db)return "offline";
-  try {
-    const{doc,setDoc,getDoc,serverTimestamp}=await fsImport();
-    const ref=doc(db,"weeklyScores",getWeekId(),"scores",playerId);
-    // Double-check first score only
-    const existing=await getDoc(ref);
-    if(existing.exists()) return "already_submitted";
-    await setDoc(ref,{
-      playerId, player:playerName, strokes,
-      course:courseName, weekId:getWeekId(),
-      submittedAt:serverTimestamp(),
-    });
-    return "ok";
-  } catch(e){ console.warn("Firestore submitScore",e); return "error"; }
+  if(_localStore.submitted.has(playerId)) return "already_submitted";
+  _localStore.submitted.add(playerId);
+  _localStore.scores.push({playerId,player:playerName,strokes,course:courseName,weekId:getWeekId()});
+  return "ok";
+}
+async function saveCourse(course) {
+  const existing = _localStore.savedCourses.findIndex(c=>c.id===course.id);
+  const entry = { ...course, savedAt: new Date().toISOString() };
+  if(existing>=0) _localStore.savedCourses[existing]=entry;
+  else _localStore.savedCourses=[entry,..._localStore.savedCourses];
+  return true;
+}
+async function loadSavedCourses() { return _localStore.savedCourses; }
+async function deleteSavedCourse(courseId) {
+  _localStore.savedCourses=_localStore.savedCourses.filter(c=>c.id!==courseId);
+  return true;
 }
 
-async function loadScores(wid) {
-  const db=getDB(); if(!db)return [];
-  const targetWid=wid||getWeekId();
-  try {
-    const{collection,getDocs,query,orderBy}=await fsImport();
-    const q=query(collection(db,"weeklyScores",targetWid,"scores"),orderBy("strokes"));
-    const snap=await getDocs(q);
-    return snap.docs.map(d=>d.data());
-  } catch(e){ console.warn("Firestore loadScores",e); return []; }
+// ── Course Library (commissioner picks + publishes) ───────────────────────────
+function CourseLibraryView({onPublish, publishMsg}) {
+  const [courses, setCourses] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [previewing, setPreviewing] = useState(null); // course being previewed
+  const ED_CAM = {x:380,y:480,scale:0.36};
+
+  useEffect(()=>{
+    loadSavedCourses().then(c=>{ setCourses(c); setLoading(false); });
+  },[]);
+
+  const handleDelete = async (id) => {
+    await deleteSavedCourse(id);
+    setCourses(prev=>prev.filter(c=>c.id!==id));
+  };
+
+  const btn=(active=false,danger=false)=>({
+    background:danger?"#3a1010":active?"#1e4a1e":"#172512",
+    color:danger?"#ff8080":active?"#e8d080":"#c0d0b0",
+    border:`1.5px solid ${danger?"#6a2020":active?"#50a050":"#2a4020"}`,
+    borderRadius:5,padding:"5px 12px",cursor:"pointer",
+    fontSize:11,fontFamily:"Georgia,serif",whiteSpace:"nowrap",
+  });
+
+  if(loading) return <div style={{color:"#3a6030",textAlign:"center",padding:60,fontFamily:"Georgia,serif"}}>Loading courses…</div>;
+
+  if(previewing) return(
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      <div style={{background:"#080e08",borderBottom:"1px solid #1e3a1e",
+        padding:"6px 14px",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap"}}>
+        <button style={btn()} onClick={()=>setPreviewing(null)}>← Back to Library</button>
+        <span style={{color:"#e8d080",fontSize:13,fontWeight:"bold"}}>{previewing.name}</span>
+        <span style={{color:"#3a6030",fontSize:11}}>Par {previewing.wickets?.length||0}</span>
+        <button style={btn(true)} onClick={()=>{ onPublish(previewing); setPreviewing(null); }}>
+          📅 Publish as This Week's Course
+        </button>
+        {publishMsg&&<span style={{color:publishMsg.startsWith("✓")?"#60d060":"#e0a030",fontSize:12}}>{publishMsg}</span>}
+      </div>
+      <div style={{flex:1,overflow:"hidden"}}>
+        <GameView course={previewing} key={"preview-"+previewing.id}/>
+      </div>
+    </div>
+  );
+
+  return(
+    <div style={{padding:"20px 16px",maxWidth:560,margin:"0 auto",fontFamily:"Georgia,serif",
+      width:"100%",boxSizing:"border-box",overflowY:"auto",height:"100%"}}>
+      <div style={{textAlign:"center",marginBottom:20}}>
+        <div style={{color:"#e8d080",fontSize:18,fontWeight:"bold",letterSpacing:2}}>
+          Course Library
+        </div>
+        <div style={{color:"#3a6030",fontSize:11,marginTop:4}}>
+          Courses saved by admins · preview and publish as this week's course
+        </div>
+      </div>
+
+      {!courses?.length&&(
+        <div style={{color:"#3a6030",textAlign:"center",padding:40,fontSize:13}}>
+          No saved courses yet — go to ✏️ Editor, build one, and hit Save to Library.
+        </div>
+      )}
+
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {courses?.map((c,i)=>(
+          <div key={c.id||i} style={{background:"#0c1a0e",border:"1px solid #1a3a1a",
+            borderRadius:10,padding:"12px 16px",display:"flex",
+            alignItems:"center",gap:12}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{color:"#e8d080",fontSize:14,fontWeight:"bold",marginBottom:3}}>
+                {c.name||"Untitled Course"}
+              </div>
+              <div style={{color:"#3a6030",fontSize:11}}>
+                Par {c.wickets?.length||0} · {c.zones?.length||0} zones · {c.obstacles?.length||0} obstacles
+              </div>
+              {c.savedAt&&<div style={{color:"#2a4a2a",fontSize:10,marginTop:2}}>
+                Saved {new Date(c.savedAt).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
+              </div>}
+            </div>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <button style={btn()} onClick={()=>setPreviewing(c)}>👁 Preview</button>
+              <button style={btn(true)} onClick={()=>{ onPublish(c); }}>📅 Publish</button>
+              <button style={btn(false,true)} onClick={()=>handleDelete(c.id||i)}>✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Mini-Game Leaderboard ─────────────────────────────────────────────────────
@@ -1637,7 +1775,7 @@ function LeaderboardView({weeklyInfo, wid}) {
 }
 
 // ── Past Courses ──────────────────────────────────────────────────────────────
-function PastCoursesView({onPlay}) {
+function PastCoursesView({onPlay, isMember=false}) {
   const [courses, setCourses] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -1678,11 +1816,13 @@ function PastCoursesView({onPlay}) {
                 {c.weekId} · Par {c.course?.wickets?.length??0}
               </div>
             </div>
-            <button onClick={()=>onPlay(c.course)} style={{
-              background:"#1e4a1e",color:"#e8d080",border:"1px solid #50a050",
-              borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",
-              fontFamily:"Georgia,serif",
-            }}>Play ⛳</button>
+            {isMember
+              ? <button onClick={()=>onPlay(c.course)} style={{
+                  background:"#1e4a1e",color:"#e8d080",border:"1px solid #50a050",
+                  borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",
+                  fontFamily:"Georgia,serif"}}>Play ⛳</button>
+              : <span style={{color:"#2a4a2a",fontSize:11,fontStyle:"italic"}}>members only</span>
+            }
           </div>
         ))}
       </div>
@@ -1814,19 +1954,32 @@ function SubmitScoreModal({strokes, par, courseName, player, onSubmit, onSkip}) 
 //   currentPlayer: { id, name, ... } — the logged-in player object, or null
 //   isCommissioner: boolean — whether this player is the commissioner
 // ═══════════════════════════════════════════════════════════════════════════════
-export default function CroquetGame({ currentPlayer=null, isCommissioner=false }) {
-  const [tab,           setTab]          = useState("weekly");
-  const [editorCourse,  setEditorCourse] = useState(DEFAULT_COURSE);
-  const [parkId,        setParkId]       = useState("custom");
-  const [weeklyInfo,    setWeeklyInfo]   = useState(null);
-  const [weeklyCourse,  setWeeklyCourse] = useState(null);
-  const [weeklyActive,  setWeeklyActive] = useState(false);
-  const [publishing,    setPublishing]   = useState(false);
-  const [publishMsg,    setPublishMsg]   = useState(null);
-  const [showSubmit,    setShowSubmit]   = useState(false);
-  const [lastStrokes,   setLastStrokes]  = useState(0);
-  const [replayCourse,  setReplayCourse] = useState(null); // past course being played for fun
+export default function CroquetGame({ currentPlayer:playerProp=null, isCommissioner:commProp=false }) {
+  // ── All hooks must be declared before any conditional return ──────────────
+  const [localPlayer,      setLocalPlayer]      = useState(playerProp);
+  const [localComm,        setLocalComm]        = useState(commProp);
+  const [loginMode,        setLoginMode]        = useState("choose"); // choose | commissioner | player
+  const [loginPass,        setLoginPass]        = useState("");
+  const [loginName,        setLoginName]        = useState("");
+  const [loginJoinCode,    setLoginJoinCode]    = useState("");
+  const [loginErr,         setLoginErr]         = useState("");
+  const [tab,              setTab]              = useState("weekly");
+  const [editorCourse,     setEditorCourse]     = useState(DEFAULT_COURSE);
+  const [parkId,           setParkId]           = useState("custom");
+  const [weeklyInfo,       setWeeklyInfo]       = useState(null);
+  const [weeklyCourse,     setWeeklyCourse]     = useState(null);
+  const [weeklyActive,     setWeeklyActive]     = useState(false);
+  const [publishing,       setPublishing]       = useState(false);
+  const [publishMsg,       setPublishMsg]       = useState(null);
+  const [savingCourse,     setSavingCourse]     = useState(false);
+  const [saveMsg,          setSaveMsg]          = useState(null);
+  const [showSubmit,       setShowSubmit]       = useState(false);
+  const [lastStrokes,      setLastStrokes]      = useState(0);
+  const [replayCourse,     setReplayCourse]     = useState(null);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+
+  const currentPlayer  = playerProp || localPlayer;
+  const isCommissioner = commProp   || localComm;
 
   // Load weekly course on mount
   useEffect(()=>{
@@ -1836,19 +1989,130 @@ export default function CroquetGame({ currentPlayer=null, isCommissioner=false }
       setWeeklyActive(active);
       if(active) setWeeklyCourse(info.course);
     });
-    // Check if this player already submitted this week
     if(currentPlayer?.id){
       hasPlayerSubmitted(currentPlayer.id).then(setAlreadySubmitted);
     }
   },[currentPlayer?.id]);
 
-  // Not logged in
+  const tryCommissioner = () => {
+    if(loginPass === "croquet2026") {
+      setLocalPlayer({id:"commissioner", name:"Commissioner", isMember:true, isAdmin:true});
+      setLocalComm(true); setLoginErr("");
+    } else { setLoginErr("Incorrect password"); setLoginPass(""); }
+  };
+
+  const tryAdmin = () => {
+    const admins = [
+      {username:"commissioner", password:"croquet2026", role:"superadmin"},
+      {username:"admin2",       password:"detwah2026",  role:"admin"},
+    ];
+    const match = admins.find(a=>a.username===loginName.trim()&&a.password===loginPass);
+    if(match) {
+      const isComm = match.role==="superadmin";
+      setLocalPlayer({id:match.username, name:match.username, isMember:true, isAdmin:true});
+      if(isComm) setLocalComm(true);
+      setLoginErr("");
+    } else { setLoginErr("Invalid username or password"); setLoginPass(""); }
+  };
+
+  const tryPlayer = () => {
+    if(!loginName.trim()) { setLoginErr("Please enter your name"); return; }
+    if(loginJoinCode.trim() !== "croquet2026") { setLoginErr("Invalid join code"); return; }
+    setLocalPlayer({
+      id:`player-${loginName.trim().toLowerCase().replace(/\s+/g,"-")}`,
+      name:loginName.trim(), isMember:true, isAdmin:false,
+    });
+    setLoginErr("");
+  };
+
+  const enterAsGuest = () => {
+    setLocalPlayer({id:"guest", name:"Guest", isMember:false, isAdmin:false});
+  };
+
+  const iStyle = {
+    background:"#0d1a0e", border:"1px solid #2a4a2a", borderRadius:8,
+    padding:"9px 14px", color:"#e8d080", fontSize:13, fontFamily:"Georgia,serif",
+    width:"100%", boxSizing:"border-box", textAlign:"center", outline:"none",
+    marginBottom:10, letterSpacing:1,
+  };
+
+  // ── Login screen ───────────────────────────────────────────────────────────
   if(!currentPlayer) return(
     <div style={{height:"100vh",background:"#0a120a",display:"flex",alignItems:"center",
-      justifyContent:"center",fontFamily:"Georgia,serif",flexDirection:"column",gap:14}}>
-      <div style={{fontSize:48}}>🏡</div>
-      <div style={{color:"#e8d080",fontSize:18,fontWeight:"bold",letterSpacing:2}}>Croquet De-Twah</div>
-      <div style={{color:"#3a6030",fontSize:13}}>Please log in to play the Mini-Game</div>
+      justifyContent:"center",fontFamily:"Georgia,serif"}}>
+      <div style={{background:"#0c1e10",border:"2px solid #2a5a2a",borderRadius:16,
+        padding:"32px 40px",textAlign:"center",maxWidth:360,width:"90%"}}>
+        <div style={{fontSize:38,marginBottom:8}}>🏡</div>
+        <h1 style={{color:"#e8d080",fontSize:18,fontWeight:"bold",letterSpacing:3,margin:"0 0 4px"}}>
+          Croquet De-Twah
+        </h1>
+        <p style={{color:"#3a6030",fontSize:11,letterSpacing:2,margin:"0 0 22px"}}>MINI-GAME</p>
+
+        {loginErr&&<p style={{color:"#e06060",fontSize:12,margin:"0 0 10px"}}>{loginErr}</p>}
+
+        {/* Choose mode */}
+        {loginMode==="choose"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <button onClick={()=>{setLoginMode("player");setLoginErr("");setLoginName("");setLoginJoinCode("");}}
+              style={{background:"#1e4a1e",color:"#e8d080",border:"1.5px solid #50a050",
+                borderRadius:8,padding:"11px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+              🏑 Player Login
+            </button>
+            <button onClick={()=>{setLoginMode("admin");setLoginErr("");setLoginName("");setLoginPass("");}}
+              style={{background:"#172512",color:"#90b890",border:"1px solid #2a4a2a",
+                borderRadius:8,padding:"10px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+              🔐 Admin / Commissioner
+            </button>
+            <button onClick={enterAsGuest}
+              style={{background:"none",border:"1px solid #1a3a1a",color:"#3a6030",
+                borderRadius:8,padding:"9px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>
+              👁 View as Guest
+            </button>
+          </div>
+        )}
+
+        {/* Player login */}
+        {loginMode==="player"&&(
+          <div>
+            <input value={loginName} onChange={e=>{setLoginName(e.target.value);setLoginErr("");}}
+              placeholder="Your name" autoFocus style={iStyle}/>
+            <input type="password" value={loginJoinCode}
+              onChange={e=>{setLoginJoinCode(e.target.value);setLoginErr("");}}
+              onKeyDown={e=>e.key==="Enter"&&tryPlayer()}
+              placeholder="Join code" style={iStyle}/>
+            <button onClick={tryPlayer}
+              style={{width:"100%",background:"#1e4a1e",color:"#e8d080",
+                border:"1.5px solid #50a050",borderRadius:8,padding:"10px",
+                fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",marginBottom:8}}>
+              Enter →
+            </button>
+            <button onClick={()=>{setLoginMode("choose");setLoginErr("");}}
+              style={{background:"none",border:"none",color:"#3a6030",cursor:"pointer",
+                fontSize:12,fontFamily:"Georgia,serif"}}>← Back</button>
+          </div>
+        )}
+
+        {/* Admin / Commissioner login */}
+        {loginMode==="admin"&&(
+          <div>
+            <input value={loginName} onChange={e=>{setLoginName(e.target.value);setLoginErr("");}}
+              placeholder="Username" autoFocus style={iStyle}/>
+            <input type="password" value={loginPass}
+              onChange={e=>{setLoginPass(e.target.value);setLoginErr("");}}
+              onKeyDown={e=>e.key==="Enter"&&tryAdmin()}
+              placeholder="Password" style={iStyle}/>
+            <button onClick={tryAdmin}
+              style={{width:"100%",background:"#1e4a1e",color:"#e8d080",
+                border:"1.5px solid #50a050",borderRadius:8,padding:"10px",
+                fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif",marginBottom:8}}>
+              Enter →
+            </button>
+            <button onClick={()=>{setLoginMode("choose");setLoginErr("");}}
+              style={{background:"none",border:"none",color:"#3a6030",cursor:"pointer",
+                fontSize:12,fontFamily:"Georgia,serif"}}>← Back</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -1862,13 +2126,24 @@ export default function CroquetGame({ currentPlayer=null, isCommissioner=false }
     }));
   };
 
-  const publishCourse=async()=>{
+  const saveCourseFn=async()=>{
+    setSavingCourse(true); setSaveMsg(null);
+    const courseToSave={...editorCourse, id: editorCourse.id||`course-${Date.now()}`};
+    setEditorCourse(courseToSave);
+    const ok=await saveCourse(courseToSave);
+    setSavingCourse(false);
+    if(ok){ setSaveMsg("✓ Saved to library!"); setTimeout(()=>setSaveMsg(null),3000); }
+    else    setSaveMsg("⚠ Save failed");
+  };
+
+  const publishCourse=async(courseToPublish)=>{
+    const c = courseToPublish || editorCourse;
     setPublishing(true); setPublishMsg(null);
-    const ok=await publishWeeklyCourse(editorCourse);
+    const ok=await publishWeeklyCourse(c);
     setPublishing(false);
     if(ok){
-      const info={course:editorCourse,weekId:getWeekId(),expiresAt:getNextMonday630()};
-      setWeeklyInfo(info); setWeeklyCourse(editorCourse); setWeeklyActive(true);
+      const info={course:c,weekId:getWeekId(),expiresAt:getNextMonday630()};
+      setWeeklyInfo(info); setWeeklyCourse(c); setWeeklyActive(true);
       setPublishMsg("✓ Published! Active until "+fmtExpiry(info));
       setTimeout(()=>setPublishMsg(null),5000);
     } else {
@@ -1889,15 +2164,17 @@ export default function CroquetGame({ currentPlayer=null, isCommissioner=false }
   };
 
   // Which course is currently being played
-  const activeCourse = replayCourse || weeklyCourse;
-  const isReplay = !!replayCourse;
+  const playingCourse = replayCourse || weeklyCourse;
 
   // Tabs — commissioner gets Editor tab too
+  const isAdmin = isCommissioner || currentPlayer?.isAdmin || currentPlayer?.role === "admin";
+
   const TABS=[
     ["weekly",      "⛳ Weekly"],
     ["leaderboard", "🏆 Mini-Game Leaderboard"],
     ["past",        "📚 Past Courses"],
-    ...(isCommissioner?[["editor","✏️ Editor"]]:[]),
+    ...(isAdmin       ?[["editor","✏️ Editor"]]:[]),
+    ...(isCommissioner?[["library","📋 Course Library"]]:[]),
   ];
 
   const tabBtn=(id,label)=>(
@@ -1968,6 +2245,19 @@ export default function CroquetGame({ currentPlayer=null, isCommissioner=false }
 
         {/* ── WEEKLY PLAY ── */}
         {tab==="weekly"&&(()=>{
+          // Members only gate
+          const isMember = currentPlayer?.isMember || isCommissioner;
+          if(!isMember) return(
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+              justifyContent:"center",height:"100%",gap:14,fontFamily:"Georgia,serif"}}>
+              <div style={{fontSize:44}}>🔒</div>
+              <div style={{color:"#e8d080",fontSize:16,fontWeight:"bold"}}>Members Only</div>
+              <div style={{color:"#3a6030",fontSize:13,textAlign:"center",maxWidth:280,lineHeight:1.7}}>
+                The mini-game is available to registered league members.<br/>
+                Log in with your name and join code to play.
+              </div>
+            </div>
+          );
           // Replay mode banner
           if(replayCourse) return(
             <div style={{display:"flex",flexDirection:"column",flex:1,width:"100%",overflow:"hidden"}}>
@@ -2037,15 +2327,14 @@ export default function CroquetGame({ currentPlayer=null, isCommissioner=false }
         {/* ── PAST COURSES ── */}
         {tab==="past"&&(
           <div style={{flex:1,overflowY:"auto",width:"100%"}}>
-            <PastCoursesView onPlay={(course)=>{
-              setReplayCourse(course);
-              setTab("weekly");
-            }}/>
+            <PastCoursesView
+              isMember={currentPlayer?.isMember||isCommissioner}
+              onPlay={(course)=>{ setReplayCourse(course); setTab("weekly"); }}/>
           </div>
         )}
 
-        {/* ── EDITOR (commissioner only) ── */}
-        {tab==="editor"&&isCommissioner&&(
+        {/* ── EDITOR (all admins) ── */}
+        {tab==="editor"&&isAdmin&&(
           <div style={{flex:1,overflow:"hidden",display:"flex",
             flexDirection:"column",width:"100%"}}>
             <div style={{background:"#080e08",borderBottom:"1px solid #1e3a1e",
@@ -2054,19 +2343,44 @@ export default function CroquetGame({ currentPlayer=null, isCommissioner=false }
               <span style={{color:"#3a6030",fontSize:11}}>
                 {editorCourse.wickets.length} wickets · {editorCourse.name}
               </span>
-              <button onClick={publishCourse}
-                disabled={publishing||editorCourse.wickets.length===0}
-                style={{background:"#1e4a1e",color:"#e8d080",border:"1px solid #50a050",
-                  borderRadius:6,padding:"5px 16px",fontSize:12,cursor:"pointer",
+              {/* Save to library — any admin */}
+              <button onClick={saveCourseFn}
+                disabled={savingCourse||editorCourse.wickets.length===0}
+                style={{background:"#172a1e",color:"#80d0a0",border:"1px solid #2a6040",
+                  borderRadius:6,padding:"5px 14px",fontSize:12,cursor:"pointer",
                   fontFamily:"Georgia,serif",
                   opacity:editorCourse.wickets.length===0?0.5:1}}>
-                {publishing?"Publishing…":"📅 Publish as This Week's Course"}
+                {savingCourse?"Saving…":"💾 Save to Library"}
               </button>
-              {publishMsg&&<span style={{
-                color:publishMsg.startsWith("✓")?"#60d060":"#e0a030",fontSize:12
-              }}>{publishMsg}</span>}
+              {saveMsg&&<span style={{
+                color:saveMsg.startsWith("✓")?"#60d060":"#e0a030",fontSize:12
+              }}>{saveMsg}</span>}
+              {/* Publish direct — commissioner only */}
+              {isCommissioner&&<>
+                <button onClick={()=>publishCourse(editorCourse)}
+                  disabled={publishing||editorCourse.wickets.length===0}
+                  style={{background:"#1e4a1e",color:"#e8d080",border:"1px solid #50a050",
+                    borderRadius:6,padding:"5px 14px",fontSize:12,cursor:"pointer",
+                    fontFamily:"Georgia,serif",
+                    opacity:editorCourse.wickets.length===0?0.5:1}}>
+                  {publishing?"Publishing…":"📅 Publish as This Week's Course"}
+                </button>
+                {publishMsg&&<span style={{
+                  color:publishMsg.startsWith("✓")?"#60d060":"#e0a030",fontSize:12
+                }}>{publishMsg}</span>}
+              </>}
             </div>
             <EditorView course={editorCourse} setCourse={setEditorCourse}/>
+          </div>
+        )}
+
+        {/* ── COURSE LIBRARY (commissioner only) ── */}
+        {tab==="library"&&isCommissioner&&(
+          <div style={{flex:1,overflow:"hidden",display:"flex",
+            flexDirection:"column",width:"100%"}}>
+            <CourseLibraryView
+              onPublish={(c)=>publishCourse(c)}
+              publishMsg={publishMsg}/>
           </div>
         )}
       </div>

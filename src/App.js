@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import CroquetGame from './CroquetGame';
+import CroquetGame from './CroquetGame';
 import ParkTracer  from './ParkTracer';
 
 const firebaseConfig = {
@@ -546,7 +547,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
   const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["vote","🗳 Vote"],["profile","👤 Profile"],
-    ...(user?.role==="superadmin"?[["minigame","⛳ Mini-Game"],["tracer","🗺 Park Tracer"]]:[]),
+    ...(user?.role==="superadmin"?[["minigame","⛳ Mini-Game"]]:[]),
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[])
   ];
 
@@ -661,7 +662,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       </div>
 
       {note&&<div style={{background:C.accent,color:C.bg,textAlign:"center",padding:"8px",fontSize:"0.85rem",fontWeight:"bold"}}>{note}</div>}
-      <CommissionerOverlays tab={tab} user={user} setTab={setTab}/>
+      <CommissionerOverlays tab={tab} user={user} setTab={setTab} appState={appState} isAdmin={isAdmin}/>
 
       <div style={{maxWidth:"1020px",margin:"0 auto",padding:"16px 10px"}}>
 
@@ -1234,32 +1235,33 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 }
 // ── Commissioner-only overlays ──────────────────────────────────────────────
 
-function CommissionerOverlays({tab, user, setTab}) {
-  if(user?.role!=="superadmin") return null;
-  const backBtn = (
-    <button
-      onClick={()=>setTab("standings")}
-      style={{position:"absolute",top:8,right:8,zIndex:510,
-        background:"rgba(0,0,0,0.75)",color:"#e8d080",
-        border:"1px solid #2a4a2a",borderRadius:6,
-        padding:"5px 14px",cursor:"pointer",
-        fontFamily:"Georgia,serif",fontSize:12,letterSpacing:1}}>
-      ← League
-    </button>
-  );
-  if(tab==="minigame") return(
+function CommissionerOverlays({tab, user, setTab, appState, isAdmin}) {
+  if(user?.role!=="superadmin"&&!isAdmin) return null;
+  if(tab!=="minigame") return null;
+
+  const leagueMember = appState?.players?.find(p=>p.name===user.name);
+  const currentPlayer = {
+    id:       leagueMember?.id   || user.name,
+    name:     leagueMember?.name || user.name,
+    imageUrl: leagueMember?.imageUrl || null,
+    isMember: !!(leagueMember || isAdmin),
+    isAdmin:  isAdmin,
+  };
+
+  return(
     <div style={{position:"fixed",inset:0,zIndex:500}}>
-      {backBtn}
+      <button
+        onClick={()=>setTab("standings")}
+        style={{position:"absolute",top:8,right:8,zIndex:510,
+          background:"rgba(0,0,0,0.75)",color:"#e8d080",
+          border:"1px solid #2a4a2a",borderRadius:6,
+          padding:"5px 14px",cursor:"pointer",
+          fontFamily:"Georgia,serif",fontSize:12,letterSpacing:1}}>
+        ← League
+      </button>
       <CroquetGame
-        currentPlayer={{id:"commissioner",name:"Commissioner"}}
-        isCommissioner={true}/>
+        currentPlayer={currentPlayer}
+        isCommissioner={user?.role==="superadmin"}/>
     </div>
   );
-  if(tab==="tracer") return(
-    <div style={{position:"fixed",inset:0,zIndex:500}}>
-      {backBtn}
-      <ParkTracer/>
-    </div>
-  );
-  return null;
 }
