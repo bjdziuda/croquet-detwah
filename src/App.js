@@ -363,6 +363,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [mottoRanking, setMottoRanking] = useState([]);
   const [voteSubmitted, setVoteSubmitted] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [editingProfileName, setEditingProfileName] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileWeek, setProfileWeek] = useState(1);
@@ -382,11 +383,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   };
   const handleWeekChange = wk => { setGameWeek(wk); setAbsentPreview(computeAbsentPreview(groups,wk,players)); };
 
-  const handleLogoUpload = e => {
+  const handleLogoUpload = async e => {
     const file=e.target.files?.[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=ev=>update({leagueLogo:ev.target.result});
-    reader.readAsDataURL(file);
+    try {
+      const url=await uploadImage(file);
+      update({leagueLogo:url});
+      notify("League logo updated!");
+    } catch(err) {
+      notify("Upload failed — try again.");
+    }
   };
 
   const standings = useMemo(()=>[...players].map(p=>{
@@ -629,10 +634,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",borderBottom:`1px solid ${C.border}22`,flexWrap:"wrap"}}>
             {/* Logo */}
             <div onClick={()=>isAdmin&&logoInputRef.current?.click()}
+              onContextMenu={e=>{if(isAdmin){e.preventDefault();setShowPhotoPicker(true);}}}
               style={{width:"44px",height:"44px",borderRadius:"50%",border:`2px ${isAdmin?"dashed":"solid"} ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:isAdmin?"pointer":"default",overflow:"hidden",flexShrink:0,background:C.surface,position:"relative"}}
               onMouseEnter={e=>{if(isAdmin){e.currentTarget.style.borderColor=C.accent;}}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}>
               {leagueLogo?<img src={leagueLogo} alt="logo" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.3rem",lineHeight:1}}>🔵</span>}
+{isAdmin&&<label style={{position:"absolute",bottom:0,right:0,background:C.accent,borderRadius:"50%",width:"16px",height:"16px",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:"0.5rem"}}>📷<input type="file" accept="image/*" style={{display:"none"}} onChange={handleLogoUpload}/></label>}
             </div>
             <input ref={logoInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleLogoUpload}/>
             {/* Title */}
@@ -677,6 +684,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       </div>
 
       {note&&<div style={{background:C.accent,color:C.bg,textAlign:"center",padding:"8px",fontSize:"0.85rem",fontWeight:"bold"}}>{note}</div>}
+      {showPhotoPicker&&<CloudinaryPicker onSelect={url=>update({leagueLogo:url})} onClose={()=>setShowPhotoPicker(false)}/>}
       <CommissionerOverlays tab={tab} user={user} setTab={setTab} appState={appState} isAdmin={isAdmin}/>
 
       <div style={{maxWidth:"1020px",margin:"0 auto",padding:"16px 10px"}}>
@@ -1476,6 +1484,41 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Cloudinary photo picker ──────────────────────────────────────────────────
+function CloudinaryPicker({onSelect, onClose}) {
+  const allImages = [
+    ...LOGO_ENTRIES.map(e=>({url:e.url,label:"Logo entry"})),
+  ];
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2000,
+      display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",
+        padding:"20px",maxWidth:"560px",width:"100%",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"16px"}}>
+          <span style={{color:C.cream,fontWeight:"bold",fontSize:"0.95rem"}}>Choose a photo</span>
+          <button onClick={onClose} style={{background:"none",border:"none",color:C.muted,
+            cursor:"pointer",fontSize:"1.2rem"}}>✕</button>
+        </div>
+        <div style={{overflowY:"auto",flex:1}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(100px,1fr))",gap:"8px"}}>
+            {allImages.map((img,i)=>(
+              <div key={i} onClick={()=>{onSelect(img.url);onClose();}}
+                style={{cursor:"pointer",borderRadius:"8px",overflow:"hidden",
+                  border:`1px solid ${C.border}`,aspectRatio:"1",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+                <img src={img.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
