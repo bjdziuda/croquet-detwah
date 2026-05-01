@@ -1250,7 +1250,7 @@ function CommissionerOverlays({tab, user, setTab, appState, isAdmin}) {
     <div style={{position:"fixed",inset:0,zIndex:500}}>
       <button
         onClick={()=>setTab("standings")}
-        style={{position:"absolute",top:8,right:8,zIndex:510,
+        style={{position:"absolute",top:8,left:8,zIndex:510,
           background:"rgba(0,0,0,0.75)",color:"#e8d080",
           border:"1px solid #2a4a2a",borderRadius:6,
           padding:"5px 14px",cursor:"pointer",
