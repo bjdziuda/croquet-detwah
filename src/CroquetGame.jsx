@@ -1590,26 +1590,129 @@ const fmtExpiry = (info) => {
 // Local in-memory store — replaced by Firestore on Netlify
 const _localStore = { weeklyCourse:null, scores:[], pastCourses:[], submitted:new Set(), savedCourses:[] };
 
-async function loadWeeklyCourse()            { return _localStore.weeklyCourse; }
-async function publishWeeklyCourse(course)   { _localStore.weeklyCourse={course,weekId:getWeekId(),expiresAt:getNextMonday630()}; _localStore.pastCourses=[_localStore.weeklyCourse,..._localStore.pastCourses]; return true; }
-async function loadPastCourses()             { return _localStore.pastCourses; }
-async function hasPlayerSubmitted(playerId)  { return _localStore.submitted.has(playerId); }
-async function loadScores()                  { return [..._localStore.scores].sort((a,b)=>a.strokes-b.strokes); }
+async function loadWeeklyCourse() {
+  const db=getDB();
+  if(db){
+    try{
+      const{doc,getDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      const snap=await getDoc(doc(db,"weeklyGame","current"));
+      if(snap.exists()){const d=snap.data();_localStore.weeklyCourse=d;return d;}
+    }catch(e){console.warn("Firestore loadWeeklyCourse:",e);}
+  }
+  return _localStore.weeklyCourse;
+}
+
+async function publishWeeklyCourse(course) {
+  const data={course,weekId:getWeekId(),expiresAt:getNextMonday630()};
+  const db=getDB();
+  if(db){
+    try{
+      const{doc,setDoc,collection}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      await setDoc(doc(db,"weeklyGame","current"),data);
+      await setDoc(doc(collection(db,"weeklyGame","history","weeks"),getWeekId()),data);
+    }catch(e){console.warn("Firestore publishWeeklyCourse:",e);}
+  }
+  _localStore.weeklyCourse=data;
+  _localStore.pastCourses=[data,..._localStore.pastCourses];
+  return true;
+}
+
+async function loadPastCourses() {
+  const db=getDB();
+  if(db){
+    try{
+      const{collection,getDocs,query,orderBy}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      const wid=getWeekId();
+      const q=query(collection(db,"weeklyGame","history","weeks"),orderBy("publishedAt","desc"));
+      const snap=await getDocs(q);
+      const courses=snap.docs.map(d=>d.data()).filter(d=>d.weekId!==wid);
+      _localStore.pastCourses=courses;
+      return courses;
+    }catch(e){console.warn("Firestore loadPastCourses:",e);}
+  }
+  return _localStore.pastCourses;
+}
+
+async function hasPlayerSubmitted(playerId) {
+  const db=getDB();
+  if(db){
+    try{
+      const{doc,getDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      const snap=await getDoc(doc(db,"weeklyScores",getWeekId(),"scores",playerId));
+      return snap.exists();
+    }catch(e){console.warn("Firestore hasPlayerSubmitted:",e);}
+  }
+  return _localStore.submitted.has(playerId);
+}
+
+async function loadScores() {
+  const db=getDB();
+  if(db){
+    try{
+      const{collection,getDocs,query,orderBy}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      const q=query(collection(db,"weeklyScores",getWeekId(),"scores"),orderBy("strokes"));
+      const snap=await getDocs(q);
+      return snap.docs.map(d=>d.data());
+    }catch(e){console.warn("Firestore loadScores:",e);}
+  }
+  return [..._localStore.scores].sort((a,b)=>a.strokes-b.strokes);
+}
 async function submitScore(playerId, playerName, strokes, courseName) {
   if(_localStore.submitted.has(playerId)) return "already_submitted";
+  const db=getDB();
+  if(db){
+    try{
+      const{doc,setDoc,getDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      const ref=doc(db,"weeklyScores",getWeekId(),"scores",playerId);
+      const existing=await getDoc(ref);
+      if(existing.exists()) return "already_submitted";
+      await setDoc(ref,{playerId,player:playerName,strokes,course:courseName,weekId:getWeekId(),submittedAt:new Date().toISOString()});
+    }catch(e){console.warn("Firestore submitScore:",e);return "error";}
+  }
   _localStore.submitted.add(playerId);
   _localStore.scores.push({playerId,player:playerName,strokes,course:courseName,weekId:getWeekId()});
   return "ok";
 }
 async function saveCourse(course) {
-  const existing = _localStore.savedCourses.findIndex(c=>c.id===course.id);
-  const entry = { ...course, savedAt: new Date().toISOString() };
+  const entry={...course, id:course.id||`course-${Date.now()}`, savedAt:new Date().toISOString()};
+  // Save to Firestore if available
+  const db=getDB();
+  if(db){
+    try{
+      const{doc,setDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      await setDoc(doc(db,"savedCourses",entry.id),entry);
+    }catch(e){console.warn("Firestore saveCourse:",e);}
+  }
+  // Also update local cache
+  const existing=_localStore.savedCourses.findIndex(c=>c.id===entry.id);
   if(existing>=0) _localStore.savedCourses[existing]=entry;
   else _localStore.savedCourses=[entry,..._localStore.savedCourses];
-  return true;
+  return entry.id;
 }
-async function loadSavedCourses() { return _localStore.savedCourses; }
+
+async function loadSavedCourses() {
+  const db=getDB();
+  if(db){
+    try{
+      const{collection,getDocs,query,orderBy}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      const q=query(collection(db,"savedCourses"),orderBy("savedAt","desc"));
+      const snap=await getDocs(q);
+      const courses=snap.docs.map(d=>d.data());
+      _localStore.savedCourses=courses;
+      return courses;
+    }catch(e){console.warn("Firestore loadSavedCourses:",e);}
+  }
+  return _localStore.savedCourses;
+}
+
 async function deleteSavedCourse(courseId) {
+  const db=getDB();
+  if(db){
+    try{
+      const{doc,deleteDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+      await deleteDoc(doc(db,"savedCourses",courseId));
+    }catch(e){console.warn("Firestore deleteSavedCourse:",e);}
+  }
   _localStore.savedCourses=_localStore.savedCourses.filter(c=>c.id!==courseId);
   return true;
 }
