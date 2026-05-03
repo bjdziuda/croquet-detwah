@@ -1589,6 +1589,7 @@ const fmtExpiry = (info) => {
 };
 
 // Local in-memory store — replaced by Firestore on Netlify
+const getDB = () => window._croquetDB || null;
 const _localStore = { weeklyCourse:null, scores:[], pastCourses:[], submitted:new Set(), savedCourses:[] };
 
 async function loadWeeklyCourse() {
