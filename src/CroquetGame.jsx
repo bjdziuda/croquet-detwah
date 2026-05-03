@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { doc, getDoc, setDoc, getDocs, deleteDoc, collection, query, orderBy } from "firebase/firestore";
 
 // ─── DETROIT PARK BOUNDARIES ─────────────────────────────────────────────────
 // Normalized from real OSM lat/lon boundaries. cos(lat) aspect correction applied.
@@ -1588,14 +1589,12 @@ const fmtExpiry = (info) => {
 };
 
 // Local in-memory store — replaced by Firestore on Netlify
-const getDB = () => window._croquetDB || null;
 const _localStore = { weeklyCourse:null, scores:[], pastCourses:[], submitted:new Set(), savedCourses:[] };
 
 async function loadWeeklyCourse() {
   const db=getDB();
   if(db){
     try{
-      const{doc,getDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       const snap=await getDoc(doc(db,"weeklyGame","current"));
       if(snap.exists()){const d=snap.data();_localStore.weeklyCourse=d;return d;}
     }catch(e){console.warn("Firestore loadWeeklyCourse:",e);}
@@ -1608,7 +1607,6 @@ async function publishWeeklyCourse(course) {
   const db=getDB();
   if(db){
     try{
-      const{doc,setDoc,collection}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       await setDoc(doc(db,"weeklyGame","current"),data);
       await setDoc(doc(collection(db,"weeklyGame","history","weeks"),getWeekId()),data);
     }catch(e){console.warn("Firestore publishWeeklyCourse:",e);}
@@ -1622,7 +1620,6 @@ async function loadPastCourses() {
   const db=getDB();
   if(db){
     try{
-      const{collection,getDocs,query,orderBy}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       const wid=getWeekId();
       const q=query(collection(db,"weeklyGame","history","weeks"),orderBy("publishedAt","desc"));
       const snap=await getDocs(q);
@@ -1638,7 +1635,6 @@ async function hasPlayerSubmitted(playerId) {
   const db=getDB();
   if(db){
     try{
-      const{doc,getDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       const snap=await getDoc(doc(db,"weeklyScores",getWeekId(),"scores",playerId));
       return snap.exists();
     }catch(e){console.warn("Firestore hasPlayerSubmitted:",e);}
@@ -1650,7 +1646,6 @@ async function loadScores() {
   const db=getDB();
   if(db){
     try{
-      const{collection,getDocs,query,orderBy}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       const q=query(collection(db,"weeklyScores",getWeekId(),"scores"),orderBy("strokes"));
       const snap=await getDocs(q);
       return snap.docs.map(d=>d.data());
@@ -1663,7 +1658,6 @@ async function submitScore(playerId, playerName, strokes, courseName) {
   const db=getDB();
   if(db){
     try{
-      const{doc,setDoc,getDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       const ref=doc(db,"weeklyScores",getWeekId(),"scores",playerId);
       const existing=await getDoc(ref);
       if(existing.exists()) return "already_submitted";
@@ -1676,15 +1670,12 @@ async function submitScore(playerId, playerName, strokes, courseName) {
 }
 async function saveCourse(course) {
   const entry={...course, id:course.id||`course-${Date.now()}`, savedAt:new Date().toISOString()};
-  // Save to Firestore if available
   const db=getDB();
   if(db){
     try{
-      const{doc,setDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       await setDoc(doc(db,"savedCourses",entry.id),entry);
     }catch(e){console.warn("Firestore saveCourse:",e);}
   }
-  // Also update local cache
   const existing=_localStore.savedCourses.findIndex(c=>c.id===entry.id);
   if(existing>=0) _localStore.savedCourses[existing]=entry;
   else _localStore.savedCourses=[entry,..._localStore.savedCourses];
@@ -1695,7 +1686,6 @@ async function loadSavedCourses() {
   const db=getDB();
   if(db){
     try{
-      const{collection,getDocs,query,orderBy}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       const q=query(collection(db,"savedCourses"),orderBy("savedAt","desc"));
       const snap=await getDocs(q);
       const courses=snap.docs.map(d=>d.data());
@@ -1710,7 +1700,6 @@ async function deleteSavedCourse(courseId) {
   const db=getDB();
   if(db){
     try{
-      const{doc,deleteDoc}=await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
       await deleteDoc(doc(db,"savedCourses",courseId));
     }catch(e){console.warn("Firestore deleteSavedCourse:",e);}
   }
