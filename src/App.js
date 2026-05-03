@@ -167,7 +167,7 @@ function LoginScreen({onLogin, joinCode, nextMatch, leagueLogo}) {
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"24px"}}>
       <div style={{maxWidth:"400px",width:"100%"}}>
         <div style={{textAlign:"center",marginBottom:"24px"}}>
-          <div style={{fontSize:"3.5rem",marginBottom:"12px",width:"60px",height:"60px",borderRadius:"50%",overflow:"hidden",margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{marginBottom:"12px",maxWidth:"120px",margin:"0 auto 12px",borderRadius:"12px",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
             {leagueLogo?<img src={leagueLogo} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span>🔵</span>}
           </div>
           <h1 style={{color:C.cream,fontSize:"2rem",margin:"0 0 6px",letterSpacing:"0.05em",fontWeight:"bold"}}>Croquet De-Twah</h1>
@@ -637,7 +637,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             {/* Logo */}
             <div onClick={()=>isAdmin&&logoInputRef.current?.click()}
               onContextMenu={e=>{if(isAdmin){e.preventDefault();setShowPhotoPicker(true);}}}
-              style={{width:"44px",height:"44px",borderRadius:"50%",border:`2px ${isAdmin?"dashed":"solid"} ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:isAdmin?"pointer":"default",overflow:"hidden",flexShrink:0,background:C.surface,position:"relative"}}
+              style={{width:"44px",height:"44px",borderRadius:"10px",border:`2px ${isAdmin?"dashed":"solid"} ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:isAdmin?"pointer":"default",overflow:"hidden",flexShrink:0,background:C.surface,position:"relative"}}
               onMouseEnter={e=>{if(isAdmin){e.currentTarget.style.borderColor=C.accent;}}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;}}>
               {leagueLogo?<img src={leagueLogo} alt="logo" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.3rem",lineHeight:1}}>🔵</span>}
