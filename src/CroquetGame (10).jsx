@@ -763,8 +763,12 @@ function GameView({course, onComplete}){
     };
   });
 
+  const manualCamRef = useRef(false); // true = player overrode camera, stop auto-follow
+
   const updateCam=useCallback(()=>{
     const s=stateRef.current;if(!s||!camRef.current)return;
+    // Don't auto-follow when player has manually adjusted camera (while aiming)
+    if(manualCamRef.current&&phaseRef.current==="aiming") return;
     const tgt=camTarget(s.ball,nextWRef.current,course),cam=camRef.current;
     cam.x+=(tgt.x-cam.x)*CAM_SMOOTH;cam.y+=(tgt.y-cam.y)*CAM_SMOOTH;
     cam.scale+=(tgt.scale-cam.scale)*CAM_SMOOTH;
@@ -937,6 +941,7 @@ function GameView({course, onComplete}){
       s.ball.vx=Math.cos(Math.atan2(ddy,ddx))*pct*MAX_POWER;
       s.ball.vy=Math.sin(Math.atan2(ddy,ddx))*pct*MAX_POWER;
       s._strokes++;setStrokes(s._strokes);trailRef.current=[];
+      manualCamRef.current=false; // resume auto-follow when rolling
       phaseRef.current="rolling";setPhase("rolling");setPowerPct(0);
       cancelAnimationFrame(aimRef.current);cancelAnimationFrame(animRef.current);
       animRef.current=requestAnimationFrame(tickRef.current);
@@ -1003,16 +1008,16 @@ function GameView({course, onComplete}){
         </div>
         {/* Zoom controls */}
         <div style={{display:"flex",gap:3,alignItems:"center"}}>
-          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.min(3,c.scale*1.25);}}
+          <button onClick={()=>{const c=camRef.current;if(c){manualCamRef.current=true;c.scale=Math.min(3,c.scale*1.25);}}}
             style={{background:"#172512",color:"#80d080",border:"1px solid #2a4020",borderRadius:5,
               padding:"4px 11px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:15,lineHeight:1}}>+</button>
-          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.max(0.35,c.scale*0.8);}}
+          <button onClick={()=>{const c=camRef.current;if(c){manualCamRef.current=true;c.scale=Math.max(0.35,c.scale*0.8);}}}
             style={{background:"#172512",color:"#80d080",border:"1px solid #2a4020",borderRadius:5,
               padding:"4px 11px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:15,lineHeight:1}}>−</button>
           <button onClick={()=>{
-            // Frame ball + next 2 wickets
             const cam=camRef.current, s=stateRef.current, nw=nextWRef.current;
             if(!cam||!s||!course.wickets.length) return;
+            manualCamRef.current=true;
             const pts=[{x:s.ball.x,y:s.ball.y}];
             for(let i=nw;i<Math.min(nw+2,course.wickets.length);i++) pts.push(course.wickets[i]);
             if(pts.length===1){ cam.x=pts[0].x; cam.y=pts[0].y; cam.scale=1.8; return; }
@@ -1020,8 +1025,8 @@ function GameView({course, onComplete}){
             const minX=Math.min(...xs), maxX=Math.max(...xs);
             const minY=Math.min(...ys), maxY=Math.max(...ys);
             const pad=80;
-            const scaleX=CW/((maxX-minX)||1+pad*2);
-            const scaleY=CH/((maxY-minY)||1+pad*2);
+            const scaleX=CW/((maxX-minX+pad*2)||1);
+            const scaleY=CH/((maxY-minY+pad*2)||1);
             cam.scale=Math.min(scaleX,scaleY,2.5)*0.75;
             cam.x=(minX+maxX)/2;
             cam.y=(minY+maxY)/2;
