@@ -895,17 +895,15 @@ function GameView({course, onComplete}){
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
 
-    // Get canvas-space coords from any event (clamped to canvas size)
     const getCP=(e)=>{
       const rect=canvas.getBoundingClientRect(),src=e.touches?e.touches[0]:e;
-      // Allow drag OUTSIDE canvas — no clamping
       return{
         cx:(src.clientX-rect.left)*(CW/rect.width),
         cy:(src.clientY-rect.top)*(CH/rect.height)
       };
     };
 
-    // ── Aiming ──────────────────────────────────────────────────────────────
+    // ── Aiming — drag tracked on window so you can pull outside canvas ───────
     let isAiming=false;
 
     const onDown=(e)=>{
@@ -920,7 +918,6 @@ function GameView({course, onComplete}){
       stateRef.current.dragCurrent=c2w(cx,cy,cam);
     };
 
-    // Listen on window so drag works outside the canvas
     const onMoveWindow=(e)=>{
       if(!isAiming||phaseRef.current!=="aiming"||!stateRef.current?.dragStart)return;
       e.preventDefault();
@@ -945,108 +942,20 @@ function GameView({course, onComplete}){
       animRef.current=requestAnimationFrame(tickRef.current);
     };
 
-    // ── Scroll to zoom ───────────────────────────────────────────────────────
-    const onWheel=(e)=>{
-      e.preventDefault();
-      const cam=camRef.current; if(!cam)return;
-      const rect=canvas.getBoundingClientRect();
-      const mx=(e.clientX-rect.left)*(CW/rect.width);
-      const my=(e.clientY-rect.top)*(CH/rect.height);
-      const factor=e.deltaY<0?1.12:0.89;
-      const newScale=Math.max(0.4,Math.min(3,cam.scale*factor));
-      // Zoom toward mouse position
-      cam.x=mx-(mx-cam.x*cam.scale)*newScale/cam.scale/newScale;
-      cam.y=my-(my-cam.y*cam.scale)*newScale/cam.scale/newScale;
-      cam.scale=newScale;
-    };
-
-    // ── Right-click / middle-click drag to pan ───────────────────────────────
-    let panStart=null;
-    const onMouseDown=(e)=>{
-      if(e.button===1||e.button===2){
-        e.preventDefault();
-        const rect=canvas.getBoundingClientRect();
-        panStart={
-          mx:e.clientX,my:e.clientY,
-          cx:camRef.current.x,cy:camRef.current.y
-        };
-      } else {
-        onDown(e);
-      }
-    };
-    const onMouseMove=(e)=>{
-      if(panStart){
-        const cam=camRef.current;
-        const dx=(e.clientX-panStart.mx)*(CW/canvas.getBoundingClientRect().width);
-        const dy=(e.clientY-panStart.my)*(CH/canvas.getBoundingClientRect().height);
-        cam.x=panStart.cx+dx/cam.scale;
-        cam.y=panStart.cy+dy/cam.scale;
-        return;
-      }
-      onMoveWindow(e);
-    };
-    const onMouseUp=(e)=>{
-      if(panStart){panStart=null;return;}
-      onUpWindow(e);
-    };
-
-    // ── Pinch to zoom + two-finger pan ───────────────────────────────────────
-    let lastPinchDist=null, lastPinchMid=null;
-    const onTouchStart=(e)=>{
-      if(e.touches.length===2){
-        e.preventDefault();
-        const t1=e.touches[0],t2=e.touches[1];
-        lastPinchDist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
-        lastPinchMid=[(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2];
-      } else {
-        onDown(e);
-      }
-    };
-    const onTouchMove=(e)=>{
-      if(e.touches.length===2){
-        e.preventDefault();
-        const cam=camRef.current; if(!cam)return;
-        const t1=e.touches[0],t2=e.touches[1];
-        const dist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
-        const mid=[(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2];
-        const rect=canvas.getBoundingClientRect();
-        if(lastPinchDist&&dist>0){
-          const factor=dist/lastPinchDist;
-          const newScale=Math.max(0.4,Math.min(3,cam.scale*factor));
-          const mx=(mid[0]-rect.left)*(CW/rect.width);
-          const my=(mid[1]-rect.top)*(CH/rect.height);
-          cam.x=mx-(mx-cam.x*cam.scale)*newScale/cam.scale/newScale;
-          cam.y=my-(my-cam.y*cam.scale)*newScale/cam.scale/newScale;
-          cam.scale=newScale;
-        }
-        lastPinchDist=dist; lastPinchMid=mid;
-      } else {
-        onMoveWindow(e);
-      }
-    };
-    const onTouchEnd=(e)=>{
-      lastPinchDist=null; lastPinchMid=null;
-      onUpWindow(e);
-    };
-
-    canvas.addEventListener("mousedown",onMouseDown);
-    canvas.addEventListener("wheel",onWheel,{passive:false});
-    canvas.addEventListener("contextmenu",e=>e.preventDefault());
-    canvas.addEventListener("touchstart",onTouchStart,{passive:false});
-    canvas.addEventListener("touchmove",onTouchMove,{passive:false});
-    canvas.addEventListener("touchend",onTouchEnd,{passive:false});
-    window.addEventListener("mousemove",onMouseMove);
-    window.addEventListener("mouseup",onMouseUp);
+    canvas.addEventListener("mousedown",onDown);
+    canvas.addEventListener("touchstart",onDown,{passive:false});
+    window.addEventListener("mousemove",onMoveWindow);
+    window.addEventListener("mouseup",onUpWindow);
+    window.addEventListener("touchmove",onMoveWindow,{passive:false});
+    window.addEventListener("touchend",onUpWindow);
 
     return()=>{
-      canvas.removeEventListener("mousedown",onMouseDown);
-      canvas.removeEventListener("wheel",onWheel);
-      canvas.removeEventListener("contextmenu",e=>e.preventDefault());
-      canvas.removeEventListener("touchstart",onTouchStart);
-      canvas.removeEventListener("touchmove",onTouchMove);
-      canvas.removeEventListener("touchend",onTouchEnd);
-      window.removeEventListener("mousemove",onMouseMove);
-      window.removeEventListener("mouseup",onMouseUp);
+      canvas.removeEventListener("mousedown",onDown);
+      canvas.removeEventListener("touchstart",onDown);
+      window.removeEventListener("mousemove",onMoveWindow);
+      window.removeEventListener("mouseup",onUpWindow);
+      window.removeEventListener("touchmove",onMoveWindow);
+      window.removeEventListener("touchend",onUpWindow);
     };
   },[]);
 
@@ -1094,21 +1003,32 @@ function GameView({course, onComplete}){
         </div>
         {/* Zoom controls */}
         <div style={{display:"flex",gap:3,alignItems:"center"}}>
-          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.min(3,c.scale*1.2);}}
+          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.min(3,c.scale*1.25);}}
             style={{background:"#172512",color:"#80d080",border:"1px solid #2a4020",borderRadius:5,
-              padding:"3px 9px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,lineHeight:1}}>+</button>
-          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.max(0.4,c.scale*0.83);}}
+              padding:"4px 11px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:15,lineHeight:1}}>+</button>
+          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.max(0.35,c.scale*0.8);}}
             style={{background:"#172512",color:"#80d080",border:"1px solid #2a4020",borderRadius:5,
-              padding:"3px 9px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,lineHeight:1}}>−</button>
+              padding:"4px 11px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:15,lineHeight:1}}>−</button>
           <button onClick={()=>{
-            if(!camRef.current||!course)return;
-            const s=Math.min(CW/course.bounds.w,CH/course.bounds.h)*0.85;
-            camRef.current.scale=s;
-            camRef.current.x=course.bounds.w/2;
-            camRef.current.y=course.bounds.h/2;
-          }} style={{background:"#172512",color:"#608060",border:"1px solid #2a4020",borderRadius:5,
-            padding:"3px 8px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:9,letterSpacing:1}}>
-            FIT
+            // Frame ball + next 2 wickets
+            const cam=camRef.current, s=stateRef.current, nw=nextWRef.current;
+            if(!cam||!s||!course.wickets.length) return;
+            const pts=[{x:s.ball.x,y:s.ball.y}];
+            for(let i=nw;i<Math.min(nw+2,course.wickets.length);i++) pts.push(course.wickets[i]);
+            if(pts.length===1){ cam.x=pts[0].x; cam.y=pts[0].y; cam.scale=1.8; return; }
+            const xs=pts.map(p=>p.x), ys=pts.map(p=>p.y);
+            const minX=Math.min(...xs), maxX=Math.max(...xs);
+            const minY=Math.min(...ys), maxY=Math.max(...ys);
+            const pad=80;
+            const scaleX=CW/((maxX-minX)||1+pad*2);
+            const scaleY=CH/((maxY-minY)||1+pad*2);
+            cam.scale=Math.min(scaleX,scaleY,2.5)*0.75;
+            cam.x=(minX+maxX)/2;
+            cam.y=(minY+maxY)/2;
+          }} style={{background:"#1a3a1a",color:"#c0e0c0",border:"1px solid #3a6a3a",borderRadius:5,
+            padding:"4px 10px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:10,letterSpacing:0.5,
+            whiteSpace:"nowrap"}}>
+            👁 Next
           </button>
         </div>
         {/* Ball colour picker */}
