@@ -894,39 +894,159 @@ function GameView({course, onComplete}){
   // Events — read all state from refs, registered once
   useEffect(()=>{
     const canvas=canvasRef.current;if(!canvas)return;
+
+    // Get canvas-space coords from any event (clamped to canvas size)
     const getCP=(e)=>{
       const rect=canvas.getBoundingClientRect(),src=e.touches?e.touches[0]:e;
-      return{cx:(src.clientX-rect.left)*(CW/rect.width),cy:(src.clientY-rect.top)*(CH/rect.height)};
+      // Allow drag OUTSIDE canvas — no clamping
+      return{
+        cx:(src.clientX-rect.left)*(CW/rect.width),
+        cy:(src.clientY-rect.top)*(CH/rect.height)
+      };
     };
+
+    // ── Aiming ──────────────────────────────────────────────────────────────
+    let isAiming=false;
+
     const onDown=(e)=>{
-      if(phaseRef.current!=="aiming")return;e.preventDefault();
+      if(phaseRef.current!=="aiming")return;
       const{cx,cy}=getCP(e),cam=camRef.current,ball=stateRef.current?.ball;
       if(!cam||!ball)return;
       const bp=w2c(ball.x,ball.y,cam);
       if(d2(cx,cy,bp.cx,bp.cy)>Math.max(28,HIT_RADIUS*cam.scale))return;
-      stateRef.current.dragStart={x:ball.x,y:ball.y};stateRef.current.dragCurrent=c2w(cx,cy,cam);
+      e.preventDefault();
+      isAiming=true;
+      stateRef.current.dragStart={x:ball.x,y:ball.y};
+      stateRef.current.dragCurrent=c2w(cx,cy,cam);
     };
-    const onMove=(e)=>{
-      if(phaseRef.current!=="aiming"||!stateRef.current?.dragStart)return;e.preventDefault();
-      const{cx,cy}=getCP(e);stateRef.current.dragCurrent=c2w(cx,cy,camRef.current);
+
+    // Listen on window so drag works outside the canvas
+    const onMoveWindow=(e)=>{
+      if(!isAiming||phaseRef.current!=="aiming"||!stateRef.current?.dragStart)return;
+      e.preventDefault();
+      const{cx,cy}=getCP(e);
+      stateRef.current.dragCurrent=c2w(cx,cy,camRef.current);
     };
-    const onUp=(e)=>{
-      const s=stateRef.current;if(phaseRef.current!=="aiming"||!s?.dragStart)return;e.preventDefault();
+
+    const onUpWindow=(e)=>{
+      if(!isAiming)return;
+      isAiming=false;
+      const s=stateRef.current;
+      if(phaseRef.current!=="aiming"||!s?.dragStart)return;
       const ddx=s.dragStart.x-s.dragCurrent.x,ddy=s.dragStart.y-s.dragCurrent.y;
       const pct=Math.min(Math.sqrt(ddx*ddx+ddy*ddy)/MAX_DRAG_W,1);
       s.dragStart=null;s.dragCurrent=null;
       if(pct<0.03){drawRef.current?.(Date.now());return;}
-      s.ball.vx=Math.cos(Math.atan2(ddy,ddx))*pct*MAX_POWER;s.ball.vy=Math.sin(Math.atan2(ddy,ddx))*pct*MAX_POWER;
+      s.ball.vx=Math.cos(Math.atan2(ddy,ddx))*pct*MAX_POWER;
+      s.ball.vy=Math.sin(Math.atan2(ddy,ddx))*pct*MAX_POWER;
       s._strokes++;setStrokes(s._strokes);trailRef.current=[];
       phaseRef.current="rolling";setPhase("rolling");setPowerPct(0);
       cancelAnimationFrame(aimRef.current);cancelAnimationFrame(animRef.current);
       animRef.current=requestAnimationFrame(tickRef.current);
     };
-    canvas.addEventListener("mousedown",onDown);canvas.addEventListener("mousemove",onMove);canvas.addEventListener("mouseup",onUp);
-    canvas.addEventListener("touchstart",onDown,{passive:false});canvas.addEventListener("touchmove",onMove,{passive:false});canvas.addEventListener("touchend",onUp,{passive:false});
+
+    // ── Scroll to zoom ───────────────────────────────────────────────────────
+    const onWheel=(e)=>{
+      e.preventDefault();
+      const cam=camRef.current; if(!cam)return;
+      const rect=canvas.getBoundingClientRect();
+      const mx=(e.clientX-rect.left)*(CW/rect.width);
+      const my=(e.clientY-rect.top)*(CH/rect.height);
+      const factor=e.deltaY<0?1.12:0.89;
+      const newScale=Math.max(0.4,Math.min(3,cam.scale*factor));
+      // Zoom toward mouse position
+      cam.x=mx-(mx-cam.x*cam.scale)*newScale/cam.scale/newScale;
+      cam.y=my-(my-cam.y*cam.scale)*newScale/cam.scale/newScale;
+      cam.scale=newScale;
+    };
+
+    // ── Right-click / middle-click drag to pan ───────────────────────────────
+    let panStart=null;
+    const onMouseDown=(e)=>{
+      if(e.button===1||e.button===2){
+        e.preventDefault();
+        const rect=canvas.getBoundingClientRect();
+        panStart={
+          mx:e.clientX,my:e.clientY,
+          cx:camRef.current.x,cy:camRef.current.y
+        };
+      } else {
+        onDown(e);
+      }
+    };
+    const onMouseMove=(e)=>{
+      if(panStart){
+        const cam=camRef.current;
+        const dx=(e.clientX-panStart.mx)*(CW/canvas.getBoundingClientRect().width);
+        const dy=(e.clientY-panStart.my)*(CH/canvas.getBoundingClientRect().height);
+        cam.x=panStart.cx+dx/cam.scale;
+        cam.y=panStart.cy+dy/cam.scale;
+        return;
+      }
+      onMoveWindow(e);
+    };
+    const onMouseUp=(e)=>{
+      if(panStart){panStart=null;return;}
+      onUpWindow(e);
+    };
+
+    // ── Pinch to zoom + two-finger pan ───────────────────────────────────────
+    let lastPinchDist=null, lastPinchMid=null;
+    const onTouchStart=(e)=>{
+      if(e.touches.length===2){
+        e.preventDefault();
+        const t1=e.touches[0],t2=e.touches[1];
+        lastPinchDist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
+        lastPinchMid={(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2};
+      } else {
+        onDown(e);
+      }
+    };
+    const onTouchMove=(e)=>{
+      if(e.touches.length===2){
+        e.preventDefault();
+        const cam=camRef.current; if(!cam)return;
+        const t1=e.touches[0],t2=e.touches[1];
+        const dist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
+        const mid={(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2};
+        const rect=canvas.getBoundingClientRect();
+        if(lastPinchDist&&dist>0){
+          const factor=dist/lastPinchDist;
+          const newScale=Math.max(0.4,Math.min(3,cam.scale*factor));
+          const mx=(mid[0]-rect.left)*(CW/rect.width);
+          const my=(mid[1]-rect.top)*(CH/rect.height);
+          cam.x=mx-(mx-cam.x*cam.scale)*newScale/cam.scale/newScale;
+          cam.y=my-(my-cam.y*cam.scale)*newScale/cam.scale/newScale;
+          cam.scale=newScale;
+        }
+        lastPinchDist=dist; lastPinchMid=mid;
+      } else {
+        onMoveWindow(e);
+      }
+    };
+    const onTouchEnd=(e)=>{
+      lastPinchDist=null; lastPinchMid=null;
+      onUpWindow(e);
+    };
+
+    canvas.addEventListener("mousedown",onMouseDown);
+    canvas.addEventListener("wheel",onWheel,{passive:false});
+    canvas.addEventListener("contextmenu",e=>e.preventDefault());
+    canvas.addEventListener("touchstart",onTouchStart,{passive:false});
+    canvas.addEventListener("touchmove",onTouchMove,{passive:false});
+    canvas.addEventListener("touchend",onTouchEnd,{passive:false});
+    window.addEventListener("mousemove",onMouseMove);
+    window.addEventListener("mouseup",onMouseUp);
+
     return()=>{
-      canvas.removeEventListener("mousedown",onDown);canvas.removeEventListener("mousemove",onMove);canvas.removeEventListener("mouseup",onUp);
-      canvas.removeEventListener("touchstart",onDown);canvas.removeEventListener("touchmove",onMove);canvas.removeEventListener("touchend",onUp);
+      canvas.removeEventListener("mousedown",onMouseDown);
+      canvas.removeEventListener("wheel",onWheel);
+      canvas.removeEventListener("contextmenu",e=>e.preventDefault());
+      canvas.removeEventListener("touchstart",onTouchStart);
+      canvas.removeEventListener("touchmove",onTouchMove);
+      canvas.removeEventListener("touchend",onTouchEnd);
+      window.removeEventListener("mousemove",onMouseMove);
+      window.removeEventListener("mouseup",onMouseUp);
     };
   },[]);
 
@@ -971,6 +1091,25 @@ function GameView({course, onComplete}){
         <div style={{display:"flex",gap:20,color:"#608060",fontSize:12,letterSpacing:1}}>
           <span>Strokes <strong style={{color:"#e8d080"}}>{strokes}</strong></span>
           <span>Wickets <strong style={{color:"#e8d080"}}>{nextWicket}/{totalWickets}</strong></span>
+        </div>
+        {/* Zoom controls */}
+        <div style={{display:"flex",gap:3,alignItems:"center"}}>
+          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.min(3,c.scale*1.2);}}
+            style={{background:"#172512",color:"#80d080",border:"1px solid #2a4020",borderRadius:5,
+              padding:"3px 9px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,lineHeight:1}}>+</button>
+          <button onClick={()=>{const c=camRef.current;if(c)c.scale=Math.max(0.4,c.scale*0.83);}}
+            style={{background:"#172512",color:"#80d080",border:"1px solid #2a4020",borderRadius:5,
+              padding:"3px 9px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:14,lineHeight:1}}>−</button>
+          <button onClick={()=>{
+            if(!camRef.current||!course)return;
+            const s=Math.min(CW/course.bounds.w,CH/course.bounds.h)*0.85;
+            camRef.current.scale=s;
+            camRef.current.x=course.bounds.w/2;
+            camRef.current.y=course.bounds.h/2;
+          }} style={{background:"#172512",color:"#608060",border:"1px solid #2a4020",borderRadius:5,
+            padding:"3px 8px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:9,letterSpacing:1}}>
+            FIT
+          </button>
         </div>
         {/* Ball colour picker */}
         <div style={{display:"flex",alignItems:"center",gap:5}}>
