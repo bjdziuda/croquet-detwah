@@ -461,7 +461,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
   const addGroup=()=>handleGroupChange(prev=>[...prev,{id:Date.now(),players:[{playerId:"",position:""}]}]);
   const removeGroup=gid=>handleGroupChange(prev=>prev.filter(g=>g.id!==gid));
-  const addRowToGroup=gid=>handleGroupChange(prev=>prev.map(g=>g.id===gid?{...g,players:[...g.players,{playerId:"",position:""}]}:g));
+  const addRowToGroup=(gid,playerId="")=>handleGroupChange(prev=>prev.map(g=>g.id===gid?{...g,players:[...g.players,{playerId,position:String(g.players.filter(r=>r.playerId).length+1)}]}:g));
   const removeRowFromGroup=(gid,idx)=>handleGroupChange(prev=>prev.map(g=>g.id===gid?{...g,players:g.players.filter((_,i)=>i!==idx)}:g));
   const updateGroupRow=(gid,idx,field,val)=>handleGroupChange(prev=>prev.map(g=>g.id===gid?{...g,players:g.players.map((r,i)=>i===idx?{...r,[field]:val}:r)}:g));
   const addSotdRow=()=>setSotdEntries(prev=>[...prev,{playerId:"",count:1}]);
@@ -982,26 +982,71 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>{absentPreview.map(name=><span key={name} style={{background:C.red+"22",border:`1px solid ${C.red}44`,color:C.red,borderRadius:"4px",padding:"2px 8px",fontSize:"0.78rem"}}>{name}</span>)}</div>
               </div>
             )}
-            {groups.map((grp,gi)=>(
+            {groups.map((grp,gi)=>{
+              const allUsedIds=new Set(groups.flatMap(g=>g.players.map(r=>r.playerId)).filter(Boolean));
+              const unselected=players.filter(p=>p.joinedWeek<=parseInt(gameWeek)&&!allUsedIds.has(String(p.id)));
+              const ranked=grp.players.filter(r=>r.playerId);
+              return(
               <div key={grp.id} style={{...cardSt,marginBottom:"10px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px"}}>
                   <span style={{color:C.accentLight,fontWeight:"bold",fontSize:"0.85rem"}}>Group {gi+1}</span>
                   {groups.length>1&&<button onClick={()=>removeGroup(grp.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>}
                 </div>
-                {grp.players.map((row,ri)=>{
-                  const pts=row.position?calcPoints(parseInt(row.position),grp.players.length):"—";
-                  return(
-                    <div key={ri} style={{display:"grid",gridTemplateColumns:"1fr 100px 40px 26px",gap:"6px",marginBottom:"6px",alignItems:"center"}}>
-                      <select style={inputSt} value={row.playerId} onChange={e=>updateGroupRow(grp.id,ri,"playerId",e.target.value)}><option value="">Player…</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                      <select style={inputSt} value={row.position} onChange={e=>updateGroupRow(grp.id,ri,"position",e.target.value)}><option value="">Place…</option>{Array.from({length:grp.players.length},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}{n===1?"st":n===2?"nd":n===3?"rd":"th"}</option>)}</select>
-                      <div style={{textAlign:"center",color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{pts}</div>
-                      <button onClick={()=>removeRowFromGroup(grp.id,ri)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"1rem",padding:"2px"}}>✕</button>
+
+                {unselected.length>0&&(
+                  <div style={{marginBottom:"12px"}}>
+                    <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"6px"}}>TAP TO ADD</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                      {unselected.map(p=>(
+                        <button key={p.id} onClick={()=>addRowToGroup(grp.id,String(p.id))}
+                          style={{padding:"5px 14px",borderRadius:"20px",border:`1px solid ${C.border}`,
+                            background:C.surface,cursor:"pointer",fontFamily:"Georgia,serif",
+                            fontSize:"0.78rem",color:C.cream}}>
+                          {p.name}
+                        </button>
+                      ))}
                     </div>
-                  );
-                })}
-                <button onClick={()=>addRowToGroup(grp.id)} style={{...btnSt(C.green,true),padding:"6px 12px",fontSize:"0.75rem",marginTop:"4px"}}>+ Add Player</button>
+                  </div>
+                )}
+
+                {ranked.length>0?(
+                  <div>
+                    <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"6px"}}>FINISHING ORDER</div>
+                    {ranked.map((row,ri)=>{
+                      const p=players.find(x=>String(x.id)===String(row.playerId));
+                      const pts=calcPoints(ri+1,ranked.length);
+                      return(
+                        <div key={ri} style={{display:"flex",alignItems:"center",gap:"8px",
+                          background:C.surface,borderRadius:"8px",padding:"8px 10px",
+                          marginBottom:"5px",border:`1px solid ${C.border}`}}>
+                          <span style={{color:C.accent,fontSize:"0.82rem",fontWeight:"bold",minWidth:"30px"}}>
+                            {ri+1}{ri===0?"st":ri===1?"nd":ri===2?"rd":"th"}
+                          </span>
+                          <span style={{flex:1,color:C.cream,fontSize:"0.85rem"}}>{p?.name||row.playerId}</span>
+                          <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.8rem"}}>{pts}pt</span>
+                          <div style={{display:"flex",flexDirection:"column",gap:"2px"}}>
+                            <button disabled={ri===0} onClick={()=>{
+                              const nl=[...ranked];[nl[ri],nl[ri-1]]=[nl[ri-1],nl[ri]];
+                              const withPos=nl.map((r,i)=>({...r,position:String(i+1)}));
+                              handleGroupChange(prev=>prev.map(g=>g.id===grp.id?{...g,players:withPos}:g));
+                            }} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"3px",padding:"0px 5px",cursor:"pointer",fontSize:"0.75rem",lineHeight:"1.5",opacity:ri===0?0.3:1}}>▲</button>
+                            <button disabled={ri===ranked.length-1} onClick={()=>{
+                              const nl=[...ranked];[nl[ri],nl[ri+1]]=[nl[ri+1],nl[ri]];
+                              const withPos=nl.map((r,i)=>({...r,position:String(i+1)}));
+                              handleGroupChange(prev=>prev.map(g=>g.id===grp.id?{...g,players:withPos}:g));
+                            }} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"3px",padding:"0px 5px",cursor:"pointer",fontSize:"0.75rem",lineHeight:"1.5",opacity:ri===ranked.length-1?0.3:1}}>▼</button>
+                          </div>
+                          <button onClick={()=>removeRowFromGroup(grp.id,grp.players.findIndex(r=>r.playerId===row.playerId))}
+                            style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"1rem",padding:"2px"}}>✕</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ):(
+                  <div style={{color:C.muted,fontSize:"0.78rem",fontStyle:"italic",padding:"4px 0"}}>Tap players above to add them</div>
+                )}
               </div>
-            ))}
+            );})}
             <button onClick={addGroup} style={{...btnSt(C.blue,true),marginBottom:"16px"}}>+ Add Group</button>
             <div style={{...cardSt,marginBottom:"16px",borderColor:C.gold+"55"}}>
               <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"10px"}}><span style={{fontSize:"1rem"}}>⭐</span><span style={{color:C.gold,fontWeight:"bold",fontSize:"0.85rem"}}>Shot of the Day</span><span style={{color:C.muted,fontSize:"0.72rem"}}>+1 bonus pt each</span></div>
