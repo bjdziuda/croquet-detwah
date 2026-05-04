@@ -767,15 +767,17 @@ function GameView({course, onComplete}){
 
   const updateCam=useCallback(()=>{
     const s=stateRef.current;if(!s||!camRef.current)return;
-    // Don't auto-follow when player has manually adjusted camera (while aiming)
-    if(manualCamRef.current&&phaseRef.current==="aiming") return;
     const tgt=camTarget(s.ball,nextWRef.current,course),cam=camRef.current;
     cam.x+=(tgt.x-cam.x)*CAM_SMOOTH;cam.y+=(tgt.y-cam.y)*CAM_SMOOTH;
     cam.scale+=(tgt.scale-cam.scale)*CAM_SMOOTH;
   },[course]);
 
   useEffect(()=>{
-    aimTickRef.current=()=>{updateCam();drawRef.current?.(Date.now());aimRef.current=requestAnimationFrame(aimTickRef.current);};
+    aimTickRef.current=()=>{
+      if(!manualCamRef.current) updateCam();
+      drawRef.current?.(Date.now());
+      aimRef.current=requestAnimationFrame(aimTickRef.current);
+    };
   });
   useEffect(()=>{
     tickRef.current=()=>{
