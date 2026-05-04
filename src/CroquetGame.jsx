@@ -942,7 +942,7 @@ function GameView({course, onComplete}){
   },[course]);
   useEffect(()=>{reset();},[reset]);
 
-  const par=course.wickets.length,svp=strokes-par,slabel=svp===0?"E":svp<0?`${svp}`:`+${svp}`;
+  const totalWickets=course.wickets.length;
   return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"8px 8px 4px",width:"100%",boxSizing:"border-box"}}>
       <div style={{position:"relative",borderRadius:6,overflow:"hidden",boxShadow:"0 8px 40px rgba(0,0,0,0.85),0 0 0 2px #2a5030",maxWidth:"100%"}}>
@@ -959,8 +959,7 @@ function GameView({course, onComplete}){
           <div style={{background:"#0c1e10",border:"2px solid #50a050",borderRadius:14,padding:"24px 40px",textAlign:"center"}}>
             <div style={{fontSize:36,marginBottom:4}}>🏆</div>
             <h2 style={{color:"#e8d080",margin:"0 0 6px",fontSize:20,letterSpacing:2}}>Pegged Out!</h2>
-            <p style={{color:"#80b080",margin:"0 0 4px",fontSize:13}}>{strokes} strokes · Par {par}</p>
-            <p style={{fontSize:17,fontWeight:"bold",margin:"8px 0 18px",color:svp<0?"#60f060":svp===0?"#e8d080":"#e06060"}}>{svp===0?"Even par":svp<0?`${slabel} under par 🔥`:`${slabel} over par`}</p>
+            <p style={{color:"#80d060",margin:"0 0 18px",fontSize:28,fontWeight:"bold"}}>{strokes} strokes</p>
             <div style={{display:"flex",gap:8,justifyContent:"center"}}>
               <button onClick={reset} style={{background:"#172512",color:"#608060",border:"1px solid #2a4020",borderRadius:6,padding:"8px 18px",fontSize:12,cursor:"pointer",fontFamily:"Georgia,serif"}}>Play Again</button>
               {onComplete&&<button onClick={()=>onComplete(strokes)} style={{background:"#1e4a1e",color:"#e8d080",border:"1px solid #50a050",borderRadius:6,padding:"8px 18px",fontSize:13,cursor:"pointer",fontFamily:"Georgia,serif"}}>Submit Score 🏆</button>}
@@ -971,8 +970,7 @@ function GameView({course, onComplete}){
       <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap",justifyContent:"center"}}>
         <div style={{display:"flex",gap:20,color:"#608060",fontSize:12,letterSpacing:1}}>
           <span>Strokes <strong style={{color:"#e8d080"}}>{strokes}</strong></span>
-          <span>Wickets <strong style={{color:"#e8d080"}}>{nextWicket}/{par}</strong></span>
-          {strokes>0&&<span>Score <strong style={{color:svp<0?"#60f060":svp===0?"#e8d080":"#e06060"}}>{slabel}</strong></span>}
+          <span>Wickets <strong style={{color:"#e8d080"}}>{nextWicket}/{totalWickets}</strong></span>
         </div>
         {/* Ball colour picker */}
         <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -1633,42 +1631,48 @@ async function loadPastCourses() {
 }
 
 async function hasPlayerSubmitted(playerId) {
+  const wid=getWeekId();
   const db=getDB();
   if(db){
     try{
-      const snap=await getDoc(doc(db,"weeklyScores",getWeekId(),"scores",playerId));
+      const snap=await getDoc(doc(db,"miniGameScores",`${wid}_${playerId}`));
       return snap.exists();
     }catch(e){console.warn("Firestore hasPlayerSubmitted:",e);}
   }
   return _localStore.submitted.has(playerId);
 }
 
-async function loadScores() {
+async function loadScores(wid) {
   const db=getDB();
   if(db){
     try{
-      const q=query(collection(db,"weeklyScores",getWeekId(),"scores"),orderBy("strokes"));
+      const q=query(collection(db,"miniGameScores"),orderBy("strokes"));
       const snap=await getDocs(q);
-      return snap.docs.map(d=>d.data());
+      const all=snap.docs.map(d=>d.data());
+      return wid ? all.filter(s=>s.weekId===wid) : all;
     }catch(e){console.warn("Firestore loadScores:",e);}
   }
   return [..._localStore.scores].sort((a,b)=>a.strokes-b.strokes);
 }
+
 async function submitScore(playerId, playerName, strokes, courseName) {
-  if(_localStore.submitted.has(playerId)) return "already_submitted";
+  const wid=getWeekId();
+  const docId=`${wid}_${playerId}`;
   const db=getDB();
   if(db){
     try{
-      const ref=doc(db,"weeklyScores",getWeekId(),"scores",playerId);
+      const ref=doc(db,"miniGameScores",docId);
       const existing=await getDoc(ref);
       if(existing.exists()) return "already_submitted";
-      await setDoc(ref,{playerId,player:playerName,strokes,course:courseName,weekId:getWeekId(),submittedAt:new Date().toISOString()});
+      await setDoc(ref,{playerId,player:playerName,strokes,course:courseName,weekId:wid,submittedAt:new Date().toISOString()});
     }catch(e){console.warn("Firestore submitScore:",e);return "error";}
   }
+  if(_localStore.submitted.has(playerId)) return "already_submitted";
   _localStore.submitted.add(playerId);
-  _localStore.scores.push({playerId,player:playerName,strokes,course:courseName,weekId:getWeekId()});
+  _localStore.scores.push({playerId,player:playerName,strokes,course:courseName,weekId:wid});
   return "ok";
 }
+
 async function saveCourse(course) {
   const entry={...course, id:course.id||`course-${Date.now()}`, savedAt:new Date().toISOString()};
   const db=getDB();
@@ -1802,66 +1806,85 @@ function CourseLibraryView({onPublish, publishMsg}) {
 function LeaderboardView({weeklyInfo, wid}) {
   const [scores,  setScores]  = useState(null);
   const [loading, setLoading] = useState(true);
-  const targetWid = wid || getWeekId();
-  const par = weeklyInfo?.course?.wickets?.length ?? 0;
+  const [filter,  setFilter]  = useState("all"); // "all" | current weekId
+  const currentWid = getWeekId();
   const medals = ["🥇","🥈","🥉"];
 
   useEffect(()=>{
     setLoading(true);
-    loadScores(targetWid).then(s=>{setScores(s);setLoading(false);});
-  },[targetWid]);
+    loadScores().then(s=>{ setScores(s); setLoading(false); });
+  },[]);
+
+  const displayScores = scores
+    ? (filter==="all" ? scores : scores.filter(s=>s.weekId===filter))
+        .sort((a,b)=>a.strokes-b.strokes)
+    : [];
+
+  // Get unique weeks for filter buttons
+  const weeks = scores
+    ? [...new Set(scores.map(s=>s.weekId))].sort().reverse()
+    : [];
 
   return(
     <div style={{padding:"20px 16px",maxWidth:520,margin:"0 auto",fontFamily:"Georgia,serif",
       width:"100%",boxSizing:"border-box"}}>
-      <div style={{textAlign:"center",marginBottom:20}}>
+      <div style={{textAlign:"center",marginBottom:16}}>
         <div style={{color:"#e8d080",fontSize:18,fontWeight:"bold",letterSpacing:2}}>
           Mini-Game Leaderboard
         </div>
-        <div style={{color:"#3a6030",fontSize:11,letterSpacing:1,marginTop:4}}>
-          {weeklyInfo?.course?.name||"–"} · {targetWid} · Par {par}
-        </div>
-        {weeklyInfo&&isWeeklyActive(weeklyInfo)&&(
-          <div style={{color:"#2a5020",fontSize:10,marginTop:3}}>
-            Active until {fmtExpiry(weeklyInfo)}
-          </div>
-        )}
+        <div style={{color:"#3a6030",fontSize:11,marginTop:4}}>Season scores</div>
       </div>
 
-      {loading&&<div style={{color:"#3a6030",textAlign:"center",padding:40}}>Loading…</div>}
-
-      {!loading&&!scores?.length&&(
-        <div style={{color:"#3a6030",textAlign:"center",padding:40,fontSize:13}}>
-          No scores yet this week — go play! ⛳
+      {/* Week filter */}
+      {weeks.length>1&&(
+        <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",justifyContent:"center"}}>
+          <button onClick={()=>setFilter("all")} style={{
+            padding:"3px 10px",borderRadius:4,cursor:"pointer",fontSize:11,
+            fontFamily:"Georgia,serif",
+            background:filter==="all"?"#1e4a1e":"#172512",
+            color:filter==="all"?"#e8d080":"#608060",
+            border:`1px solid ${filter==="all"?"#50a050":"#243820"}`,
+          }}>All</button>
+          {weeks.map(w=>(
+            <button key={w} onClick={()=>setFilter(w)} style={{
+              padding:"3px 10px",borderRadius:4,cursor:"pointer",fontSize:11,
+              fontFamily:"Georgia,serif",
+              background:filter===w?"#1e4a1e":"#172512",
+              color:filter===w?"#e8d080":"#608060",
+              border:`1px solid ${filter===w?"#50a050":"#243820"}`,
+            }}>{w}</button>
+          ))}
         </div>
       )}
 
-      {!loading&&scores?.length>0&&(
+      {loading&&<div style={{color:"#3a6030",textAlign:"center",padding:40}}>Loading…</div>}
+
+      {!loading&&!displayScores.length&&(
+        <div style={{color:"#3a6030",textAlign:"center",padding:40,fontSize:13}}>
+          No scores yet — go play! ⛳
+        </div>
+      )}
+
+      {!loading&&displayScores.length>0&&(
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {scores.map((s,i)=>{
-            const diff=s.strokes-par;
-            return(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:12,
-                background:i===0?"#0c2a10":"#0c1a0e",
-                border:`1px solid ${i===0?"#50a050":"#1a3a1a"}`,
-                borderRadius:10,padding:"12px 16px"}}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>
-                  {medals[i]||<span style={{color:"#3a6030",fontSize:13}}>{i+1}</span>}
-                </span>
-                <div style={{flex:1}}>
-                  <div style={{color:"#e8d080",fontSize:14,fontWeight:"bold"}}>{s.player}</div>
-                  <div style={{color:"#3a6030",fontSize:11,marginTop:2}}>{s.strokes} strokes</div>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{color:diff<0?"#60f060":diff===0?"#e8d080":"#e06060",
-                    fontSize:15,fontWeight:"bold"}}>
-                    {diff===0?"E":diff<0?diff:`+${diff}`}
-                  </div>
-                  <div style={{color:"#2a5020",fontSize:10}}>vs par</div>
-                </div>
+          {displayScores.map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:12,
+              background:i===0?"#0c2a10":"#0c1a0e",
+              border:`1px solid ${i===0?"#50a050":"#1a3a1a"}`,
+              borderRadius:10,padding:"12px 16px"}}>
+              <span style={{fontSize:20,width:28,textAlign:"center"}}>
+                {medals[i]||<span style={{color:"#3a6030",fontSize:13}}>#{i+1}</span>}
+              </span>
+              <div style={{flex:1}}>
+                <div style={{color:"#e8d080",fontSize:14,fontWeight:"bold"}}>{s.player}</div>
+                <div style={{color:"#3a6030",fontSize:11,marginTop:2}}>{s.course} · {s.weekId}</div>
               </div>
-            );
-          })}
+              <div style={{textAlign:"right"}}>
+                <div style={{color:"#80d060",fontSize:18,fontWeight:"bold"}}>{s.strokes}</div>
+                <div style={{color:"#2a5020",fontSize:10}}>strokes</div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -1926,16 +1949,12 @@ function PastCoursesView({onPlay, isMember=false}) {
 
 // ── Score submission modal ────────────────────────────────────────────────────
 // Uses player profile — no manual name entry needed
-function SubmitScoreModal({strokes, par, courseName, player, onSubmit, onSkip}) {
-  const [state, setState] = useState("idle"); // idle | submitting | done | already | offline
-  const diff = strokes-par;
+function SubmitScoreModal({strokes, courseName, player, onSubmit, onSkip}) {
+  const [state, setState] = useState("idle");
 
   useEffect(()=>{
-    // Check if already submitted as soon as modal opens
     if(player?.id){
-      hasPlayerSubmitted(player.id).then(has=>{
-        if(has) setState("already");
-      });
+      hasPlayerSubmitted(player.id).then(has=>{ if(has) setState("already"); });
     }
   },[player]);
 
@@ -2010,12 +2029,8 @@ function SubmitScoreModal({strokes, par, courseName, player, onSubmit, onSkip}) 
             <div style={{color:"#e8d080",fontSize:18,fontWeight:"bold",marginBottom:4}}>
               Pegged Out!
             </div>
-            <div style={{color:"#80b080",fontSize:13,marginBottom:4}}>
-              {strokes} strokes · Par {par}
-            </div>
-            <div style={{fontSize:16,fontWeight:"bold",marginBottom:16,
-              color:diff<0?"#60f060":diff===0?"#e8d080":"#e06060"}}>
-              {diff===0?"Even par":diff<0?`${Math.abs(diff)} under par 🔥`:`${diff} over par`}
+            <div style={{color:"#80d060",fontSize:28,fontWeight:"bold",marginBottom:16}}>
+              {strokes} strokes
             </div>
             <div style={{color:"#608060",fontSize:12,marginBottom:16}}>
               Submitting as <strong style={{color:"#e8d080"}}>
@@ -2290,7 +2305,6 @@ export default function CroquetGame({ currentPlayer:playerProp=null, isCommissio
       {showSubmit&&(
         <SubmitScoreModal
           strokes={lastStrokes}
-          par={weeklyCourse?.wickets?.length??0}
           courseName={weeklyCourse?.name??"Weekly Course"}
           player={currentPlayer}
           onSubmit={handleScoreSubmitted}
