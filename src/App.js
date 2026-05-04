@@ -1535,7 +1535,7 @@ function CommissionerOverlays({tab, user, setTab, appState, isAdmin}) {
 
   const leagueMember = appState?.players?.find(p=>p.name===user.name);
   const currentPlayer = {
-    id:       leagueMember?.id   || user.name,
+    id:       String(leagueMember?.id   || user.name),
     name:     leagueMember?.name || user.name,
     imageUrl: leagueMember?.imageUrl || null,
     isMember: !!(leagueMember || isAdmin),
