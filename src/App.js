@@ -373,7 +373,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const votes = appState.votes || {};
 
   const notify = msg => { setNote(msg); setTimeout(()=>setNote(""),3500); };
-  const maxWk  = Math.max(totalWeeks,...players.map(p=>p.joinedWeek||1),1);
+  const maxWk  = Math.max(totalWeeks, ...Object.values(weeklyGames).flatMap(wg=>Object.keys(wg).map(Number)).filter(n=>!isNaN(n)), 1);
   const weekOptions = Array.from({length:maxWk+3},(_,i)=>i+1);
 
   const computeAbsentPreview = (grps,wk,plrs) => {
