@@ -1066,6 +1066,28 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         {tab==="history"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Score History — tap to edit</h2>
+            <div style={{...cardSt,marginBottom:"14px",borderColor:C.red+"44",background:"#1a0f0f"}}>
+              <div style={{color:C.red,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚠ DELETE WEEK DATA</div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                <select id="deleteWeekSel" style={inputSt} defaultValue="">
+                  <option value="">Select week to delete…</option>
+                  {Array.from({length:maxWk},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}</option>)}
+                </select>
+                <button onClick={()=>{
+                  const sel=document.getElementById("deleteWeekSel");
+                  const wk=sel?.value; if(!wk){notify("Select a week first.");return;}
+                  const nwg={};
+                  Object.entries(weeklyGames).forEach(([pid,weeks])=>{
+                    nwg[pid]={...weeks};
+                    delete nwg[pid][wk];
+                  });
+                  update({weeklyGames:nwg,totalWeeks:Math.max(1,...Object.values(nwg).flatMap(w=>Object.keys(w).map(Number)).filter(n=>!isNaN(n)))});
+                  sel.value="";
+                  notify(`Week ${wk} data deleted.`);
+                }} style={{...btnSt(C.red,true),padding:"8px 14px",fontSize:"0.8rem"}}>Delete Week</button>
+              </div>
+              <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>This removes all recorded scores for that week. Players will need to be re-recorded.</p>
+            </div>
             {players.length===0&&<p style={{color:C.muted}}>No data yet.</p>}
             {Array.from({length:maxWk},(_,i)=>maxWk-i).map(wk=>{
               const hasData=players.some(p=>(weeklyGames[p.id]?.[wk]||[]).length>0);
