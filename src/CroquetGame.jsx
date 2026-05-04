@@ -997,7 +997,7 @@ function GameView({course, onComplete}){
         e.preventDefault();
         const t1=e.touches[0],t2=e.touches[1];
         lastPinchDist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
-        lastPinchMid={(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2};
+        lastPinchMid=[(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2];
       } else {
         onDown(e);
       }
@@ -1008,7 +1008,7 @@ function GameView({course, onComplete}){
         const cam=camRef.current; if(!cam)return;
         const t1=e.touches[0],t2=e.touches[1];
         const dist=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
-        const mid={(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2};
+        const mid=[(t1.clientX+t2.clientX)/2,(t1.clientY+t2.clientY)/2];
         const rect=canvas.getBoundingClientRect();
         if(lastPinchDist&&dist>0){
           const factor=dist/lastPinchDist;
