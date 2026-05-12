@@ -983,6 +983,19 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
         {tab==="grid"&&(()=>{
           const weeks=Array.from({length:maxWk},(_,i)=>i+1);
+          const weekLabels={};
+          weeks.forEach(wk=>{
+            const labels=new Set();
+            players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.label) labels.add(g.label);});});
+            weekLabels[wk]=["Gp 1","Gp 2","Gp 3","Gp 4"].filter(l=>labels.has(l));
+          });
+          const getFilter=wk=>weekGroupFilter[wk]||"all";
+          const getEntries=(pid,wk)=>{
+            const all=weeklyGames[pid]?.[wk]||[];
+            const f=getFilter(wk);
+            if(f==="all") return all;
+            return all.filter(g=>g.label===f);
+          };
           const cellColor=(g)=>{
             if(!g||g.absent) return {bg:"transparent",text:C.muted};
             if(!g.position) return {bg:"transparent",text:C.muted};
