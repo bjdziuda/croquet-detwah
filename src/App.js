@@ -377,7 +377,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [addPlayerModal, setAddPlayerModal] = useState(null); // {week}
   const [addPlayerPid, setAddPlayerPid]     = useState("");
   const [addPlayerGroupId, setAddPlayerGroupId] = useState("");
-  const [addPlayerPos, setAddPlayerPos]     = useState("");
+  const [weekGroupFilter, setWeekGroupFilter] = useState({});
 
   const votes = appState.votes || {};
 
@@ -860,6 +860,19 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
         {tab==="grid"&&(()=>{
           const weeks=Array.from({length:maxWk},(_,i)=>i+1);
+          const weekLabels={};
+          weeks.forEach(wk=>{
+            const labels=new Set();
+            players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.label) labels.add(g.label);});});
+            weekLabels[wk]=["Gp 1","Gp 2","Gp 3","Gp 4"].filter(l=>labels.has(l));
+          });
+          const getFilter=wk=>weekGroupFilter[wk]||"all";
+          const getEntries=(pid,wk)=>{
+            const all=weeklyGames[pid]?.[wk]||[];
+            const f=getFilter(wk);
+            if(f==="all") return all;
+            return all.filter(g=>g.label===f);
+          };
           const cellColor=(g)=>{
             if(!g||g.absent) return {bg:"transparent",text:C.muted};
             if(!g.position) return {bg:"transparent",text:C.muted};
@@ -980,10 +993,23 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             return {bg:C.card,text:C.text};
           };
           const ordinal=n=>n===1?"1st":n===2?"2nd":n===3?"3rd":`${n}th`;
+          const totalFilteredPts=(p)=>{
+            let t=0;
+            weeks.forEach(wk=>getEntries(p.id,wk).forEach(g=>{t+=(g.pts||0)+(g.sotd||0);}));
+            return t;
+          };
+          const anyFiltered=weeks.some(wk=>getFilter(wk)!=="all");
           return(
             <div>
               <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Weekly Results Grid</h2>
               {standings.length===0&&<p style={{color:C.muted}}>No data yet.</p>}
+              {anyFiltered&&(
+                <button onClick={()=>setWeekGroupFilter({})}
+                  style={{marginBottom:"10px",background:"none",border:`1px solid ${C.border}`,color:C.muted,
+                    borderRadius:"20px",padding:"3px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.72rem"}}>
+                  ✕ Clear all filters
+                </button>
+              )}
               <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
                 <table style={{borderCollapse:"separate",borderSpacing:"3px",minWidth:"100%",tableLayout:"auto"}}>
                   <thead>
@@ -991,11 +1017,27 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       <th style={{background:C.surface,color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",
                         padding:"6px 10px",textAlign:"left",borderRadius:"5px",whiteSpace:"nowrap",
                         position:"sticky",left:0,zIndex:2,minWidth:"90px"}}>PLAYER</th>
-                      {weeks.map(wk=>(
-                        <th key={wk} style={{background:C.surface,color:C.muted,fontSize:"0.65rem",
-                          letterSpacing:"0.08em",padding:"6px 8px",textAlign:"center",
-                          borderRadius:"5px",whiteSpace:"nowrap",minWidth:"52px"}}>Wk {wk}</th>
-                      ))}
+                      {weeks.map(wk=>{
+                        const labels=weekLabels[wk];
+                        const f=getFilter(wk);
+                        return(
+                          <th key={wk} style={{background:C.surface,borderRadius:"5px",padding:"5px 4px",
+                            textAlign:"center",minWidth:"64px",verticalAlign:"top"}}>
+                            <div style={{color:f!=="all"?C.accentLight:C.muted,fontSize:"0.65rem",
+                              letterSpacing:"0.08em",marginBottom:"4px",whiteSpace:"nowrap"}}>Wk {wk}</div>
+                            {labels.length>1&&(
+                              <select value={f}
+                                onChange={e=>setWeekGroupFilter(prev=>({...prev,[wk]:e.target.value}))}
+                                style={{background:C.bg,color:f!=="all"?C.accentLight:C.muted,border:`1px solid ${f!=="all"?C.accent:C.border}`,
+                                  borderRadius:"4px",fontSize:"0.58rem",padding:"1px 2px",width:"100%",
+                                  fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                                <option value="all">All</option>
+                                {labels.map(l=><option key={l} value={l}>{l}</option>)}
+                              </select>
+                            )}
+                          </th>
+                        );
+                      })}
                       <th style={{background:C.surface,color:C.accent,fontSize:"0.65rem",
                         letterSpacing:"0.08em",padding:"6px 8px",textAlign:"center",
                         borderRadius:"5px",whiteSpace:"nowrap",minWidth:"48px"}}>PTS</th>
@@ -1017,7 +1059,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                             </div>
                           </td>
                           {weeks.map(wk=>{
-                            const entries=(weeklyGames[p.id]?.[wk]||[]);
+                            const entries=getEntries(p.id,wk);
                             if(entries.length===0) return(
                               <td key={wk} style={{padding:"3px",textAlign:"center"}}>
                                 <div style={{background:"transparent",borderRadius:"5px",padding:"5px 4px",minHeight:"36px"}}/>
@@ -1056,7 +1098,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                             <div style={{background:C.surface,border:`1px solid ${C.accent}44`,
                               borderRadius:"5px",padding:"5px 4px",minHeight:"36px",
                               display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{p.pts}</span>
+                              <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{anyFiltered?totalFilteredPts(p):p.pts}</span>
                             </div>
                           </td>
                         </tr>
