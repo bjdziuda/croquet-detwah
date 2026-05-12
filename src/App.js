@@ -625,7 +625,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["venues","📍 Venues"],["profile","👤 Profile"],
+  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["grid","📊 Grid"],["venues","📍 Venues"],["profile","👤 Profile"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?[["minigame","⛳ Mini-Game"]]:[]),
@@ -857,6 +857,226 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           </div>
         )}
+
+        {tab==="grid"&&(()=>{
+          const weeks=Array.from({length:maxWk},(_,i)=>i+1);
+          const cellColor=(g)=>{
+            if(!g||g.absent) return {bg:"transparent",text:C.muted};
+            if(!g.position) return {bg:"transparent",text:C.muted};
+            const gs=g.groupSize||1;
+            if(g.position===1) return {bg:"#2a2200",text:C.gold};
+            if(g.position===2) return {bg:"#1a1f14",text:C.greenLight};
+            if(g.position===gs) return {bg:"#1f0f0f",text:C.red};
+            return {bg:C.card,text:C.text};
+          };
+          const ordinal=n=>n===1?"1st":n===2?"2nd":n===3?"3rd":`${n}th`;
+          return(
+            <div>
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Weekly Results Grid</h2>
+              {standings.length===0&&<p style={{color:C.muted}}>No data yet.</p>}
+              <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+                <table style={{borderCollapse:"separate",borderSpacing:"3px",minWidth:"100%",tableLayout:"auto"}}>
+                  <thead>
+                    <tr>
+                      <th style={{background:C.surface,color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",
+                        padding:"6px 10px",textAlign:"left",borderRadius:"5px",whiteSpace:"nowrap",
+                        position:"sticky",left:0,zIndex:2,minWidth:"90px"}}>PLAYER</th>
+                      {weeks.map(wk=>(
+                        <th key={wk} style={{background:C.surface,color:C.muted,fontSize:"0.65rem",
+                          letterSpacing:"0.08em",padding:"6px 8px",textAlign:"center",
+                          borderRadius:"5px",whiteSpace:"nowrap",minWidth:"52px"}}>Wk {wk}</th>
+                      ))}
+                      <th style={{background:C.surface,color:C.accent,fontSize:"0.65rem",
+                        letterSpacing:"0.08em",padding:"6px 8px",textAlign:"center",
+                        borderRadius:"5px",whiteSpace:"nowrap",minWidth:"48px"}}>PTS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.map((p,ri)=>{
+                      return(
+                        <tr key={p.id}>
+                          <td style={{background:C.surface,padding:"6px 10px",borderRadius:"5px",
+                            position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                              <Medal rank={ri+1}/>
+                              {p.imageUrl
+                                ?<img src={p.imageUrl} alt="" style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
+                                :<div style={{width:"20px",height:"20px",borderRadius:"50%",background:C.border,flexShrink:0}}/>
+                              }
+                              <span style={{color:C.cream,fontSize:"0.78rem",fontWeight:"bold"}}>{p.name}</span>
+                            </div>
+                          </td>
+                          {weeks.map(wk=>{
+                            const entries=(weeklyGames[p.id]?.[wk]||[]);
+                            if(entries.length===0) return(
+                              <td key={wk} style={{padding:"3px",textAlign:"center"}}>
+                                <div style={{background:"transparent",borderRadius:"5px",padding:"5px 4px",minHeight:"36px"}}/>
+                              </td>
+                            );
+                            return(
+                              <td key={wk} style={{padding:"3px",verticalAlign:"top"}}>
+                                {entries.map((g,gi)=>{
+                                  const {bg,text}=cellColor(g);
+                                  return(
+                                    <div key={gi} style={{background:bg,border:`1px solid ${C.border}`,
+                                      borderRadius:"5px",padding:"4px 5px",textAlign:"center",
+                                      minHeight:"36px",display:"flex",flexDirection:"column",
+                                      alignItems:"center",justifyContent:"center",gap:"1px",
+                                      marginBottom:gi<entries.length-1?"2px":0}}>
+                                      {g.absent?(
+                                        <span style={{color:C.muted,fontSize:"0.65rem"}}>Abs</span>
+                                      ):(
+                                        <>
+                                          <span style={{color:text,fontSize:"0.72rem",fontWeight:"bold",lineHeight:1}}>
+                                            {ordinal(g.position)}
+                                          </span>
+                                          <span style={{color:C.muted,fontSize:"0.58rem",lineHeight:1}}>
+                                            /{g.groupSize}
+                                          </span>
+                                          {g.sotd>0&&<span style={{fontSize:"0.6rem",lineHeight:1}}>⭐</span>}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </td>
+                            );
+                          })}
+                          <td style={{padding:"3px",textAlign:"center"}}>
+                            <div style={{background:C.surface,border:`1px solid ${C.accent}44`,
+                              borderRadius:"5px",padding:"5px 4px",minHeight:"36px",
+                              display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{p.pts}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{display:"flex",gap:"12px",flexWrap:"wrap",marginTop:"12px"}}>
+                {[{col:C.gold,label:"1st place"},{col:C.greenLight,label:"2nd place"},{col:C.red,label:"Last place"},{col:C.muted,label:"Absent"}].map(({col,label})=>(
+                  <div key={label} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                    <div style={{width:"10px",height:"10px",borderRadius:"2px",background:col+"55",border:`1px solid ${col}44`}}/>
+                    <span style={{color:C.muted,fontSize:"0.65rem"}}>{label}</span>
+                  </div>
+                ))}
+                <span style={{color:C.muted,fontSize:"0.65rem"}}>⭐ = Shot of the Day</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {tab==="grid"&&(()=>{
+          const weeks=Array.from({length:maxWk},(_,i)=>i+1);
+          const cellColor=(g)=>{
+            if(!g||g.absent) return {bg:"transparent",text:C.muted};
+            if(!g.position) return {bg:"transparent",text:C.muted};
+            const gs=g.groupSize||1;
+            if(g.position===1) return {bg:"#2a2200",text:C.gold};
+            if(g.position===2) return {bg:"#1a1f14",text:C.greenLight};
+            if(g.position===gs) return {bg:"#1f0f0f",text:C.red};
+            return {bg:C.card,text:C.text};
+          };
+          const ordinal=n=>n===1?"1st":n===2?"2nd":n===3?"3rd":`${n}th`;
+          return(
+            <div>
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Weekly Results Grid</h2>
+              {standings.length===0&&<p style={{color:C.muted}}>No data yet.</p>}
+              <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+                <table style={{borderCollapse:"separate",borderSpacing:"3px",minWidth:"100%",tableLayout:"auto"}}>
+                  <thead>
+                    <tr>
+                      <th style={{background:C.surface,color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",
+                        padding:"6px 10px",textAlign:"left",borderRadius:"5px",whiteSpace:"nowrap",
+                        position:"sticky",left:0,zIndex:2,minWidth:"90px"}}>PLAYER</th>
+                      {weeks.map(wk=>(
+                        <th key={wk} style={{background:C.surface,color:C.muted,fontSize:"0.65rem",
+                          letterSpacing:"0.08em",padding:"6px 8px",textAlign:"center",
+                          borderRadius:"5px",whiteSpace:"nowrap",minWidth:"52px"}}>Wk {wk}</th>
+                      ))}
+                      <th style={{background:C.surface,color:C.accent,fontSize:"0.65rem",
+                        letterSpacing:"0.08em",padding:"6px 8px",textAlign:"center",
+                        borderRadius:"5px",whiteSpace:"nowrap",minWidth:"48px"}}>PTS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {standings.map((p,ri)=>{
+                      return(
+                        <tr key={p.id}>
+                          <td style={{background:C.surface,padding:"6px 10px",borderRadius:"5px",
+                            position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                              <Medal rank={ri+1}/>
+                              {p.imageUrl
+                                ?<img src={p.imageUrl} alt="" style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
+                                :<div style={{width:"20px",height:"20px",borderRadius:"50%",background:C.border,flexShrink:0}}/>
+                              }
+                              <span style={{color:C.cream,fontSize:"0.78rem",fontWeight:"bold"}}>{p.name}</span>
+                            </div>
+                          </td>
+                          {weeks.map(wk=>{
+                            const entries=(weeklyGames[p.id]?.[wk]||[]);
+                            if(entries.length===0) return(
+                              <td key={wk} style={{padding:"3px",textAlign:"center"}}>
+                                <div style={{background:"transparent",borderRadius:"5px",padding:"5px 4px",minHeight:"36px"}}/>
+                              </td>
+                            );
+                            return(
+                              <td key={wk} style={{padding:"3px",verticalAlign:"top"}}>
+                                {entries.map((g,gi)=>{
+                                  const {bg,text}=cellColor(g);
+                                  return(
+                                    <div key={gi} style={{background:bg,border:`1px solid ${C.border}`,
+                                      borderRadius:"5px",padding:"4px 5px",textAlign:"center",
+                                      minHeight:"36px",display:"flex",flexDirection:"column",
+                                      alignItems:"center",justifyContent:"center",gap:"1px",
+                                      marginBottom:gi<entries.length-1?"2px":0}}>
+                                      {g.absent?(
+                                        <span style={{color:C.muted,fontSize:"0.65rem"}}>Abs</span>
+                                      ):(
+                                        <>
+                                          <span style={{color:text,fontSize:"0.72rem",fontWeight:"bold",lineHeight:1}}>
+                                            {ordinal(g.position)}
+                                          </span>
+                                          <span style={{color:C.muted,fontSize:"0.58rem",lineHeight:1}}>
+                                            /{g.groupSize}
+                                          </span>
+                                          {g.sotd>0&&<span style={{fontSize:"0.6rem",lineHeight:1}}>⭐</span>}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </td>
+                            );
+                          })}
+                          <td style={{padding:"3px",textAlign:"center"}}>
+                            <div style={{background:C.surface,border:`1px solid ${C.accent}44`,
+                              borderRadius:"5px",padding:"5px 4px",minHeight:"36px",
+                              display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{p.pts}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{display:"flex",gap:"12px",flexWrap:"wrap",marginTop:"12px"}}>
+                {[{col:C.gold,label:"1st place"},{col:C.greenLight,label:"2nd place"},{col:C.red,label:"Last place"},{col:C.muted,label:"Absent"}].map(({col,label})=>(
+                  <div key={label} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                    <div style={{width:"10px",height:"10px",borderRadius:"2px",background:col+"55",border:`1px solid ${col}44`}}/>
+                    <span style={{color:C.muted,fontSize:"0.65rem"}}>{label}</span>
+                  </div>
+                ))}
+                <span style={{color:C.muted,fontSize:"0.65rem"}}>⭐ = Shot of the Day</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {tab==="venues"&&(
           <div>
