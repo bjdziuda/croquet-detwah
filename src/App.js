@@ -243,7 +243,9 @@ function LoginScreen({onLogin, joinCode, nextMatch, leagueLogo}) {
 }
 
 export default function App() {
-  const [user, setUser]         = useState(null);
+  const [user, setUser]         = useState(() => {
+  try { return JSON.parse(sessionStorage.getItem("croquetUser")); } catch { return null; }
+});
   const [appState, setAppState] = useState(null);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -322,13 +324,15 @@ export default function App() {
       } else {
         const id=Date.now();
         persist({...appState,players:[...appState.players,{id,name:u.name,joinedWeek:1}],weeklyGames:{...appState.weeklyGames,[id]:{}}});
-        setUser({name:u.name,role:"viewer"});
+        const newUser = {name:u.name,role:"viewer"};
+        setUser(newUser);
+        sessionStorage.setItem("croquetUser", JSON.stringify(newUser));
       }
     } else {
       setUser(u);
     }
   }} joinCode={appState?.joinCode||"croquet2026"} nextMatch={nextMatch} leagueLogo={appState?.leagueLogo}/>;
-  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>setUser(null)} uploadImage={uploadImage}/>;
+  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
@@ -470,21 +474,26 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
   const submitGames = () => {
     const wk=parseInt(gameWeek); let errors=[],updates={};
+    const validGroups = [];
     groups.forEach((grp,gi)=>{
       const rows=grp.players.filter(r=>r.playerId&&r.position);
       if(rows.length<2){errors.push(`Group ${gi+1} needs at least 2 players.`);return;}
       const pos=rows.map(r=>parseInt(r.position));
       if(new Set(pos).size!==pos.length){errors.push(`Group ${gi+1} has duplicate positions.`);return;}
       if(Math.max(...pos)!==rows.length){errors.push(`Group ${gi+1}: positions must run 1 to ${rows.length}.`);return;}
-      const gameId=`g-${Date.now()}-${gi}`;
-      rows.forEach(r=>{
-        const p2=parseInt(r.position),pts=calcPoints(p2,rows.length);
-        if(!updates[r.playerId]) updates[r.playerId]={};
-        if(!updates[r.playerId][wk]) updates[r.playerId][wk]=[];
-        updates[r.playerId][wk].push({gameId,position:p2,groupSize:rows.length,pts,sotd:0,absent:false,label:`Gp ${gi+1}`,venue:gameVenue,date:gameDate});
-      });
+      validGroups.push({grp,gi,rows});
     });
     if(errors.length){notify(errors[0]);return;}
+    const maxGroupSize = Math.max(...validGroups.map(({rows})=>rows.length));
+    validGroups.forEach(({grp,gi,rows})=>{
+      const gameId=`g-${Date.now()}-${gi}`;
+      rows.forEach(r=>{
+        const p2=parseInt(r.position),pts=calcPoints(p2,maxGroupSize);
+        if(!updates[r.playerId]) updates[r.playerId]={};
+        if(!updates[r.playerId][wk]) updates[r.playerId][wk]=[];
+        updates[r.playerId][wk].push({gameId,position:p2,groupSize:maxGroupSize,actualGroupSize:rows.length,pts,sotd:0,absent:false,label:`Gp ${gi+1}`,venue:gameVenue,date:gameDate});
+      });
+    });
     const sotdMap={};
     sotdEntries.filter(s=>s.playerId).forEach(s=>{sotdMap[s.playerId]=(sotdMap[s.playerId]||0)+parseInt(s.count||1);});
     const includedIds=new Set(Object.keys(updates));
