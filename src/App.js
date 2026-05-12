@@ -377,6 +377,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [addPlayerModal, setAddPlayerModal] = useState(null); // {week}
   const [addPlayerPid, setAddPlayerPid]     = useState("");
   const [addPlayerGroupId, setAddPlayerGroupId] = useState("");
+  const [addPlayerPos, setAddPlayerPos]     = useState("");
   const [weekGroupFilter, setWeekGroupFilter] = useState({});
 
   const votes = appState.votes || {};
