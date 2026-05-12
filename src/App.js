@@ -374,6 +374,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [profileName, setProfileName] = useState("");
   const [profileWeek, setProfileWeek] = useState(1);
 
+  const [addPlayerModal, setAddPlayerModal] = useState(null); // {week}
+  const [addPlayerPid, setAddPlayerPid]     = useState("");
+  const [addPlayerGroupId, setAddPlayerGroupId] = useState("");
+  const [addPlayerPos, setAddPlayerPos]     = useState("");
+
   const votes = appState.votes || {};
 
   const notify = msg => { setNote(msg); setTimeout(()=>setNote(""),3500); };
@@ -567,6 +572,50 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     const nwg={...weeklyGames,[pid]:{...weeklyGames[pid],[week]:(weeklyGames[pid][week]||[]).filter((_,i)=>i!==gameIdx)}};
     update({weeklyGames:nwg}); setEditModal(null); notify("Entry deleted.");
   };
+
+  const swapPositions=(wk,gameId,pid,direction)=>{
+    const entry=(weeklyGames[pid]?.[wk]||[]).find(g=>g.gameId===gameId);
+    if(!entry||entry.absent) return;
+    const curPos=entry.position, targetPos=curPos+direction;
+    const other=players.find(p=>String(p.id)!==String(pid)&&(weeklyGames[p.id]?.[wk]||[]).some(g=>g.gameId===gameId&&g.position===targetPos));
+    if(!other) return;
+    const gs=entry.groupSize;
+    const nwg={...weeklyGames};
+    nwg[pid]={...nwg[pid],[wk]:(nwg[pid][wk]||[]).map(g=>g.gameId===gameId?{...g,position:targetPos,pts:calcPoints(targetPos,gs)}:g)};
+    nwg[other.id]={...nwg[other.id],[wk]:(nwg[other.id][wk]||[]).map(g=>g.gameId===gameId?{...g,position:curPos,pts:calcPoints(curPos,gs)}:g)};
+    update({weeklyGames:nwg});
+  };
+
+  const addMissedPlayer=()=>{
+    if(!addPlayerModal||!addPlayerPid||!addPlayerGroupId||!addPlayerPos) return;
+    const wk=parseInt(addPlayerModal.week), insertPos=parseInt(addPlayerPos);
+    const groupEntries=[];
+    players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(g.gameId===addPlayerGroupId&&!g.absent) groupEntries.push({pid:String(p.id),g});});});
+    const newGroupSize=groupEntries.length+1;
+    const gameIdCounts={};
+    players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});});
+    gameIdCounts[addPlayerGroupId]=newGroupSize;
+    const maxGs=Math.max(1,...Object.values(gameIdCounts));
+    const nwg={...weeklyGames};
+    groupEntries.forEach(({pid,g})=>{
+      const newPos=g.position>=insertPos?g.position+1:g.position;
+      nwg[pid]={...(nwg[pid]||{}),[wk]:(nwg[pid]?.[wk]||[]).map(gg=>{
+        if(gg.gameId===addPlayerGroupId) return {...gg,position:newPos,groupSize:maxGs,pts:calcPoints(newPos,maxGs)};
+        if(!gg.absent&&gg.gameId) return {...gg,groupSize:maxGs,pts:calcPoints(gg.position,maxGs)};
+        return gg;
+      })};
+    });
+    const ref=groupEntries[0]?.g||{};
+    const pidStr=String(addPlayerPid);
+    nwg[pidStr]={...(nwg[pidStr]||{})};
+    nwg[pidStr][wk]=[...(nwg[pidStr][wk]||[]).filter(g=>!g.absent),
+      {gameId:addPlayerGroupId,position:insertPos,groupSize:maxGs,actualGroupSize:newGroupSize,
+       pts:calcPoints(insertPos,maxGs),sotd:0,absent:false,label:ref.label||"Gp 1",venue:ref.venue||"",date:ref.date||""}
+    ];
+    update({weeklyGames:nwg});
+    setAddPlayerModal(null); setAddPlayerPid(""); setAddPlayerGroupId(""); setAddPlayerPos("");
+    notify("Player added and scores updated!");
+  };
   const toggleChart=id=>setChartPlayers(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
 
   const inputSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.85rem",fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"};
@@ -599,6 +648,58 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 <button style={{...btnSt(),flex:1}} onClick={saveEdit}>Save</button>
                 <button style={{...btnSt(C.red,true),flex:1}} onClick={()=>deleteGame(pid,week,gameIdx)}>Delete</button>
                 <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>setEditModal(null)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {addPlayerModal&&isAdmin&&(()=>{
+        const wk=parseInt(addPlayerModal.week);
+        const weekGroups={};
+        players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{
+          if(!g.absent&&g.gameId){
+            if(!weekGroups[g.gameId]) weekGroups[g.gameId]={gameId:g.gameId,label:g.label,size:0};
+            weekGroups[g.gameId].size++;
+          }
+        });});
+        const groupList=Object.values(weekGroups);
+        const alreadyIn=new Set(players.filter(p=>(weeklyGames[p.id]?.[wk]||[]).some(g=>!g.absent)).map(p=>String(p.id)));
+        const available=players.filter(p=>!alreadyIn.has(String(p.id))&&p.joinedWeek<=wk);
+        const selGroup=groupList.find(g=>g.gameId===addPlayerGroupId);
+        const maxPos=selGroup?selGroup.size+1:1;
+        return(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
+            <div style={{...cardSt,maxWidth:"380px",width:"100%",background:C.surface,border:`1px solid ${C.green}55`}}>
+              <h3 style={{color:C.cream,margin:"0 0 4px",fontSize:"1rem"}}>➕ Add Missed Player</h3>
+              <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 18px"}}>Week {wk}</p>
+              <div style={{marginBottom:"14px"}}>
+                <label style={lbSt}>PLAYER</label>
+                <select style={inputSt} value={addPlayerPid} onChange={e=>setAddPlayerPid(e.target.value)}>
+                  <option value="">Select player…</option>
+                  {available.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                </select>
+                {available.length===0&&<p style={{color:C.muted,fontSize:"0.72rem",margin:"4px 0 0"}}>All eligible players are already recorded this week.</p>}
+              </div>
+              <div style={{marginBottom:"14px"}}>
+                <label style={lbSt}>GROUP</label>
+                <select style={inputSt} value={addPlayerGroupId} onChange={e=>{setAddPlayerGroupId(e.target.value);setAddPlayerPos("");}}>
+                  <option value="">Select group…</option>
+                  {groupList.map(g=><option key={g.gameId} value={g.gameId}>{g.label} ({g.size} players)</option>)}
+                </select>
+              </div>
+              {addPlayerGroupId&&(
+                <div style={{marginBottom:"20px"}}>
+                  <label style={lbSt}>FINISHING POSITION (others shift down)</label>
+                  <select style={inputSt} value={addPlayerPos} onChange={e=>setAddPlayerPos(e.target.value)}>
+                    <option value="">Select position…</option>
+                    {Array.from({length:maxPos},(_,i)=>i+1).map(n=><option key={n} value={n}>{n}{n===1?"st":n===2?"nd":n===3?"rd":"th"}</option>)}
+                  </select>
+                </div>
+              )}
+              <div style={{display:"flex",gap:"8px"}}>
+                <button style={{...btnSt(C.green,true),flex:1}} onClick={addMissedPlayer} disabled={!addPlayerPid||!addPlayerGroupId||!addPlayerPos}>Add Player</button>
+                <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>setAddPlayerModal(null)}>Cancel</button>
               </div>
             </div>
           </div>
@@ -1157,17 +1258,29 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               if(!hasData) return null;
               return(
                 <div key={wk} style={{marginBottom:"16px"}}>
-                  <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",letterSpacing:"0.1em",marginBottom:"6px"}}>WEEK {wk}</div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"6px"}}>
+                    <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",letterSpacing:"0.1em"}}>WEEK {wk}</div>
+                    <button onClick={()=>{setAddPlayerModal({week:wk});setAddPlayerPid("");setAddPlayerGroupId("");setAddPlayerPos("");}}
+                      style={{...btnSt(C.green,true),padding:"3px 10px",fontSize:"0.7rem"}}>+ Add Player</button>
+                  </div>
                   <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
                     {players.map(p=>(weeklyGames[p.id]?.[wk]||[]).map((g,gi)=>(
-                      <div key={`${p.id}-${gi}`} onClick={()=>openEdit(p.id,wk,gi,g)}
-                        style={{...cardSt,padding:"9px 12px",display:"flex",alignItems:"center",gap:"8px",cursor:"pointer"}}>
-                        <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold",flex:1}}>{p.name}</span>
+                      <div key={`${p.id}-${gi}`}
+                        style={{...cardSt,padding:"9px 12px",display:"flex",alignItems:"center",gap:"8px"}}>
+                        <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold",flex:1,cursor:"pointer"}} onClick={()=>openEdit(p.id,wk,gi,g)}>{p.name}</span>
                         <span style={{color:C.muted,fontSize:"0.72rem",background:C.surface,padding:"1px 6px",borderRadius:"4px"}}>{g.label}</span>
                         <span style={{color:C.muted,fontSize:"0.72rem"}}>{g.absent?"Absent":g.position?`${g.position}/${g.groupSize}`:"—"}</span>
                         <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{g.pts}pt</span>
                         {g.sotd>0&&<span style={{color:C.gold,fontSize:"0.78rem"}}>⭐+{g.sotd}</span>}
-                        <span style={{color:C.muted,fontSize:"0.7rem"}}>✎</span>
+                        {!g.absent&&g.gameId&&(
+                          <div style={{display:"flex",flexDirection:"column",gap:"1px"}}>
+                            <button onClick={e=>{e.stopPropagation();swapPositions(wk,g.gameId,p.id,-1);}}
+                              style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:"0 3px",fontSize:"0.6rem",lineHeight:1}}>▲</button>
+                            <button onClick={e=>{e.stopPropagation();swapPositions(wk,g.gameId,p.id,1);}}
+                              style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:"0 3px",fontSize:"0.6rem",lineHeight:1}}>▼</button>
+                          </div>
+                        )}
+                        <span style={{color:C.muted,fontSize:"0.7rem",cursor:"pointer"}} onClick={()=>openEdit(p.id,wk,gi,g)}>✎</span>
                       </div>
                     )))}
                   </div>
