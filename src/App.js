@@ -494,7 +494,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     validGroups.forEach(({grp,gi,rows})=>{
       const gameId=`g-${Date.now()}-${gi}`;
       rows.forEach(r=>{
-        const p2=parseInt(r.position),pts=calcPoints(p2,maxGroupSize);
+        const p2=parseInt(r.position),pts=p2===rows.length?0:calcPoints(p2,maxGroupSize);
         if(!updates[r.playerId]) updates[r.playerId]={};
         if(!updates[r.playerId][wk]) updates[r.playerId][wk]=[];
         updates[r.playerId][wk].push({gameId,position:p2,groupSize:maxGroupSize,actualGroupSize:rows.length,pts,sotd:0,absent:false,label:`Gp ${gi+1}`,venue:gameVenue,date:gameDate});
@@ -1375,7 +1375,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     if(!(nwg[p.id]?.[wk])) return;
                     nwg[p.id]={...nwg[p.id],[wk]:nwg[p.id][wk].map(g=>{
                       if(g.absent||!g.position) return g;
-                      return {...g,groupSize:maxGs,pts:calcPoints(g.position,maxGs)};
+                      return {...g,groupSize:maxGs,pts:g.position===g.actualGroupSize?0:calcPoints(g.position,maxGs)};
                     })};
                   });
                   update({weeklyGames:nwg});
