@@ -1617,41 +1617,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>This removes all recorded scores for that week. Players will need to be re-recorded.</p>
             </div>
-            {players.length===0&&<p style={{color:C.muted}}>No data yet.</p>}
-            {Array.from({length:maxWk},(_,i)=>maxWk-i).map(wk=>{
-              const hasData=players.some(p=>(weeklyGames[p.id]?.[wk]||[]).length>0);
-              if(!hasData) return null;
-              return(
-                <div key={wk} style={{marginBottom:"16px"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"6px"}}>
-                    <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",letterSpacing:"0.1em"}}>WEEK {wk}</div>
-                    <button onClick={()=>{setAddPlayerModal({week:wk});setAddPlayerPid("");setAddPlayerGroupId("");setAddPlayerPos("");}}
-                      style={{...btnSt(C.green,true),padding:"3px 10px",fontSize:"0.7rem"}}>+ Add Player</button>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
-                    {players.map(p=>(weeklyGames[p.id]?.[wk]||[]).map((g,gi)=>(
-                      <div key={`${p.id}-${gi}`}
-                        style={{...cardSt,padding:"9px 12px",display:"flex",alignItems:"center",gap:"8px"}}>
-                        <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold",flex:1,cursor:"pointer"}} onClick={()=>openEdit(p.id,wk,gi,g)}>{p.name}</span>
-                        <span style={{color:C.muted,fontSize:"0.72rem",background:C.surface,padding:"1px 6px",borderRadius:"4px"}}>{g.label}</span>
-                        <span style={{color:C.muted,fontSize:"0.72rem"}}>{g.absent?"Absent":g.position?`${g.position}/${g.groupSize}`:"—"}</span>
-                        <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{g.pts}pt</span>
-                        {g.sotd>0&&<span style={{color:C.gold,fontSize:"0.78rem"}}>⭐+{g.sotd}</span>}
-                        {!g.absent&&g.gameId&&(
-                          <div style={{display:"flex",flexDirection:"column",gap:"1px"}}>
-                            <button onClick={e=>{e.stopPropagation();swapPositions(wk,g.gameId,p.id,-1);}}
-                              style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:"0 3px",fontSize:"0.6rem",lineHeight:1}}>▲</button>
-                            <button onClick={e=>{e.stopPropagation();swapPositions(wk,g.gameId,p.id,1);}}
-                              style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:"0 3px",fontSize:"0.6rem",lineHeight:1}}>▼</button>
-                          </div>
-                        )}
-                        <span style={{color:C.muted,fontSize:"0.7rem",cursor:"pointer"}} onClick={()=>openEdit(p.id,wk,gi,g)}>✎</span>
-                      </div>
-                    )))}
-                  </div>
-                </div>
-              );
-            })}
+            </div>
           </div>
         )}
 
