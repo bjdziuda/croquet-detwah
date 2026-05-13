@@ -1736,7 +1736,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           );
         })()}
 
-{tab==="players"&&isAdmin&&(
+        {tab==="players"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Manage Players</h2>
             <div style={{...cardSt,marginBottom:"14px"}}>
