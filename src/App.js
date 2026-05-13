@@ -379,6 +379,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [addPlayerGroupId, setAddPlayerGroupId] = useState("");
   const [addPlayerPos, setAddPlayerPos]     = useState("");
   const [weekGroupFilter, setWeekGroupFilter] = useState({});
+  const [gameRound, setGameRound]           = useState(1);
+  const [gridEditKey, setGridEditKey]       = useState(null);
+  const [gridEditPos, setGridEditPos]       = useState("");
+  const [gridSelWeek, setGridSelWeek]       = useState("");
 
   const votes = appState.votes || {};
 
@@ -497,7 +501,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         const p2=parseInt(r.position),pts=p2===rows.length?0:calcPoints(p2,maxGroupSize);
         if(!updates[r.playerId]) updates[r.playerId]={};
         if(!updates[r.playerId][wk]) updates[r.playerId][wk]=[];
-        updates[r.playerId][wk].push({gameId,position:p2,groupSize:maxGroupSize,actualGroupSize:rows.length,pts,sotd:0,absent:false,label:`Gp ${gi+1}`,venue:gameVenue,date:gameDate});
+        updates[r.playerId][wk].push({gameId,position:p2,groupSize:maxGroupSize,actualGroupSize:rows.length,pts,sotd:0,absent:false,label:`Gp ${gi+1}`,venue:gameVenue,date:gameDate,gameRound:parseInt(gameRound)});
       });
     });
     const sotdMap={};
@@ -862,148 +866,127 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
        
 
         {tab==="grid"&&(()=>{
-          const weeks=Array.from({length:maxWk},(_,i)=>i+1);
-          const weekLabels={};
-          weeks.forEach(wk=>{
-            const labels=new Set();
-            players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.label) labels.add(g.label);});});
-            weekLabels[wk]=["Gp 1","Gp 2","Gp 3","Gp 4"].filter(l=>labels.has(l));
-          });
-          const getFilter=wk=>weekGroupFilter[wk]||"all";
-          const getEntries=(pid,wk)=>{
-            const all=weeklyGames[pid]?.[wk]||[];
-            const f=getFilter(wk);
-            if(f==="all") return all;
-            return all.filter(g=>g.label===f);
-          };
-          const cellColor=(g)=>{
-            if(!g||g.absent) return {bg:"transparent",text:C.muted};
-            if(!g.position) return {bg:"transparent",text:C.muted};
-            const gs=g.groupSize||1;
-            if(g.position===1) return {bg:"#2a2200",text:C.gold};
-            if(g.position===2) return {bg:"#1a1f14",text:C.greenLight};
-            if(g.position===(g.actualGroupSize||gs)) return {bg:"#1f0f0f",text:C.red};
-            return {bg:C.card,text:C.text};
-          };
           const ordinal=n=>n===1?"1st":n===2?"2nd":n===3?"3rd":`${n}th`;
-          const totalFilteredPts=(p)=>{
-            let t=0;
-            weeks.forEach(wk=>getEntries(p.id,wk).forEach(g=>{t+=(g.pts||0)+(g.sotd||0);}));
-            return t;
+          const selWk=gridSelWeek;
+          const getRounds=(wk)=>{
+            const rs=new Set();
+            players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent) rs.add(g.gameRound||1);});});
+            return Array.from(rs).sort();
           };
-          const anyFiltered=weeks.some(wk=>getFilter(wk)!=="all");
+          const getGroups=(wk,round)=>{
+            const grps={};
+            players.forEach(p=>{
+              (weeklyGames[p.id]?.[wk]||[]).forEach((g,gi)=>{
+                if(g.absent) return;
+                if((g.gameRound||1)!==round) return;
+                if(!grps[g.gameId]) grps[g.gameId]={gameId:g.gameId,label:g.label,players:[]};
+                grps[g.gameId].players.push({pid:p.id,name:p.name,gi,...g});
+              });
+            });
+            return Object.values(grps).sort((a,b)=>a.label.localeCompare(b.label));
+          };
+          const saveGridPos=(pid,wk,gi,newPos)=>{
+            const entry=(weeklyGames[pid]?.[wk]||[])[gi];
+            if(!entry) return;
+            const newPts=newPos===entry.actualGroupSize?0:calcPoints(newPos,entry.groupSize);
+            const nwg={...weeklyGames,[pid]:{...weeklyGames[pid],[wk]:(weeklyGames[pid][wk]||[]).map((g,i)=>i===gi?{...g,position:newPos,pts:newPts}:g)}};
+            update({weeklyGames:nwg}); setGridEditKey(null); notify("Position updated!");
+          };
+          const weeksWithData=Array.from({length:maxWk},(_,i)=>i+1).filter(wk=>players.some(p=>(weeklyGames[p.id]?.[wk]||[]).length>0));
+          const absent=selWk?players.filter(p=>!(weeklyGames[p.id]?.[parseInt(selWk)]||[]).some(g=>!g.absent)):[];
+          const rounds=selWk?getRounds(parseInt(selWk)):[];
           return(
             <div>
-              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Weekly Results Grid</h2>
-              {standings.length===0&&<p style={{color:C.muted}}>No data yet.</p>}
-              {anyFiltered&&(
-                <button onClick={()=>setWeekGroupFilter({})}
-                  style={{marginBottom:"10px",background:"none",border:`1px solid ${C.border}`,color:C.muted,
-                    borderRadius:"20px",padding:"3px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.72rem"}}>
-                  ✕ Clear all filters
-                </button>
-              )}
-              <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-                <table style={{borderCollapse:"separate",borderSpacing:"3px",minWidth:"100%",tableLayout:"auto"}}>
-                  <thead>
-                    <tr>
-                      <th style={{background:C.surface,color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",
-                        padding:"6px 10px",textAlign:"left",borderRadius:"5px",whiteSpace:"nowrap",
-                        position:"sticky",left:0,zIndex:2,minWidth:"90px"}}>PLAYER</th>
-                      {weeks.map(wk=>{
-                        const labels=weekLabels[wk];
-                        const f=getFilter(wk);
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Weekly Results</h2>
+              <select style={inputSt} value={selWk} onChange={e=>setGridSelWeek(e.target.value)}>
+                <option value="">Select a week…</option>
+                {weeksWithData.map(w=><option key={w} value={w}>Week {w}</option>)}
+              </select>
+              {selWk&&rounds.length===0&&<p style={{color:C.muted,marginTop:"12px"}}>No data for this week.</p>}
+              {selWk&&rounds.map(round=>{
+                const grps=getGroups(parseInt(selWk),round);
+                return(
+                  <div key={round} style={{marginTop:"16px"}}>
+                    <div style={{color:C.accentLight,fontSize:"0.75rem",fontWeight:"bold",letterSpacing:"0.1em",marginBottom:"10px"}}>
+                      {rounds.length>1?`GAME ${round}`:""}
+                    </div>
+                    <div style={{display:"flex",gap:"10px",flexWrap:"wrap"}}>
+                      {grps.map(grp=>{
+                        const sorted=[...grp.players].sort((a,b)=>a.position-b.position);
                         return(
-                          <th key={wk} style={{background:C.surface,borderRadius:"5px",padding:"5px 4px",
-                            textAlign:"center",minWidth:"64px",verticalAlign:"top"}}>
-                            <div style={{color:f!=="all"?C.accentLight:C.muted,fontSize:"0.65rem",
-                              letterSpacing:"0.08em",marginBottom:"4px",whiteSpace:"nowrap"}}>Wk {wk}</div>
-                            {labels.length>1&&(
-                              <select value={f}
-                                onChange={e=>setWeekGroupFilter(prev=>({...prev,[wk]:e.target.value}))}
-                                style={{background:C.bg,color:f!=="all"?C.accentLight:C.muted,border:`1px solid ${f!=="all"?C.accent:C.border}`,
-                                  borderRadius:"4px",fontSize:"0.58rem",padding:"1px 2px",width:"100%",
-                                  fontFamily:"Georgia,serif",cursor:"pointer"}}>
-                                <option value="all">All</option>
-                                {labels.map(l=><option key={l} value={l}>{l}</option>)}
-                              </select>
-                            )}
-                          </th>
+                          <div key={grp.gameId} style={{...cardSt,flex:1,minWidth:"140px",padding:0,overflow:"hidden"}}>
+                            <div style={{background:C.surface,padding:"7px 12px",fontSize:"0.72rem",fontWeight:"bold",
+                              letterSpacing:"0.08em",color:C.muted,borderBottom:`1px solid ${C.border}`,
+                              display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                              <span>{grp.label} · {sorted.length} players</span>
+                              {isAdmin&&<button onClick={()=>{setAddPlayerModal({week:parseInt(selWk)});setAddPlayerGroupId(grp.gameId);setAddPlayerPid("");setAddPlayerPos("");}}
+                                style={{background:"none",border:`1px solid ${C.green}`,color:C.green,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>+ Add</button>}
+                            </div>
+                            {sorted.map(p=>{
+                              const isFirst=p.position===1,isLast=p.position===(p.actualGroupSize||p.groupSize);
+                              const ekey=`${p.pid}-${selWk}-${p.gi}`;
+                              const isEditing=gridEditKey===ekey;
+                              return(
+                                <div key={p.pid}>
+                                  <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",
+                                    borderBottom:`1px solid ${C.border}`,
+                                    background:isFirst?"#2a2200":isLast?"#1f0f0f":C.card}}>
+                                    <span style={{fontSize:"0.72rem",fontWeight:"bold",minWidth:"28px",
+                                      color:isFirst?C.gold:isLast?C.red:p.position===2?C.greenLight:C.muted}}>
+                                      {ordinal(p.position)}
+                                    </span>
+                                    <span style={{flex:1,fontSize:"0.82rem",color:C.cream,fontWeight:"bold"}}>{p.name}</span>
+                                    {p.sotd>0&&<span style={{fontSize:"0.7rem"}}>⭐</span>}
+                                    <span style={{fontSize:"0.78rem",color:C.accent,fontWeight:"bold"}}>{p.pts}pt</span>
+                                    {isAdmin&&<button onClick={()=>{setGridEditKey(isEditing?null:ekey);setGridEditPos(String(p.position));}}
+                                      style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",
+                                        padding:"1px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✎</button>}
+                                  </div>
+                                  {isEditing&&isAdmin&&(
+                                    <div style={{background:C.surface,padding:"10px 12px",borderBottom:`1px solid ${C.border}`}}>
+                                      <div style={{fontSize:"0.65rem",color:C.muted,marginBottom:"6px",letterSpacing:"0.06em"}}>CHANGE POSITION</div>
+                                      <select style={{...inputSt,marginBottom:"8px"}} value={gridEditPos} onChange={e=>setGridEditPos(e.target.value)}>
+                                        {Array.from({length:p.actualGroupSize||p.groupSize},(_,i)=>i+1).map(n=>(
+                                          <option key={n} value={n}>{ordinal(n)}</option>
+                                        ))}
+                                      </select>
+                                      <div style={{display:"flex",gap:"6px"}}>
+                                        <button onClick={()=>saveGridPos(p.pid,parseInt(selWk),p.gi,parseInt(gridEditPos))}
+                                          style={{...btnSt(C.green,true),padding:"5px 14px",fontSize:"0.78rem"}}>Save</button>
+                                        <button onClick={()=>setGridEditKey(null)}
+                                          style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",
+                                            padding:"5px 10px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Cancel</button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         );
                       })}
-                      <th style={{background:C.surface,color:C.accent,fontSize:"0.65rem",
-                        letterSpacing:"0.08em",padding:"6px 8px",textAlign:"center",
-                        borderRadius:"5px",whiteSpace:"nowrap",minWidth:"48px"}}>PTS</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {standings.map((p,ri)=>{
-                      return(
-                        <tr key={p.id}>
-                          <td style={{background:C.surface,padding:"6px 10px",borderRadius:"5px",
-                            position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                              <Medal rank={ri+1}/>
-                              {p.imageUrl
-                                ?<img src={p.imageUrl} alt="" style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
-                                :<div style={{width:"20px",height:"20px",borderRadius:"50%",background:C.border,flexShrink:0}}/>
-                              }
-                              <span style={{color:C.cream,fontSize:"0.78rem",fontWeight:"bold"}}>{p.name}</span>
-                            </div>
-                          </td>
-                          {weeks.map(wk=>{
-                            const entries=getEntries(p.id,wk);
-                            if(entries.length===0) return(
-                              <td key={wk} style={{padding:"3px",textAlign:"center"}}>
-                                <div style={{background:"transparent",borderRadius:"5px",padding:"5px 4px",minHeight:"36px"}}/>
-                              </td>
-                            );
-                            return(
-                              <td key={wk} style={{padding:"3px",verticalAlign:"top"}}>
-                                {entries.map((g,gi)=>{
-                                  const {bg,text}=cellColor(g);
-                                  return(
-                                    <div key={gi} style={{background:bg,border:`1px solid ${C.border}`,
-                                      borderRadius:"5px",padding:"4px 5px",textAlign:"center",
-                                      minHeight:"36px",display:"flex",flexDirection:"column",
-                                      alignItems:"center",justifyContent:"center",gap:"1px",
-                                      marginBottom:gi<entries.length-1?"2px":0}}>
-                                      {g.absent?(
-                                        <span style={{color:C.muted,fontSize:"0.65rem"}}>Abs</span>
-                                      ):(
-                                        <>
-                                          <span style={{color:text,fontSize:"0.72rem",fontWeight:"bold",lineHeight:1}}>
-                                            {ordinal(g.position)}
-                                          </span>
-                                          <span style={{color:C.muted,fontSize:"0.58rem",lineHeight:1}}>
-                                            /{g.groupSize}
-                                          </span>
-                                          {g.sotd>0&&<span style={{fontSize:"0.6rem",lineHeight:1}}>⭐</span>}
-                                        </>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </td>
-                            );
-                          })}
-                          <td style={{padding:"3px",textAlign:"center"}}>
-                            <div style={{background:C.surface,border:`1px solid ${C.accent}44`,
-                              borderRadius:"5px",padding:"5px 4px",minHeight:"36px",
-                              display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.85rem"}}>{anyFiltered?totalFilteredPts(p):p.pts}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{display:"flex",gap:"12px",flexWrap:"wrap",marginTop:"12px"}}>
-                {[{col:C.gold,label:"1st place"},{col:C.greenLight,label:"2nd place"},{col:C.red,label:"Last place"},{col:C.muted,label:"Absent"}].map(({col,label})=>(
+                    </div>
+                  </div>
+                );
+              })}
+              {selWk&&absent.length>0&&(
+                <div style={{marginTop:"16px"}}>
+                  <div style={{color:C.muted,fontSize:"0.75rem",fontWeight:"bold",letterSpacing:"0.1em",marginBottom:"8px"}}>ABSENT THIS WEEK</div>
+                  <div style={{...cardSt,padding:0,overflow:"hidden"}}>
+                    {absent.map(p=>(
+                      <div key={p.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 12px",borderBottom:`1px solid ${C.border}`}}>
+                        <span style={{fontSize:"0.72rem",color:C.muted,minWidth:"28px"}}>—</span>
+                        <span style={{flex:1,fontSize:"0.82rem",color:C.muted}}>{p.name}</span>
+                        <span style={{fontSize:"0.78rem",color:C.muted}}>1pt</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{display:"flex",gap:"12px",flexWrap:"wrap",marginTop:"16px"}}>
+                {[{col:C.gold,label:"1st place"},{col:C.greenLight,label:"2nd place"},{col:C.red,label:"Last place"}].map(({col,label})=>(
                   <div key={label} style={{display:"flex",alignItems:"center",gap:"5px"}}>
-                    <div style={{width:"10px",height:"10px",borderRadius:"2px",background:col+"55",border:`1px solid ${col}44`}}/>
+                    <div style={{width:"10px",height:"10px",borderRadius:"2px",background:col+"22",border:`1px solid ${col}44`}}/>
                     <span style={{color:C.muted,fontSize:"0.65rem"}}>{label}</span>
                   </div>
                 ))}
@@ -1012,7 +995,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           );
         })()}
-
+          
         {tab==="venues"&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>📍 Venues</h2>
@@ -1234,6 +1217,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             <div style={{...cardSt,marginBottom:"12px"}}>
               <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
                 <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
+                <div><label style={lbSt}>GAME #</label><select style={inputSt} value={gameRound} onChange={e=>setGameRound(e.target.value)}><option value={1}>Game 1</option><option value={2}>Game 2</option><option value={3}>Game 3</option></select></div>
                 <div><label style={lbSt}>📍 VENUE</label><select style={inputSt} value={gameVenue} onChange={e=>setGameVenue(e.target.value)}>{venues.map(v=><option key={v.id}>{v.name}</option>)}</select></div>
                 <div><label style={lbSt}>DATE</label><input style={inputSt} type="date" value={gameDate} onChange={e=>setGameDate(e.target.value)}/></div>
               </div>
@@ -1324,13 +1308,239 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               ))}
               <button onClick={addSotdRow} style={{...btnSt(C.gold),padding:"6px 12px",fontSize:"0.75rem"}}>+ Add SOTD</button>
             </div>
-            <button onClick={submitGames} style={{...btnSt(),padding:"12px",fontSize:"0.9rem",width:"100%"}}>Submit Week {gameWeek} Results</button>
+            <button onClick={submitGames} style={{...btnSt(),padding:"12px",fontSize:"0.9rem",width:"100%"}}>Submit Week {gameWeek} Game {gameRound} Results</button>
           </div>
         )}
 
         {tab==="history"&&isAdmin&&(
           <div>
-            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Score History — tap to edit</h2>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Season Summary</h2>
+
+            {(()=>{
+              const colSet=new Set(), cols=[];
+              players.forEach(p=>{
+                Object.entries(weeklyGames[p.id]||{}).forEach(([wk,entries])=>{
+                  entries.forEach(g=>{
+                    const r=g.gameRound||1, key=`${wk}-${r}`;
+                    if(!colSet.has(key)){colSet.add(key);cols.push({wk:parseInt(wk),round:r,key});}
+                  });
+                });
+              });
+              cols.sort((a,b)=>a.wk-b.wk||a.round-b.round);
+              const wkGroups={};
+              cols.forEach(c=>{if(!wkGroups[c.wk])wkGroups[c.wk]=[];wkGroups[c.wk].push(c);});
+              const thSt={background:C.surface,borderRadius:"5px",padding:"5px 7px",fontSize:"0.62rem",
+                color:C.muted,textAlign:"center",whiteSpace:"nowrap",minWidth:"40px",fontWeight:"normal"};
+              const cellSt=(isWin,isLast)=>({
+                borderRadius:"5px",padding:"4px 5px",textAlign:"center",minHeight:"34px",minWidth:"40px",
+                display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"1px",
+                background:isWin?"#2a2200":isLast?"#1f0f0f":C.card,
+                border:`1px solid ${C.border}`,
+              });
+              return(
+                <div style={{overflowX:"auto",marginBottom:"20px"}}>
+                  <table style={{borderCollapse:"separate",borderSpacing:"3px",minWidth:"100%"}}>
+                    <thead>
+                      <tr>
+                        <th style={{...thSt,textAlign:"left",position:"sticky",left:0,zIndex:2,minWidth:"100px"}}>PLAYER</th>
+                        {Object.entries(wkGroups).map(([wk,wcols])=>(
+                          <th key={wk} colSpan={wcols.length} style={{padding:"0 3px 3px",verticalAlign:"bottom"}}>
+                            <div style={{background:C.surface,borderRadius:"5px 5px 0 0",fontSize:"0.6rem",
+                              letterSpacing:"0.08em",color:C.muted,padding:"3px 6px",textAlign:"center"}}>WK {wk}</div>
+                          </th>
+                        ))}
+                        <th style={{...thSt,color:C.accent}}>TOT</th>
+                        <th style={thSt}>🥇</th>
+                        <th style={thSt}>⭐</th>
+                        <th style={thSt}>ABS</th>
+                      </tr>
+                      <tr>
+                        <th style={{...thSt,textAlign:"left",position:"sticky",left:0,zIndex:2}}></th>
+                        {cols.map(col=>(
+                          <th key={col.key} style={{padding:"0 3px 4px"}}>
+                            <div style={{background:C.card,borderRadius:"0 0 5px 5px",fontSize:"0.56rem",
+                              color:C.muted,padding:"2px 5px",textAlign:"center",borderTop:`1px solid ${C.border}`}}>
+                              G{col.round}
+                            </div>
+                          </th>
+                        ))}
+                        <th/><th/><th/><th/>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standings.map((p,ri)=>{
+                        let wins=0,sotds=0,abs=0;
+                        const medal=ri===0?"🥇":ri===1?"🥈":ri===2?"🥉":`${ri+1}.`;
+                        return(
+                          <tr key={p.id}>
+                            <td style={{background:C.surface,borderRadius:"5px",padding:"6px 10px",
+                              position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+                                <span style={{fontSize:"0.78rem"}}>{medal}</span>
+                                {p.imageUrl
+                                  ?<img src={p.imageUrl} alt="" style={{width:"18px",height:"18px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
+                                  :<div style={{width:"18px",height:"18px",borderRadius:"50%",background:C.border,flexShrink:0}}/>
+                                }
+                                <span style={{color:C.cream,fontSize:"0.78rem",fontWeight:"bold"}}>{p.name}</span>
+                              </div>
+                            </td>
+                            {cols.map(col=>{
+                              const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
+                              if(!entries.length){
+                                abs++;
+                                return(
+                                  <td key={col.key} style={{padding:"2px"}}>
+                                    <div style={cellSt(false,false)}>
+                                      <span style={{color:C.muted,fontSize:"0.65rem"}}>—</span>
+                                    </div>
+                                  </td>
+                                );
+                              }
+                              let wkPts=0,isWin=false,isLast=false,hasSotd=false;
+                              entries.forEach(g=>{
+                                if(g.absent){abs++;return;}
+                                wkPts+=g.pts+(g.sotd||0);
+                                if(g.position===1)isWin=true;
+                                if(g.position===(g.actualGroupSize||g.groupSize))isLast=true;
+                                if(g.sotd>0)hasSotd=true;
+                              });
+                              if(isWin)wins++;
+                              if(hasSotd)sotds++;
+                              return(
+                                <td key={col.key} style={{padding:"2px"}}>
+                                  <div style={cellSt(isWin,isLast)}>
+                                    <span style={{fontSize:"0.72rem",fontWeight:"bold",
+                                      color:isWin?C.gold:isLast?C.red:C.cream}}>{wkPts}pt</span>
+                                    <span style={{fontSize:"0.58rem",lineHeight:1}}>
+                                      {isWin?"🥇":isLast?"💀":""}{hasSotd?"⭐":""}
+                                    </span>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:"#1e2a1e",borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.82rem"}}>{p.pts}</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{color:C.gold,fontSize:"0.78rem"}}>{wins||"—"}</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{fontSize:"0.72px"}}>{sotds?"⭐".repeat(Math.min(sotds,3)):"—"}</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{color:C.muted,fontSize:"0.78rem"}}>{abs||"—"}</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+
+            <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginBottom:"20px"}}>
+              {[{col:C.gold,label:"1st place"},{col:C.red,label:"Last place"}].map(({col,label})=>(
+                <div key={label} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                  <div style={{width:"10px",height:"10px",borderRadius:"2px",background:col+"22",border:`1px solid ${col}44`}}/>
+                  <span style={{color:C.muted,fontSize:"0.65rem"}}>{label}</span>
+                </div>
+              ))}
+              <span style={{color:C.muted,fontSize:"0.65rem"}}>⭐ = Shot of the Day &nbsp;·&nbsp; — = absent</span>
+            </div>
+
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:"16px",marginTop:"8px"}}>
+              <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"12px"}}>ADMIN TOOLS</div>
+            <div style={{...cardSt,marginBottom:"14px",borderColor:C.blue+"44",background:"#0a0f1a"}}>
+              <div style={{color:C.blue,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>☔ RAIN OUT WEEK</div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                <select id="rainOutWeekSel" style={inputSt} defaultValue="">
+                  <option value="">Select week…</option>
+                  {Array.from({length:maxWk+1},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}</option>)}
+                </select>
+                <button onClick={()=>{
+                  const sel=document.getElementById("rainOutWeekSel");
+                  const wk=sel?.value; if(!wk){notify("Select a week first.");return;}
+                  const nwg={...weeklyGames};
+                  players.filter(p=>p.joinedWeek<=parseInt(wk)).forEach(p=>{
+                    nwg[p.id]={...(nwg[p.id]||{}),[wk]:[{gameId:`rain-${wk}-${p.id}`,position:null,groupSize:null,pts:1,sotd:0,absent:true,label:"Rain Out"}]};
+                  });
+                  update({weeklyGames:nwg,totalWeeks:Math.max(totalWeeks,parseInt(wk))});
+                  sel.value="";
+                  notify(`Week ${wk} marked as rained out — everyone gets 1 pt!`);
+                }} style={{...btnSt(C.blue,true),padding:"8px 14px",fontSize:"0.8rem"}}>Rain Out</button>
+              </div>
+              <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>Marks all eligible players as absent with 1 point. Overwrites any existing data for that week.</p>
+            </div>
+            <div style={{...cardSt,marginBottom:"14px",borderColor:C.accent+"44",background:"#1a140a"}}>
+              <div style={{color:C.accent,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚖ REBALANCE WEEK SCORES</div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                <select id="rebalanceWeekSel" style={inputSt} defaultValue="">
+                  <option value="">Select week to rebalance…</option>
+                  {Array.from({length:maxWk},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}</option>)}
+                </select>
+                <button onClick={()=>{
+                  const sel=document.getElementById("rebalanceWeekSel");
+                  const wk=sel?.value; if(!wk){notify("Select a week first.");return;}
+                  const gameIdCounts={};
+                  players.forEach(p=>{
+                    (weeklyGames[p.id]?.[wk]||[]).forEach(g=>{
+                      if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;
+                    });
+                  });
+                  const maxGs=Math.max(1,...Object.values(gameIdCounts));
+                  const nwg={...weeklyGames};
+                  players.forEach(p=>{
+                    if(!(nwg[p.id]?.[wk])) return;
+                    nwg[p.id]={...nwg[p.id],[wk]:nwg[p.id][wk].map(g=>{
+                      if(g.absent||!g.position) return g;
+                      return {...g,groupSize:maxGs,pts:g.position===g.actualGroupSize?0:calcPoints(g.position,maxGs)};
+                    })};
+                  });
+                  update({weeklyGames:nwg});
+                  sel.value="";
+                  notify(`Week ${wk} rebalanced to group size ${maxGs}!`);
+                }} style={{...btnSt(C.accent),padding:"8px 14px",fontSize:"0.8rem"}}>Rebalance</button>
+              </div>
+              <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>Recalculates all scores for a week so every group uses the largest group's size as the max points.</p>
+            </div>
+            <div style={{...cardSt,marginBottom:"14px",borderColor:C.red+"44",background:"#1a0f0f"}}>
+              <div style={{color:C.red,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚠ DELETE WEEK DATA</div>
+              <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
+                <select id="deleteWeekSel" style={inputSt} defaultValue="">
+                  <option value="">Select week to delete…</option>
+                  {Array.from({length:maxWk},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}</option>)}
+                </select>
+                <button onClick={()=>{
+                  const sel=document.getElementById("deleteWeekSel");
+                  const wk=sel?.value; if(!wk){notify("Select a week first.");return;}
+                  const nwg={};
+                  Object.entries(weeklyGames).forEach(([pid,weeks])=>{
+                    nwg[pid]={...weeks};
+                    delete nwg[pid][wk];
+                  });
+                  update({weeklyGames:nwg,totalWeeks:Math.max(1,...Object.values(nwg).flatMap(w=>Object.keys(w).map(Number)).filter(n=>!isNaN(n)))});
+                  sel.value="";
+                  notify(`Week ${wk} data deleted.`);
+                }} style={{...btnSt(C.red,true),padding:"8px 14px",fontSize:"0.8rem"}}>Delete Week</button>
+              </div>
+              <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>This removes all recorded scores for that week. Players will need to be re-recorded.</p>
+            </div>
+            </div>
+          </div>
+        )}
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.blue+"44",background:"#0a0f1a"}}>
               <div style={{color:C.blue,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>☔ RAIN OUT WEEK</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
