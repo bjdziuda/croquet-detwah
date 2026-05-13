@@ -882,7 +882,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             const gs=g.groupSize||1;
             if(g.position===1) return {bg:"#2a2200",text:C.gold};
             if(g.position===2) return {bg:"#1a1f14",text:C.greenLight};
-            if(g.position===gs) return {bg:"#1f0f0f",text:C.red};
+            if(g.position===(g.actualGroupSize||gs)) return {bg:"#1f0f0f",text:C.red};
             return {bg:C.card,text:C.text};
           };
           const ordinal=n=>n===1?"1st":n===2?"2nd":n===3?"3rd":`${n}th`;
