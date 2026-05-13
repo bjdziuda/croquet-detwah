@@ -923,7 +923,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                 style={{background:"none",border:`1px solid ${C.green}`,color:C.green,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>+ Add</button>}
                             </div>
                             {sorted.map(p=>{
-                              const isFirst=p.position===1,isLast=p.pts===0&&!p.absent;
+                              const maxPosInGroup=Math.max(...sorted.map(x=>x.position));
+                              const isFirst=p.position===1,isLast=p.position===maxPosInGroup;
                               const ekey=`${p.pid}-${selWk}-${p.gi}`;
                               const isEditing=gridEditKey===ekey;
                               return(
@@ -1501,12 +1502,14 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     });
                   });
                   const maxGs=Math.max(1,...Object.values(gameIdCounts));
+                  const gameIdMaxPos={};
+                  players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.gameId&&g.position) gameIdMaxPos[g.gameId]=Math.max(gameIdMaxPos[g.gameId]||0,g.position);});});
                   const nwg={...weeklyGames};
                   players.forEach(p=>{
                     if(!(nwg[p.id]?.[wk])) return;
                     nwg[p.id]={...nwg[p.id],[wk]:nwg[p.id][wk].map(g=>{
                       if(g.absent||!g.position) return g;
-                      return {...g,groupSize:maxGs,pts:g.position===g.actualGroupSize?0:calcPoints(g.position,maxGs)};
+                      return {...g,groupSize:maxGs,pts:g.position===gameIdMaxPos[g.gameId]?0:calcPoints(g.position,maxGs)};
                     })};
                   });
                   update({weeklyGames:nwg});
