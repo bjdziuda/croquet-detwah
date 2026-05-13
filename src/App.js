@@ -923,7 +923,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                 style={{background:"none",border:`1px solid ${C.green}`,color:C.green,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>+ Add</button>}
                             </div>
                             {sorted.map(p=>{
-                              const isFirst=p.position===1,isLast=p.position===(p.actualGroupSize||p.groupSize);
+                              const isFirst=p.position===1,isLast=p.pts===0&&!p.absent;
                               const ekey=`${p.pid}-${selWk}-${p.gi}`;
                               const isEditing=gridEditKey===ekey;
                               return(
