@@ -114,6 +114,7 @@ const EMPTY_STATE = {
   votes: {},
   joinCode: "croquet2026",
   nextVenueId: null,
+  weekSignups: {},
   pastSeasons: {},
   leagueHonours: {
     seasons: {
@@ -132,109 +133,126 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, joinCode, nextMatch, leagueLogo}) {
-  const [mode, setMode]         = useState("choose");
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek}) {
+  const [mode, setMode]       = useState("bubbles");
+  const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [viewerName, setViewerName] = useState("");
-  const [err, setErr]           = useState("");
-  const [joinCodeInput, setJoinCodeInput] = useState("");
-  const [showJoinCode, setShowJoinCode] = useState(false);
+  const [err, setErr]         = useState("");
+
+  const wk = nextMatchWeek || 1;
+  const signup = weekSignups?.[wk] || {open:false,signups:[],waitlist:[],groups:null,published:false};
+  const signupIds = new Set((signup.signups||[]).map(String));
+  const waitlistIds = new Set((signup.waitlist||[]).map(String));
 
   const tryAdmin = () => {
     const match = DEFAULT_ADMINS.find(a => a.username===username.trim() && a.password===password);
     if (match) onLogin({name:match.username, role:match.role});
     else setErr("Invalid username or password.");
   };
-  const tryViewer = () => {
-    if (!viewerName.trim()) { setErr("Please enter your name."); return; }
-    const name = viewerName.trim();
-    if(joinCodeInput.trim()) {
-      if(joinCodeInput.trim()===joinCode) {
-        onLogin({name, role:"self-register", onError:(msg)=>setErr(msg)});
-      } else {
-        setErr("Invalid join code.");
-      }
-    } else {
-      onLogin({name, role:"viewer"});
-    }
-  };
 
   const iSt = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",color:C.text,padding:"12px 14px",fontSize:"0.95rem",fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"};
   const bSt = (col=C.accent) => ({background:`linear-gradient(135deg,${col},${col}bb)`,border:"none",borderRadius:"8px",color:col===C.accent?C.bg:C.text,padding:"12px 20px",fontFamily:"Georgia,serif",fontSize:"0.95rem",fontWeight:"bold",cursor:"pointer",width:"100%",letterSpacing:"0.04em"});
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",padding:"24px"}}>
-      <div style={{maxWidth:"400px",width:"100%"}}>
-        <div style={{textAlign:"center",marginBottom:"24px"}}>
-          <div style={{marginBottom:"12px",maxWidth:"120px",margin:"0 auto 12px",borderRadius:"12px",overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {leagueLogo?<img src={leagueLogo} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span>🔵</span>}
-          </div>
-          <h1 style={{color:C.cream,fontSize:"2rem",margin:"0 0 6px",letterSpacing:"0.05em",fontWeight:"bold"}}>Croquet De-Twah</h1>
-          <p style={{color:C.muted,fontSize:"0.85rem",margin:0,letterSpacing:"0.08em",textTransform:"uppercase"}}>2026 Season</p>
+    <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Georgia,serif",padding:"20px",overflowY:"auto"}}>
+      <div style={{maxWidth:"520px",margin:"0 auto",paddingBottom:"40px"}}>
+
+        {/* Header */}
+        <div style={{textAlign:"center",padding:"24px 0 20px"}}>
+          {leagueLogo&&<img src={leagueLogo} style={{width:"64px",height:"64px",borderRadius:"12px",objectFit:"cover",marginBottom:"10px"}}/>}
+          <h1 style={{color:C.cream,fontSize:"1.8rem",margin:"0 0 4px",letterSpacing:"0.04em"}}>{leagueName||"Croquet De-Twah"}</h1>
+          <p style={{color:C.muted,fontSize:"0.82rem",margin:0}}>2026 Season · Week {wk}</p>
+          {nextMatch&&<p style={{color:C.accentLight,fontSize:"0.82rem",margin:"4px 0 0"}}>📅 {nextMatch.date} · {nextMatch.name}</p>}
         </div>
-        {nextMatch&&(
-          <div style={{background:C.card,border:`1px solid ${C.accent}44`,borderRadius:"12px",padding:"14px 16px",marginBottom:"24px"}}>
-            <div style={{color:C.accent,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"8px"}}>NEXT MATCH</div>
-            <div style={{display:"flex",gap:"12px",alignItems:"center"}}>
-              {nextMatch.imageUrl
-                ? <img src={nextMatch.imageUrl} alt={nextMatch.name} style={{width:"56px",height:"56px",borderRadius:"8px",objectFit:"cover",flexShrink:0}}/>
-                : <div style={{width:"56px",height:"56px",borderRadius:"8px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.5rem",flexShrink:0}}>📍</div>
-              }
-              <div style={{flex:1}}>
-                <div style={{color:C.cream,fontWeight:"bold",fontSize:"0.95rem",marginBottom:"2px"}}>{nextMatch.name}</div>
-                <div style={{color:C.accentLight,fontSize:"0.8rem",marginBottom:"4px"}}>📅 {nextMatch.date} · 6:30pm</div>
-                <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
-                  <StarRating value={Math.round(nextMatch.avgRating||0)} size={12}/>
-                  <span style={{color:nextMatch.hasGrill?C.accent:C.muted,fontSize:"0.72rem"}}>{nextMatch.hasGrill?"🔥 Grills":"🚫 No grills"}</span>
+
+        {/* BUBBLE MODE */}
+        {mode==="bubbles"&&(
+          <>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"20px",marginBottom:"12px"}}>
+              <div style={{color:C.accentLight,fontSize:"0.82rem",fontWeight:"bold",marginBottom:"4px"}}>
+                {signup.open?"🏑 Week "+wk+" sign-ups are open!":"Tap your name to enter"}
+              </div>
+              {signup.open&&<div style={{color:C.muted,fontSize:"0.75rem",marginBottom:"14px"}}>{signupIds.size}/24 signed up{waitlistIds.size>0&&` · ${waitlistIds.size} waitlist`}</div>}
+              {!signup.open&&<div style={{color:C.muted,fontSize:"0.75rem",marginBottom:"14px"}}>Select your name below</div>}
+              <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
+                {(players||[]).filter(p=>p.joinedWeek<=wk).map(p=>{
+                  const pid=String(p.id);
+                  const isIn=signupIds.has(pid);
+                  const isWait=waitlistIds.has(pid);
+                  return(
+                    <button key={p.id} onClick={()=>setSelected(p)}
+                      style={{padding:"8px 16px",borderRadius:"20px",
+                        border:`1px solid ${isIn?C.green:isWait?C.accent:C.border}`,
+                        background:isIn?C.green+"33":isWait?C.accent+"22":"transparent",
+                        color:isIn?C.greenLight:isWait?C.accentLight:C.cream,
+                        fontFamily:"Georgia,serif",fontSize:"0.85rem",cursor:"pointer"}}>
+                      {isIn?"✓ ":isWait?"⏳ ":""}{p.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Groups display */}
+            {signup.published&&signup.groups&&signup.groups.length>0&&(
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"20px",marginBottom:"12px"}}>
+                <div style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"12px"}}>WEEK {wk} GROUPS</div>
+                <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                  {signup.groups.map((grp,gi)=>(
+                    <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px 12px",flex:1,minWidth:"120px"}}>
+                      <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",marginBottom:"8px"}}>Group {gi+1}</div>
+                      {grp.map(pid=>{
+                        const p=(players||[]).find(x=>String(x.id)===String(pid));
+                        return p?<div key={pid} style={{color:C.cream,fontSize:"0.82rem",padding:"3px 0",borderBottom:`1px solid ${C.border}22`}}>{p.name}</div>:null;
+                      })}
+                    </div>
+                  ))}
                 </div>
               </div>
+            )}
+
+            <div style={{textAlign:"center"}}>
+              <button onClick={()=>setMode("admin")} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline"}}>Admin login</button>
+            </div>
+          </>
+        )}
+
+        {/* CONFIRM OVERLAY */}
+        {selected&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",zIndex:100}}>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"28px",maxWidth:"320px",width:"100%",textAlign:"center"}}>
+              <div style={{fontSize:"1.8rem",marginBottom:"8px"}}>👋</div>
+              <div style={{color:C.cream,fontSize:"1.1rem",fontWeight:"bold",marginBottom:"6px"}}>Hey {selected.name}!</div>
+              <div style={{color:C.muted,fontSize:"0.88rem",marginBottom:"24px"}}>
+                {signup.open?`Are you coming to Week ${wk}?`:`Enter the league as ${selected.name}?`}
+              </div>
+              <div style={{display:"flex",gap:"10px",marginBottom:"12px"}}>
+                {signup.open&&(
+                  <button onClick={()=>{onSignup(selected.id,true);onLogin({name:selected.name,role:"viewer"});setSelected(null);}}
+                    style={{flex:1,padding:"11px",background:`linear-gradient(135deg,${C.green},${C.green}bb)`,border:"none",borderRadius:"8px",color:C.text,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
+                    Yes, I'm in! 🏑
+                  </button>
+                )}
+                <button onClick={()=>{if(signup.open)onSignup(selected.id,false);onLogin({name:selected.name,role:"viewer"});setSelected(null);}}
+                  style={{flex:1,padding:"11px",background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.muted,fontFamily:"Georgia,serif",fontSize:"0.9rem",cursor:"pointer"}}>
+                  {signup.open?"Can't make it":"Just browsing"}
+                </button>
+              </div>
+              <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline"}}>Back</button>
             </div>
           </div>
         )}
-        {mode==="choose" && (
-          <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
-            <button onClick={()=>setMode("admin")} style={{...bSt(),padding:"16px"}}>🔐 Admin Login</button>
-            <button onClick={()=>setMode("player")} style={{...bSt(C.green),padding:"16px",color:C.text}}>🏑 Player Login</button>
-            <button onClick={()=>setMode("viewer")} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.muted,padding:"12px 20px",fontFamily:"Georgia,serif",fontSize:"0.85rem",cursor:"pointer"}}>👁 View as Guest</button>
-            <p style={{color:C.muted,fontSize:"0.72rem",textAlign:"center",margin:"0",lineHeight:"1.6"}}>
-              Players use their name + join code to register.<br/>Guests can browse but won't have a profile.
-            </p>
-          </div>
-        )}
-        {mode==="admin" && (
+
+        {/* ADMIN MODE */}
+        {mode==="admin"&&(
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"24px"}}>
             <h2 style={{color:C.accentLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>ADMIN LOGIN</h2>
             {err&&<div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"6px",padding:"10px 14px",color:C.red,fontSize:"0.82rem",marginBottom:"16px"}}>{err}</div>}
             <div style={{marginBottom:"14px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>USERNAME</label><input style={iSt} value={username} onChange={e=>{setUsername(e.target.value);setErr("");}} placeholder="Enter username" onKeyDown={e=>e.key==="Enter"&&tryAdmin()}/></div>
             <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>PASSWORD</label><input style={iSt} type="password" value={password} onChange={e=>{setPassword(e.target.value);setErr("");}} placeholder="Enter password" onKeyDown={e=>e.key==="Enter"&&tryAdmin()}/></div>
             <button style={bSt()} onClick={tryAdmin}>Sign In</button>
-            <button onClick={()=>{setMode("choose");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
-          </div>
-        )}
-        {mode==="player" && (
-          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"24px"}}>
-            <h2 style={{color:C.greenLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>🏑 PLAYER LOGIN</h2>
-            {err&&<div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"6px",padding:"10px 14px",color:C.red,fontSize:"0.82rem",marginBottom:"16px"}}>{err}</div>}
-            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
-            {!showJoinCode&&<p onClick={()=>setShowJoinCode(true)} style={{color:C.muted,fontSize:"0.75rem",textAlign:"center",cursor:"pointer",textDecoration:"underline",marginBottom:"16px"}}>New player? Register with a join code</p>}
-            {showJoinCode&&(
-              <div style={{marginBottom:"20px"}}>
-                <label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>JOIN CODE</label>
-                <input style={iSt} value={joinCodeInput} onChange={e=>{setJoinCodeInput(e.target.value);setErr("");}} placeholder="Enter join code…" onKeyDown={e=>e.key==="Enter"&&tryViewer()}/>
-              </div>
-            )}
-            <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>Enter League →</button>
-            <button onClick={()=>{setMode("choose");setErr("");setShowJoinCode(false);}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
-          </div>
-        )}
-        {mode==="viewer" && (
-          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"24px"}}>
-            <h2 style={{color:C.greenLight,fontSize:"1rem",margin:"0 0 20px",letterSpacing:"0.06em"}}>JOIN / VIEW</h2>
-            {err&&<div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"6px",padding:"10px 14px",color:C.red,fontSize:"0.82rem",marginBottom:"16px"}}>{err}</div>}
-            <div style={{marginBottom:"20px"}}><label style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",display:"block",marginBottom:"6px"}}>YOUR NAME</label><input style={iSt} value={viewerName} onChange={e=>{setViewerName(e.target.value);setErr("");}} placeholder="e.g. Margaret H." onKeyDown={e=>e.key==="Enter"&&tryViewer()}/></div>
-            <button style={{...bSt(C.green),color:C.text}} onClick={tryViewer}>View League →</button>
-            <button onClick={()=>{setMode("choose");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
+            <button onClick={()=>{setMode("bubbles");setErr("");}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",marginTop:"14px",display:"block",width:"100%",textAlign:"center"}}>← Back</button>
           </div>
         )}
       </div>
@@ -315,28 +333,36 @@ export default function App() {
     date: getMatchDate(appState.nextMatchWeek||1),
   } : null;
 
-  if (!user) return <LoginScreen onLogin={(u)=>{
-    if(u.role==="self-register") {
-      const existing = appState.players.find(p=>p.name.toLowerCase()===u.name.toLowerCase());
-      if(existing) {
-        u.onError("That name is already taken — please choose a different name or log in as a Guest with that name.");
-        return;
+  if (!user) return <LoginScreen
+    onLogin={(u)=>{setUser(u);sessionStorage.setItem("croquetUser",JSON.stringify(u));}}
+    onSignup={(playerId,coming)=>{
+      const wk=appState.nextMatchWeek||1;
+      const cur=appState.weekSignups?.[wk]||{open:false,signups:[],waitlist:[],groups:null,published:false};
+      const pid=String(playerId);
+      let signups=(cur.signups||[]).map(String), waitlist=(cur.waitlist||[]).map(String);
+      if(coming){
+        if(!signups.includes(pid)&&!waitlist.includes(pid)){
+          if(signups.length<24) signups=[...signups,pid];
+          else waitlist=[...waitlist,pid];
+        }
       } else {
-        const id=Date.now();
-        persist({...appState,players:[...appState.players,{id,name:u.name,joinedWeek:1}],weeklyGames:{...appState.weeklyGames,[id]:{}}});
-        const newUser = {name:u.name,role:"viewer"};
-        setUser(newUser);
-        sessionStorage.setItem("croquetUser", JSON.stringify(newUser));
+        signups=signups.filter(x=>x!==pid);
+        waitlist=waitlist.filter(x=>x!==pid);
       }
-    } else {
-      setUser(u);
-    }
-  }} joinCode={appState?.joinCode||"croquet2026"} nextMatch={nextMatch} leagueLogo={appState?.leagueLogo}/>;
+      persist({...appState,weekSignups:{...appState.weekSignups,[wk]:{...cur,signups,waitlist}}});
+    }}
+    nextMatch={nextMatch}
+    leagueLogo={appState?.leagueLogo}
+    leagueName={appState?.leagueName}
+    players={appState?.players||[]}
+    weekSignups={appState?.weekSignups||{}}
+    nextMatchWeek={appState?.nextMatchWeek||1}
+  />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues} = appState;
+  const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -622,6 +648,23 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     notify("Player added and scores updated!");
   };
   const toggleChart=id=>setChartPlayers(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+
+  const curSignupWk=appState.nextMatchWeek||1;
+  const curSignup=weekSignups[curSignupWk]||{open:false,signups:[],waitlist:[],groups:null,published:false};
+
+  const generateGroups=()=>{
+    const ids=[...(curSignup.signups||[])].map(String).sort(()=>Math.random()-0.5);
+    const numGroups=Math.max(1,Math.ceil(ids.length/8));
+    const grps=Array.from({length:numGroups},()=>[]);
+    ids.forEach((id,i)=>grps[i%numGroups].push(id));
+    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps,published:false}}});
+    notify("Groups randomised!");
+  };
+
+  const publishGroups=()=>{
+    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:true}}});
+    notify("Groups published!");
+  };
 
   const inputSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.85rem",fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"};
   const textareaSt={...inputSt,resize:"vertical",minHeight:"70px",lineHeight:"1.5"};
@@ -1215,6 +1258,38 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         {tab==="record"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
+
+            <div style={{...cardSt,marginBottom:"16px",borderColor:C.green+"44",background:"#0f1a0f"}}>
+              <div style={{color:C.greenLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"10px"}}>🏑 WEEK {curSignupWk} SIGN-UPS</div>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px"}}>
+                {!curSignup.open
+                  ?<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:true}}})} style={{...btnSt(C.green,true),padding:"6px 14px",fontSize:"0.78rem"}}>Open sign-ups</button>
+                  :<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Close sign-ups</button>
+                }
+                {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⇄ Randomise groups</button>}
+                {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
+                {curSignup.published&&<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
+              </div>
+              {(curSignup.signups||[]).length>0&&(
+                <>
+                  <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"8px"}}>{(curSignup.signups||[]).length}/24 signed up{(curSignup.waitlist||[]).length>0&&` · ${curSignup.waitlist.length} waitlist`}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:curSignup.groups?"10px":"0"}}>
+                    {(curSignup.signups||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.green+"22",border:`1px solid ${C.green}44`,color:C.greenLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>✓ {p.name}</span>:null;})}
+                    {(curSignup.waitlist||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.accent+"22",border:`1px solid ${C.accent}44`,color:C.accentLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>⏳ {p.name}</span>:null;})}
+                  </div>
+                </>
+              )}
+              {curSignup.groups&&(
+                <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                  {curSignup.groups.map((grp,gi)=>(
+                    <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",padding:"8px 10px",flex:1,minWidth:"100px"}}>
+                      <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold",marginBottom:"5px"}}>Group {gi+1}</div>
+                      {grp.map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<div key={pid} style={{color:C.cream,fontSize:"0.75rem",padding:"2px 0"}}>{p.name}</div>:null;})}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div style={{...cardSt,marginBottom:"12px"}}>
               <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
                 <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
