@@ -362,7 +362,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}} = appState;
+  const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -404,6 +404,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [addPlayerPid, setAddPlayerPid]     = useState("");
   const [addPlayerGroupId, setAddPlayerGroupId] = useState("");
   const [addPlayerPos, setAddPlayerPos]     = useState("");
+  const [addPlayerSotd, setAddPlayerSotd]   = useState(0);
   const [weekGroupFilter, setWeekGroupFilter] = useState({});
   const [gameRound, setGameRound]           = useState(1);
   const [gridEditKey, setGridEditKey]       = useState(null);
@@ -669,10 +670,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     nwg[pidStr]={...(nwg[pidStr]||{})};
     nwg[pidStr][wk]=[...(nwg[pidStr][wk]||[]).filter(g=>!g.absent),
       {gameId:addPlayerGroupId,position:insertPos,groupSize:maxGs,actualGroupSize:newGroupSize,
-       pts:calcPoints(insertPos,maxGs),sotd:0,absent:false,label:ref.label||"Gp 1",venue:ref.venue||"",date:ref.date||""}
+       pts:calcPoints(insertPos,maxGs),sotd:parseInt(addPlayerSotd)||0,absent:false,label:ref.label||"Gp 1",venue:ref.venue||"",date:ref.date||""}
     ];
     update({weeklyGames:nwg});
-    setAddPlayerModal(null); setAddPlayerPid(""); setAddPlayerGroupId(""); setAddPlayerPos("");
+    setAddPlayerModal(null); setAddPlayerPid(""); setAddPlayerGroupId(""); setAddPlayerPos(""); setAddPlayerSotd(0);
     notify("Player added and scores updated!");
   };
   const toggleChart=id=>setChartPlayers(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
@@ -705,6 +706,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?[["minigame","⛳ Mini-Game"]]:[]),
+    ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
   ];
 
   return (
@@ -741,7 +743,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         });});
         const groupList=Object.values(weekGroups);
         const alreadyIn=new Set(players.filter(p=>(weeklyGames[p.id]?.[wk]||[]).some(g=>!g.absent)).map(p=>String(p.id)));
-        const available=players.filter(p=>!alreadyIn.has(String(p.id))&&p.joinedWeek<=wk);
+        const available=players.filter(p=>!alreadyIn.has(String(p.id)));
         const selGroup=groupList.find(g=>g.gameId===addPlayerGroupId);
         const maxPos=selGroup?selGroup.size+1:1;
         return(
@@ -773,6 +775,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   </select>
                 </div>
               )}
+              <div style={{marginBottom:"16px"}}>
+                <label style={lbSt}>SHOT OF THE DAY (+1 pt bonus)</label>
+                <input style={inputSt} type="number" min="0" max="10" value={addPlayerSotd} onChange={e=>setAddPlayerSotd(e.target.value)} placeholder="0"/>
+              </div>
               <div style={{display:"flex",gap:"8px"}}>
                 <button style={{...btnSt(C.green,true),flex:1}} onClick={addMissedPlayer} disabled={!addPlayerPid||!addPlayerGroupId||!addPlayerPos}>Add Player</button>
                 <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>setAddPlayerModal(null)}>Cancel</button>
@@ -1721,10 +1727,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                         <button onClick={()=>{setProfileName(myPlayer.name);setEditingProfileName(true);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 7px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✎ edit</button>
                       </div>
                       <div style={{color:C.muted,fontSize:"0.75rem",marginTop:"4px"}}>
-                        <label style={lbSt}>JOINED WEEK</label>
-                        <select style={{...inputSt,width:"auto",padding:"4px 8px",fontSize:"0.78rem"}} value={profileWeek} onChange={e=>{setProfileWeek(parseInt(e.target.value));saveProfileWeek(e.target.value);}}>
-                          {weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}
-                        </select>
+                        <span style={{fontSize:"0.72rem",color:C.muted}}>Joined Week {myPlayer.joinedWeek||1}</span>
                       </div>
                     </div>
                   )}
@@ -1820,6 +1823,47 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           </div>
         )}
 
+        {tab==="dues"&&user?.role==="superadmin"&&(
+          <div style={{maxWidth:"600px",margin:"0 auto",padding:"16px 10px"}}>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>💰 Membership Dues</h2>
+            <div style={{...cardSt,marginBottom:"14px"}}>
+              <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 10px",lineHeight:"1.5"}}>Track annual membership dues. Only visible to the Commissioner.</p>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
+                <span style={{fontSize:"0.72rem",color:C.accent,letterSpacing:"0.08em"}}>{players.filter(p=>membershipDues[String(p.id)]).length} / {players.length} PAID</span>
+                <span style={{color:C.muted,fontSize:"0.72rem"}}>{players.length-players.filter(p=>membershipDues[String(p.id)]).length} outstanding</span>
+              </div>
+              <div style={{height:"4px",background:C.surface,borderRadius:"2px",marginBottom:"4px"}}>
+                <div style={{height:"4px",background:C.green,borderRadius:"2px",width:`${players.length>0?(players.filter(p=>membershipDues[String(p.id)]).length/players.length)*100:0}%`,transition:"width 0.4s"}}/>
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+              {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+                const paid=!!membershipDues[String(p.id)];
+                return(
+                  <div key={p.id} style={{...cardSt,padding:"10px 14px",display:"flex",alignItems:"center",gap:"12px",borderLeft:`3px solid ${paid?C.green:C.border}`,borderRadius:"0 10px 10px 0"}}>
+                    {p.imageUrl
+                      ?<img src={p.imageUrl} alt={p.name} style={{width:"36px",height:"36px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${paid?C.green:C.border}`,flexShrink:0}}/>
+                      :<div style={{width:"36px",height:"36px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1rem",flexShrink:0}}>👤</div>
+                    }
+                    <div style={{flex:1}}>
+                      <div style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>{p.name}</div>
+                      <div style={{color:C.muted,fontSize:"0.7rem"}}>Joined Wk {p.joinedWeek||1}</div>
+                    </div>
+                    <button
+                      onClick={()=>{
+                        const newDues={...membershipDues,[String(p.id)]:!paid};
+                        update({membershipDues:newDues});
+                        notify(paid?"Marked unpaid":"Marked paid!");
+                      }}
+                      style={{background:paid?C.green+"22":"transparent",border:`1px solid ${paid?C.green:C.border}`,borderRadius:"6px",color:paid?C.green:C.muted,padding:"5px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem",fontWeight:"bold",minWidth:"72px"}}>
+                      {paid?"✓ Paid":"Unpaid"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
