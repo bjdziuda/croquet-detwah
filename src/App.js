@@ -600,8 +600,36 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     nwg[pid][week]=wkG; update({weeklyGames:nwg}); setEditModal(null); notify("Score updated!");
   };
   const deleteGame=(pid,week,gameIdx)=>{
-    const nwg={...weeklyGames,[pid]:{...weeklyGames[pid],[week]:(weeklyGames[pid][week]||[]).filter((_,i)=>i!==gameIdx)}};
-    update({weeklyGames:nwg}); setEditModal(null); notify("Entry deleted.");
+    const removedGame=(weeklyGames[pid]?.[week]||[])[gameIdx];
+    if(!removedGame||removedGame.absent){
+      const nwg={...weeklyGames,[pid]:{...weeklyGames[pid],[week]:(weeklyGames[pid][week]||[]).filter((_,i)=>i!==gameIdx)}};
+      update({weeklyGames:nwg}); setEditModal(null); notify("Entry deleted."); return;
+    }
+    const {gameId,position:removedPos}=removedGame;
+    const nwg={...weeklyGames};
+    // Remove the entry from the target player
+    nwg[pid]={...nwg[pid],[week]:(nwg[pid][week]||[]).filter((_,i)=>i!==gameIdx)};
+    // Recalculate group: collect all remaining players in this game
+    const remaining=[];
+    players.forEach(p=>{
+      (nwg[p.id]?.[week]||[]).forEach((g,i)=>{
+        if(g.gameId===gameId&&!g.absent) remaining.push({pid:String(p.id),idx:i,pos:g.position});
+      });
+    });
+    const newSize=remaining.length;
+    // Recalculate all remaining game-ids across the week to get max group size
+    const gameIdCounts={};
+    players.forEach(p=>{(nwg[p.id]?.[week]||[]).forEach(g=>{if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});});
+    const maxGs=Math.max(1,...Object.values(gameIdCounts));
+    remaining.forEach(({pid:rpid,idx,pos})=>{
+      const newPos=pos>removedPos?pos-1:pos;
+      const newPts=newPos===newSize?0:calcPoints(newPos,maxGs);
+      nwg[rpid]={...nwg[rpid],[week]:(nwg[rpid][week]||[]).map((g,i)=>
+        i===idx?{...g,position:newPos,groupSize:maxGs,pts:newPts}:
+        (!g.absent&&g.gameId&&g.gameId!==gameId)?{...g,groupSize:maxGs,pts:calcPoints(g.position,maxGs)}:g
+      )};
+    });
+    update({weeklyGames:nwg}); setEditModal(null); notify("Player removed and scores recalculated.");
   };
 
   const swapPositions=(wk,gameId,pid,direction)=>{
@@ -694,7 +722,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <div style={{marginBottom:"20px"}}><label style={lbSt}>SHOT OF THE DAY POINTS</label><input style={inputSt} type="number" min="0" max="10" value={editSotd} onChange={e=>setEditSotd(e.target.value)}/></div>
               <div style={{display:"flex",gap:"8px"}}>
                 <button style={{...btnSt(),flex:1}} onClick={saveEdit}>Save</button>
-                <button style={{...btnSt(C.red,true),flex:1}} onClick={()=>deleteGame(pid,week,gameIdx)}>Delete</button>
+                <button style={{...btnSt(C.red,true),flex:1}} onClick={()=>deleteGame(pid,week,gameIdx)}>Remove Player</button>
                 <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>setEditModal(null)}>Cancel</button>
               </div>
             </div>
@@ -1773,6 +1801,17 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   </div>
                   <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
                     <span style={{color:C.muted,fontSize:"0.78rem"}}>{totalPts(p.id,weeklyGames)}pt</span>
+                    <select
+                      title="Joined Week"
+                      value={p.joinedWeek||1}
+                      onChange={e=>{
+                        const jw=parseInt(e.target.value);
+                        update({players:players.map(pl=>pl.id===p.id?{...pl,joinedWeek:jw}:pl)});
+                        notify("Joined week updated!");
+                      }}
+                      style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"3px 6px",fontSize:"0.72rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                      {Array.from({length:totalWeeks||1},(_,i)=>i+1).map(w=><option key={w} value={w}>Wk {w}</option>)}
+                    </select>
                     <button onClick={()=>removePlayer(p.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"3px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>
                   </div>
                 </div>
