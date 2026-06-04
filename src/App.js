@@ -904,9 +904,24 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             if(standingsMetric==="abs") return{val:p.absences,col:C.muted};
             return{val:p.pts,col:C.accent};
           };
-          const btnSt2=(active)=>({padding:"6px 0",borderRadius:"6px",border:"1px solid #fff",background:active?"#2a4a2a":"transparent",borderColor:active?C.accent:"#fff",color:active?C.accentLight:"#fff",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:"bold",flex:1,textAlign:"center"});
-          const pillSt=(active)=>({padding:"4px 10px",borderRadius:"12px",border:`1px solid ${active?C.accent:"#fff"}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:"#fff",fontSize:"0.62rem",fontFamily:"Georgia,serif",cursor:"pointer"});
-          const PlayerRow=({p,i,showSwatch})=>{
+          const btnSt2=(active)=>({padding:"6px 0",borderRadius:"6px",border:`1px solid ${active?C.accent:C.cream}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:C.cream,fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:"bold",flex:1,textAlign:"center"});
+          const pillSt=(active)=>({padding:"4px 10px",borderRadius:"12px",border:`1px solid ${active?C.accent:C.cream}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:C.cream,fontSize:"0.62rem",fontFamily:"Georgia,serif",cursor:"pointer"});
+          const minGamesForMvp=Math.ceil(maxWk/3);
+          const buildMetricData=(key)=>Array.from({length:maxWk},(_,w)=>{
+            const entry={week:`Wk ${w+1}`};
+            players.filter(p=>chartPlayers.includes(p.id)).forEach(p=>{
+              let cum=0;
+              for(let ww=1;ww<=w+1;ww++){
+                (weeklyGames[p.id]?.[ww]||[]).forEach(g=>{
+                  if(key==="wins"&&!g.absent&&g.position===1) cum++;
+                  if(key==="sotd") cum+=(g.sotd||0);
+                });
+              }
+              entry[p.name]=cum;
+            });
+            return entry;
+          });
+          const PlayerRow=({p,i,showSwatch,showMvp=true})=>{
             const col=LINE_COLORS[standings.findIndex(x=>x.id===p.id)%LINE_COLORS.length];
             const on=chartPlayers.includes(p.id);
             const mv=metricVal(p);
@@ -924,7 +939,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     {p.sotdTotal>0&&<span style={{fontSize:"0.58rem",color:C.gold,flexShrink:0}}>⭐{p.sotdTotal}</span>}
                   </div>
                   <div style={{display:"flex",gap:"8px"}}>
-                    <span style={{fontSize:"0.6rem",color:C.blue}}>MVP {p.mvp}{p.mvp!=="—"?"%":""}</span>
+                    {showMvp&&<span style={{fontSize:"0.6rem",color:C.blue}}>MVP {p.mvp}{p.mvp!=="—"?"%":""}</span>}
                     <span style={{fontSize:"0.6rem",color:C.greenLight}}>W{p.wins}</span>
                     <span style={{fontSize:"0.6rem",color:C.muted}}>Abs {p.absences}</span>
                   </div>
@@ -946,14 +961,18 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               
 
               {standingsView==="list"&&(
-                <div style={{flex:1,overflowY:"auto",minHeight:0}}>
-                  <div style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap"}}>
+                <div style={{flex:1,overflowY:"auto",minHeight:0,scrollbarWidth:"none",msOverflowStyle:"none"}}>
+                  <style>{`.no-scroll::-webkit-scrollbar{display:none}`}</style>
+                  <div className="no-scroll" style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap"}}>
                     {[["pts","Points"],["wins","Wins"],["mvp","MVP %"],["sotd","SOTD"],["abs","Absences"]].map(([k,label])=>(
                       <button key={k} style={pillSt(standingsSort===k)} onClick={()=>setStandingsSort(k)}>{label}</button>
                     ))}
                   </div>
-                  {sortedStandings.map((p,i)=><PlayerRow key={p.id} p={p} i={i} showSwatch={false}/>)}
-                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts.</p>
+                  {sortedStandings.map((p,i)=>{
+                    const showMvp=p.weeksAttended>=minGamesForMvp;
+                    return <PlayerRow key={p.id} p={p} i={i} showSwatch={false} showMvp={showMvp}/>;
+                  })}
+                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts (min {minGamesForMvp} weeks played).</p>
                 </div>
               )}
 
@@ -966,7 +985,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   </div>
                   <div style={{flex:1,minHeight:0}}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={standingsMetric==="pts"?chartData:buildChartData(players.filter(p=>chartPlayers.includes(p.id)),weeklyGames,maxWk)} margin={{top:4,right:8,left:0,bottom:0}}>
+                      <LineChart data={standingsMetric==="pts"?chartData:buildMetricData(standingsMetric)} margin={{top:4,right:8,left:0,bottom:0}}>
                         <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
                         <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
                         <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
@@ -976,7 +995,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     </ResponsiveContainer>
                   </div>
                   <div style={{display:"flex",gap:"4px",flexWrap:"wrap",padding:"8px 0",justifyContent:"center"}}>
-                    {players.map((p,i)=>{const on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"3px 9px",borderRadius:"12px",border:`1px solid ${on?col:"#fff"}`,background:on?col+"22":"transparent",color:on?col:"#fff",fontSize:"0.6rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name.split(" ")[0]}</button>;})}
+                    {players.map((p,i)=>{const on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"3px 9px",borderRadius:"12px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.6rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name.split(" ")[0]}</button>;})}
                   </div>
                 </div>
               )}
