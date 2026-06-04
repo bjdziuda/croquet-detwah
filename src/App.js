@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import CroquetGame from './CroquetGame';
+
 
 const firebaseConfig = {
   apiKey: "AIzaSyCwD4CXsZ91eD83ZKwn1s3lTHHt8Lyqfpw", // netlify-secrets-ignore
@@ -703,10 +703,9 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["grid","📊 Grid"],["venues","📍 Venues"],["profile","👤 Profile"],
+  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
     ["logo","🏆 League Honours"],
-    ...(user?[["minigame","⛳ Mini-Game"]]:[]),
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
   ];
 
@@ -883,7 +882,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
       {note&&<div style={{background:C.accent,color:C.bg,textAlign:"center",padding:"8px",fontSize:"0.85rem",fontWeight:"bold"}}>{note}</div>}
       {showPhotoPicker&&<CloudinaryPicker appState={appState} onSelect={url=>update({leagueLogo:url})} onClose={()=>setShowPhotoPicker(false)}/>}
-      <CommissionerOverlays tab={tab} user={user} setTab={setTab} appState={appState} isAdmin={isAdmin}/>
+      
 
       <div style={{maxWidth:"1020px",margin:"0 auto",padding:"16px 10px"}}>
 
@@ -973,13 +972,38 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           const weeksWithData=Array.from({length:maxWk},(_,i)=>i+1).filter(wk=>players.some(p=>(weeklyGames[p.id]?.[wk]||[]).length>0));
           const absent=selWk?players.filter(p=>!(weeklyGames[p.id]?.[parseInt(selWk)]||[]).some(g=>!g.absent)):[];
           const rounds=selWk?getRounds(parseInt(selWk)):[];
+          const getWeekLeaders=(wk)=>{
+            const totals=players.map(p=>{
+              const games=weeklyGames[p.id]?.[wk]||[];
+              const pts=games.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
+              const absent=games.every(g=>g.absent);
+              return{name:p.name,pts,absent};
+            }).filter(p=>!p.absent&&p.pts>0);
+            if(!totals.length) return[];
+            const max=Math.max(...totals.map(p=>p.pts));
+            return totals.filter(p=>p.pts===max);
+          };
+          const weekLeaders=selWk?getWeekLeaders(parseInt(selWk)):[];
           return(
             <div>
-              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Weekly Results</h2>
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Scores</h2>
               <select style={inputSt} value={selWk} onChange={e=>setGridSelWeek(e.target.value)}>
                 <option value="">Select a week…</option>
                 {weeksWithData.map(w=><option key={w} value={w}>Week {w}</option>)}
               </select>
+              {selWk&&weekLeaders.length>0&&(
+                <div style={{margin:"12px 0",padding:"10px 14px",background:weekLeaders.length>1?"#1a1a2e":"#1e2a0e",border:`1px solid ${weekLeaders.length>1?C.blue:C.accent}`,borderRadius:"8px",display:"flex",alignItems:"center",gap:"10px"}}>
+                  <span style={{fontSize:"1.2rem"}}>{weekLeaders.length>1?"🤝":"🏆"}</span>
+                  <div>
+                    <div style={{fontSize:"0.65rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{weekLeaders.length>1?"TIED — MOST POINTS":"MOST POINTS"}</div>
+                    <div style={{color:weekLeaders.length>1?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>
+                      {weekLeaders.map(l=>l.name).join(" & ")}
+                      <span style={{color:C.muted,fontWeight:"normal",fontSize:"0.75rem"}}> · {weekLeaders[0].pts} pts</span>
+                    </div>
+                    {weekLeaders.length>1&&<div style={{fontSize:"0.62rem",color:C.muted,marginTop:"3px"}}>Tiebreaker pending</div>}
+                  </div>
+                </div>
+              )}
               {selWk&&rounds.length===0&&<p style={{color:C.muted,marginTop:"12px"}}>No data for this week.</p>}
               {selWk&&rounds.map(round=>{
                 const grps=getGroups(parseInt(selWk),round);
@@ -2187,34 +2211,3 @@ function CloudinaryPicker({onSelect, onClose, appState}) {
   );
 }
 
-// ── Commissioner-only overlays ──────────────────────────────────────────────
-
-function CommissionerOverlays({tab, user, setTab, appState, isAdmin}) {
-  if(tab!=="minigame") return null;
-
-  const leagueMember = appState?.players?.find(p=>p.name===user.name);
-  const currentPlayer = {
-    id:       String(leagueMember?.id   || user.name),
-    name:     leagueMember?.name || user.name,
-    imageUrl: leagueMember?.imageUrl || null,
-    isMember: !!(leagueMember || isAdmin),
-    isAdmin:  isAdmin,
-  };
-
-  return(
-    <div style={{position:"fixed",inset:0,zIndex:500}}>
-      <button
-        onClick={()=>setTab("standings")}
-        style={{position:"absolute",top:8,left:8,zIndex:510,
-          background:"rgba(0,0,0,0.75)",color:"#e8d080",
-          border:"1px solid #2a4a2a",borderRadius:6,
-          padding:"5px 14px",cursor:"pointer",
-          fontFamily:"Georgia,serif",fontSize:12,letterSpacing:1}}>
-        ← League
-      </button>
-      <CroquetGame
-        currentPlayer={currentPlayer}
-        isCommissioner={user?.role==="superadmin"}/>
-    </div>
-  );
-}
