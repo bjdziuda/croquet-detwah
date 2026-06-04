@@ -411,6 +411,9 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [gridEditPos, setGridEditPos]       = useState("");
   const [gridEditSotd, setGridEditSotd]     = useState(0);
   const [gridSelWeek, setGridSelWeek]       = useState("");
+  const [standingsView, setStandingsView]   = useState("combined");
+  const [standingsSort, setStandingsSort]   = useState("pts");
+  const [standingsMetric, setStandingsMetric] = useState("pts");
 
   const votes = appState.votes || {};
 
@@ -703,7 +706,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["chart","📈 Progress"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],
+  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
@@ -886,59 +889,130 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
       <div style={{maxWidth:"1020px",margin:"0 auto",padding:"16px 10px"}}>
 
-        {tab==="standings"&&(
-          <div>
-            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Season Standings</h2>
-            {standings.length===0&&<p style={{color:C.muted}}>No players yet{isAdmin?" — add some in the Players tab":"."}!</p>}
-            {/* Mobile: simplified card layout */}
-            <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-              {standings.map((p,i)=>(
-                <div key={p.id} style={{background:i===0&&p.pts>0?`linear-gradient(135deg,#1e3018,#253d20)`:C.card,border:`1px solid ${i===0&&p.pts>0?C.accent+"55":C.border}`,borderRadius:"9px",padding:"10px 12px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
-                    <Medal rank={i+1}/>
-                    {p.imageUrl
-                      ? <img src={p.imageUrl} alt={p.name} style={{width:"32px",height:"32px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${i===0&&p.pts>0?C.accent:C.border}`}}/>
-                      : <div style={{width:"32px",height:"32px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.9rem",flexShrink:0}}>👤</div>
-                    }
-                    <span style={{fontWeight:"bold",color:i===0&&p.pts>0?C.accentLight:C.cream,fontSize:"0.95rem",flex:1}}>{p.name}</span>
-                    {p.joinedWeek>1&&<span style={{fontSize:"0.6rem",color:C.accent,background:C.accent+"22",padding:"1px 5px",borderRadius:"3px"}}>Wk {p.joinedWeek}</span>}
-                    <span style={{color:C.accent,fontWeight:"bold",fontSize:"1.1rem"}}>{p.pts}</span>
+        {tab==="standings"&&(()=>{
+          const sortedStandings=[...standings].sort((a,b)=>{
+            if(standingsSort==="abs") return a.absences-b.absences;
+            if(standingsSort==="mvp") return parseFloat(b.mvp)-parseFloat(a.mvp);
+            if(standingsSort==="wins") return b.wins-a.wins;
+            if(standingsSort==="sotd") return b.sotdTotal-a.sotdTotal;
+            return b.pts-a.pts;
+          });
+          const metricVal=(p)=>{
+            if(standingsMetric==="wins") return{val:p.wins,col:C.greenLight};
+            if(standingsMetric==="mvp") return{val:p.mvp!=="—"?p.mvp+"%":"—",col:C.blue};
+            if(standingsMetric==="sotd") return{val:p.sotdTotal,col:C.gold};
+            if(standingsMetric==="abs") return{val:p.absences,col:C.muted};
+            return{val:p.pts,col:C.accent};
+          };
+          const btnSt2=(active)=>({padding:"6px 0",borderRadius:"6px",border:"1px solid #fff",background:active?"#2a4a2a":"transparent",borderColor:active?C.accent:"#fff",color:active?C.accentLight:"#fff",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:"bold",flex:1,textAlign:"center"});
+          const pillSt=(active)=>({padding:"4px 10px",borderRadius:"12px",border:`1px solid ${active?C.accent:"#fff"}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:"#fff",fontSize:"0.62rem",fontFamily:"Georgia,serif",cursor:"pointer"});
+          const PlayerRow=({p,i,showSwatch})=>{
+            const col=LINE_COLORS[standings.findIndex(x=>x.id===p.id)%LINE_COLORS.length];
+            const on=chartPlayers.includes(p.id);
+            const mv=metricVal(p);
+            return(
+              <div onClick={()=>standingsView==="combined"?toggleChart(p.id):null}
+                style={{display:"flex",alignItems:"center",gap:"7px",padding:"5px 8px",borderRadius:"7px",marginBottom:"3px",
+                  border:`1px solid ${standingsView==="combined"&&on?col:"#252525"}`,
+                  background:standingsView==="combined"&&on?"#1a2a1e":"#161616",
+                  cursor:standingsView==="combined"?"pointer":"default"}}>
+                <span style={{fontSize:"0.6rem",color:i===0?"#d4a843":"#666",minWidth:"16px",textAlign:"right",flexShrink:0}}>#{i+1}</span>
+                {p.imageUrl
+                  ? <img src={p.imageUrl} alt={p.name} style={{width:"28px",height:"28px",borderRadius:"50%",objectFit:"cover",border:`1.5px solid ${standingsView==="combined"&&on?col:"#444"}`,flexShrink:0}}/>
+                  : <div style={{width:"28px",height:"28px",borderRadius:"50%",background:"#2a2a2a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.62rem",color:standingsView==="combined"&&on?col:"#999",border:`1.5px solid ${standingsView==="combined"&&on?col:"#444"}`,flexShrink:0}}>{p.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</div>
+                }
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"2px"}}>
+                    <span style={{fontSize:"0.76rem",color:"#e8dcc8",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
+                    {p.sotdTotal>0&&<span style={{fontSize:"0.58rem",color:C.gold,flexShrink:0}}>⭐{p.sotdTotal}</span>}
                   </div>
-                  <div style={{display:"flex",gap:"12px",flexWrap:"wrap"}}>
-                    <span style={{color:C.blue,fontSize:"0.75rem"}}>MVP: {p.mvp}{p.mvp!=="—"?"%":""}</span>
-                    <span style={{color:C.greenLight,fontSize:"0.75rem"}}>Wins: {p.wins}</span>
-                    <span style={{color:C.muted,fontSize:"0.75rem"}}>Att: {p.weeksAttended}</span>
-                    {p.sotdTotal>0&&<span style={{color:C.gold,fontSize:"0.75rem"}}>⭐{p.sotdTotal}</span>}
-                    <span style={{color:C.muted,fontSize:"0.75rem"}}>Abs: {p.absences}</span>
+                  <div style={{display:"flex",gap:"8px"}}>
+                    <span style={{fontSize:"0.6rem",color:C.blue}}>MVP {p.mvp}{p.mvp!=="—"?"%":""}</span>
+                    <span style={{fontSize:"0.6rem",color:C.greenLight}}>W{p.wins}</span>
+                    <span style={{fontSize:"0.6rem",color:C.muted}}>Abs {p.absences}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-            <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts.</p>
-          </div>
-        )}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"2px",flexShrink:0}}>
+                  <span style={{fontSize:"0.85rem",fontWeight:"bold",color:mv.col,lineHeight:1}}>{mv.val}</span>
+                  {showSwatch&&<div style={{width:"7px",height:"7px",borderRadius:"1px",background:on?col:"#555"}}/>}
+                </div>
+              </div>
+            );
+          };
+          return(
+            <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 120px)"}}>
+              <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
+                <button style={btnSt2(standingsView==="combined")} onClick={()=>setStandingsView("combined")}>⚑ Combined</button>
+                <button style={btnSt2(standingsView==="list")} onClick={()=>setStandingsView("list")}>≡ List</button>
+                <button style={btnSt2(standingsView==="chart")} onClick={()=>setStandingsView("chart")}>📈 Chart</button>
+              </div>
 
-        {tab==="chart"&&(
-          <div>
-            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"10px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Season Progress</h2>
-            {players.length===0&&<p style={{color:C.muted}}>No players yet.</p>}
-            <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"14px"}}>
-              {players.map((p,i)=>{const on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"4px 10px",borderRadius:"20px",border:`1px solid ${on?col:C.border}`,background:on?col+"33":"transparent",color:on?col:C.muted,cursor:"pointer",fontSize:"0.74rem",fontFamily:"Georgia,serif"}}>{p.name}</button>;})}
+              {standingsView==="combined"&&(
+                <>
+                  <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+                    {standings.length===0&&<p style={{color:C.muted}}>No players yet{isAdmin?" — add some in the Players tab":"."}!</p>}
+                    {standings.map((p,i)=><PlayerRow key={p.id} p={p} i={i} showSwatch={true}/>)}
+                    <div style={{height:"8px"}}/>
+                  </div>
+                  <div style={{height:"16px",background:`linear-gradient(transparent,${C.bg})`,marginTop:"-16px",pointerEvents:"none",flexShrink:0}}/>
+                  <div style={{flexShrink:0,borderTop:`1px solid ${C.border}`,background:"#131313",padding:"8px 8px 6px 4px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
+                      <span style={{fontSize:"0.62rem",color:"#999",letterSpacing:"0.06em"}}>Season progress</span>
+                      <span style={{fontSize:"0.58rem",color:"#666"}}>Tap player to toggle</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={160}>
+                      <LineChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+                        <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
+                        <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
+                        <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
+                        {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </>
+              )}
+
+              {standingsView==="list"&&(
+                <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+                  <div style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap"}}>
+                    {[["pts","Points"],["wins","Wins"],["mvp","MVP %"],["sotd","SOTD"],["abs","Absences"]].map(([k,label])=>(
+                      <button key={k} style={pillSt(standingsSort===k)} onClick={()=>setStandingsSort(k)}>{label}</button>
+                    ))}
+                  </div>
+                  {sortedStandings.map((p,i)=><PlayerRow key={p.id} p={p} i={i} showSwatch={false}/>)}
+                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts.</p>
+                </div>
+              )}
+
+              {standingsView==="chart"&&(
+                <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
+                  <div style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap",justifyContent:"center"}}>
+                    {[["pts","Cumulative pts"],["wins","Wins"],["sotd","SOTD"]].map(([k,label])=>(
+                      <button key={k} style={pillSt(standingsMetric===k)} onClick={()=>setStandingsMetric(k)}>{label}</button>
+                    ))}
+                  </div>
+                  <div style={{flex:1,minHeight:0}}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={standingsMetric==="pts"?chartData:buildChartData(players.filter(p=>chartPlayers.includes(p.id)),weeklyGames,maxWk)} margin={{top:4,right:8,left:0,bottom:0}}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+                        <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
+                        <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
+                        <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
+                        {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{display:"flex",gap:"4px",flexWrap:"wrap",padding:"8px 0",justifyContent:"center"}}>
+                    {players.map((p,i)=>{const on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"3px 9px",borderRadius:"12px",border:`1px solid ${on?col:"#fff"}`,background:on?col+"22":"transparent",color:on?col:"#fff",fontSize:"0.6rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name.split(" ")[0]}</button>;})}
+                  </div>
+                </div>
+              )}
             </div>
-            <div style={{...cardSt,padding:"12px 4px 12px 0"}}>
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={chartData} margin={{top:8,right:12,left:0,bottom:0}}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                  <XAxis dataKey="week" tick={{fill:C.muted,fontSize:10,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
-                  <YAxis tick={{fill:C.muted,fontSize:10,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
-                  <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.75rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
-                  <Legend wrapperStyle={{fontFamily:"Georgia,serif",fontSize:"0.7rem",paddingTop:"8px"}}/>
-                  {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={2} dot={{r:2}} activeDot={{r:5}}/>)}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
+          );
+        })()}
+
+        
 
        
 
