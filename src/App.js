@@ -409,6 +409,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [gameRound, setGameRound]           = useState(1);
   const [gridEditKey, setGridEditKey]       = useState(null);
   const [gridEditPos, setGridEditPos]       = useState("");
+  const [gridEditSotd, setGridEditSotd]     = useState(0);
   const [gridSelWeek, setGridSelWeek]       = useState("");
 
   const votes = appState.votes || {};
@@ -962,11 +963,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             });
             return Object.values(grps).sort((a,b)=>a.label.localeCompare(b.label));
           };
-          const saveGridPos=(pid,wk,gi,newPos)=>{
+          const saveGridPos=(pid,wk,gi,newPos,newSotd)=>{
             const entry=(weeklyGames[pid]?.[wk]||[])[gi];
             if(!entry) return;
             const newPts=newPos===entry.actualGroupSize?0:calcPoints(newPos,entry.groupSize);
-            const nwg={...weeklyGames,[pid]:{...weeklyGames[pid],[wk]:(weeklyGames[pid][wk]||[]).map((g,i)=>i===gi?{...g,position:newPos,pts:newPts}:g)}};
+            const nwg={...weeklyGames,[pid]:{...weeklyGames[pid],[wk]:(weeklyGames[pid][wk]||[]).map((g,i)=>i===gi?{...g,position:newPos,pts:newPts,sotd:parseInt(newSotd)||0}:g)}};
             update({weeklyGames:nwg}); setGridEditKey(null); notify("Position updated!");
           };
           const weeksWithData=Array.from({length:maxWk},(_,i)=>i+1).filter(wk=>players.some(p=>(weeklyGames[p.id]?.[wk]||[]).length>0));
@@ -1016,7 +1017,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                     <span style={{flex:1,fontSize:"0.82rem",color:C.cream,fontWeight:"bold"}}>{p.name}</span>
                                     {p.sotd>0&&<span style={{fontSize:"0.7rem"}}>⭐</span>}
                                     <span style={{fontSize:"0.78rem",color:C.accent,fontWeight:"bold"}}>{p.pts}pt</span>
-                                    {isAdmin&&<button onClick={()=>{setGridEditKey(isEditing?null:ekey);setGridEditPos(String(p.position));}}
+                                    {isAdmin&&<button onClick={()=>{setGridEditKey(isEditing?null:ekey);setGridEditPos(String(p.position));setGridEditSotd(p.sotd||0);}}
                                       style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",
                                         padding:"1px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✎</button>}
                                   </div>
@@ -1028,8 +1029,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                           <option key={n} value={n}>{ordinal(n)}</option>
                                         ))}
                                       </select>
+                                      <div style={{fontSize:"0.65rem",color:C.muted,marginBottom:"6px",letterSpacing:"0.06em"}}>SHOT OF THE DAY</div>
+                                      <input type="number" min="0" max="10" style={{...inputSt,marginBottom:"8px"}} value={gridEditSotd} onChange={e=>setGridEditSotd(e.target.value)}/>
                                       <div style={{display:"flex",gap:"6px"}}>
-                                        <button onClick={()=>saveGridPos(p.pid,parseInt(selWk),p.gi,parseInt(gridEditPos))}
+                                        <button onClick={()=>saveGridPos(p.pid,parseInt(selWk),p.gi,parseInt(gridEditPos),gridEditSotd)}
                                           style={{...btnSt(C.green,true),padding:"5px 14px",fontSize:"0.78rem"}}>Save</button>
                                         <button onClick={()=>setGridEditKey(null)}
                                           style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",
