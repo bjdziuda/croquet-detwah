@@ -411,7 +411,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [gridEditPos, setGridEditPos]       = useState("");
   const [gridEditSotd, setGridEditSotd]     = useState(0);
   const [gridSelWeek, setGridSelWeek]       = useState("");
-  const [standingsView, setStandingsView]   = useState("combined");
+  const [standingsView, setStandingsView]   = useState("list");
   const [standingsSort, setStandingsSort]   = useState("pts");
   const [standingsMetric, setStandingsMetric] = useState("pts");
 
@@ -911,15 +911,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             const on=chartPlayers.includes(p.id);
             const mv=metricVal(p);
             return(
-              <div onClick={()=>standingsView==="combined"?toggleChart(p.id):null}
-                style={{display:"flex",alignItems:"center",gap:"7px",padding:"5px 8px",borderRadius:"7px",marginBottom:"3px",
-                  border:`1px solid ${standingsView==="combined"&&on?col:"#252525"}`,
-                  background:standingsView==="combined"&&on?"#1a2a1e":"#161616",
-                  cursor:standingsView==="combined"?"pointer":"default"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"7px",padding:"5px 8px",borderRadius:"7px",marginBottom:"3px",
+                  border:"1px solid #252525",background:"#161616",cursor:"default"}}>
                 <span style={{fontSize:"0.6rem",color:i===0?"#d4a843":"#666",minWidth:"16px",textAlign:"right",flexShrink:0}}>#{i+1}</span>
                 {p.imageUrl
-                  ? <img src={p.imageUrl} alt={p.name} style={{width:"28px",height:"28px",borderRadius:"50%",objectFit:"cover",border:`1.5px solid ${standingsView==="combined"&&on?col:"#444"}`,flexShrink:0}}/>
-                  : <div style={{width:"28px",height:"28px",borderRadius:"50%",background:"#2a2a2a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.62rem",color:standingsView==="combined"&&on?col:"#999",border:`1.5px solid ${standingsView==="combined"&&on?col:"#444"}`,flexShrink:0}}>{p.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</div>
+                  ? <img src={p.imageUrl} alt={p.name} style={{width:"28px",height:"28px",borderRadius:"50%",objectFit:"cover",border:"1.5px solid #444",flexShrink:0}}/>
+                  : <div style={{width:"28px",height:"28px",borderRadius:"50%",background:"#2a2a2a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.62rem",color:"#999",border:"1.5px solid #444",flexShrink:0}}>{p.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</div>
                 }
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"2px"}}>
@@ -942,36 +939,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           return(
             <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 120px)"}}>
               <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
-                <button style={btnSt2(standingsView==="combined")} onClick={()=>setStandingsView("combined")}>⚑ Combined</button>
-                <button style={btnSt2(standingsView==="list")} onClick={()=>setStandingsView("list")}>≡ List</button>
+                <button style={btnSt2(standingsView==="list")} onClick={()=>setStandingsView("list")}>≡ Standings</button>
                 <button style={btnSt2(standingsView==="chart")} onClick={()=>setStandingsView("chart")}>📈 Chart</button>
               </div>
 
-              {standingsView==="combined"&&(
-                <>
-                  <div style={{flex:1,overflowY:"auto",minHeight:0}}>
-                    {standings.length===0&&<p style={{color:C.muted}}>No players yet{isAdmin?" — add some in the Players tab":"."}!</p>}
-                    {standings.map((p,i)=><PlayerRow key={p.id} p={p} i={i} showSwatch={true}/>)}
-                    <div style={{height:"8px"}}/>
-                  </div>
-                  <div style={{height:"16px",background:`linear-gradient(transparent,${C.bg})`,marginTop:"-16px",pointerEvents:"none",flexShrink:0}}/>
-                  <div style={{flexShrink:0,borderTop:`1px solid ${C.border}`,background:"#131313",padding:"8px 8px 6px 4px"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}}>
-                      <span style={{fontSize:"0.62rem",color:"#999",letterSpacing:"0.06em"}}>Season progress</span>
-                      <span style={{fontSize:"0.58rem",color:"#666"}}>Tap player to toggle</span>
-                    </div>
-                    <ResponsiveContainer width="100%" height={160}>
-                      <LineChart data={chartData} margin={{top:4,right:8,left:0,bottom:0}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
-                        <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
-                        <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
-                        {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </>
-              )}
+              
 
               {standingsView==="list"&&(
                 <div style={{flex:1,overflowY:"auto",minHeight:0}}>
