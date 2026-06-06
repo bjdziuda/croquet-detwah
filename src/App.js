@@ -906,7 +906,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           };
           const btnSt2=(active)=>({padding:"6px 0",borderRadius:"6px",border:`1px solid ${active?C.accent:C.cream}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:C.cream,fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:"bold",flex:1,textAlign:"center"});
           const pillSt=(active)=>({padding:"4px 10px",borderRadius:"12px",border:`1px solid ${active?C.accent:C.cream}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:C.cream,fontSize:"0.62rem",fontFamily:"Georgia,serif",cursor:"pointer"});
-          const minGamesForMvp=Math.ceil(maxWk/3);
+          const minGamesForMvp=2;
           const buildMetricData=(key)=>Array.from({length:maxWk},(_,w)=>{
             const entry={week:`Wk ${w+1}`};
             players.filter(p=>chartPlayers.includes(p.id)).forEach(p=>{
@@ -972,7 +972,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     const showMvp=p.weeksAttended>=minGamesForMvp;
                     return <PlayerRow key={p.id} p={p} i={i} showSwatch={false} showMvp={showMvp}/>;
                   })}
-                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts (min {minGamesForMvp} weeks played).</p>
+                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts (min 2 weeks played).</p>
                 </div>
               )}
 
@@ -994,8 +994,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <div style={{display:"flex",gap:"4px",flexWrap:"wrap",padding:"8px 0",justifyContent:"center"}}>
-                    {players.map((p,i)=>{const on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"3px 9px",borderRadius:"12px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.6rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name.split(" ")[0]}</button>;})}
+                  <div style={{display:"flex",flexDirection:"column",gap:"3px",padding:"6px 0",alignItems:"flex-start",maxHeight:"120px",overflowY:"auto",scrollbarWidth:"none"}}>
+                    {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map((p)=>{const i=players.findIndex(x=>x.id===p.id),on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"2px 9px",borderRadius:"10px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.6rem",fontFamily:"Georgia,serif",cursor:"pointer",textAlign:"left",whiteSpace:"nowrap"}}>{p.name}</button>;})}
                   </div>
                 </div>
               )}
