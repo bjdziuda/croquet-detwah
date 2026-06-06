@@ -978,10 +978,16 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
 
               {standingsView==="chart"&&(
                 <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
-                  <div style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap",justifyContent:"center"}}>
+                  <div style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap",justifyContent:"center",alignItems:"center"}}>
                     {[["pts","Cumulative pts"],["wins","Wins"],["sotd","SOTD"]].map(([k,label])=>(
                       <button key={k} style={pillSt(standingsMetric===k)} onClick={()=>setStandingsMetric(k)}>{label}</button>
                     ))}
+                    <button style={{...pillSt(false),borderColor:C.gold,color:C.gold,marginLeft:"6px"}} onClick={()=>{
+                      const top5=standings.slice(0,5).map(p=>p.id);
+                      const me=players.find(p=>p.name===user.name);
+                      const ids=me&&!top5.includes(me.id)?[...top5,me.id]:top5;
+                      setChartPlayers(ids);
+                    }}>⭐ Top 5{players.find(p=>p.name===user.name)&&!standings.slice(0,5).some(p=>p.name===user.name)?" + Me":""}</button>
                   </div>
                   <div style={{width:"100%",minHeight:0,height:"260px"}}>
                     <ResponsiveContainer width="100%" height="100%">
