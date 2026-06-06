@@ -892,7 +892,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         {tab==="standings"&&(()=>{
           const sortedStandings=[...standings].sort((a,b)=>{
             if(standingsSort==="abs") return a.absences-b.absences;
-            if(standingsSort==="mvp") return parseFloat(b.mvp)-parseFloat(a.mvp);
+            if(standingsSort==="mvp"){const am=parseFloat(a.mvp),bm=parseFloat(b.mvp);if(isNaN(am)&&isNaN(bm))return 0;if(isNaN(am))return 1;if(isNaN(bm))return -1;return bm-am;}
             if(standingsSort==="wins") return b.wins-a.wins;
             if(standingsSort==="sotd") return b.sotdTotal-a.sotdTotal;
             return b.pts-a.pts;
@@ -983,19 +983,21 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       <button key={k} style={pillSt(standingsMetric===k)} onClick={()=>setStandingsMetric(k)}>{label}</button>
                     ))}
                   </div>
-                  <div style={{flex:1,minHeight:0}}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={standingsMetric==="pts"?chartData:buildMetricData(standingsMetric)} margin={{top:4,right:8,left:0,bottom:0}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
-                        <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
-                        <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
-                        <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
-                        {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:"3px",padding:"6px 0",alignItems:"flex-start",maxHeight:"120px",overflowY:"auto",scrollbarWidth:"none"}}>
-                    {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map((p)=>{const i=players.findIndex(x=>x.id===p.id),on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"2px 9px",borderRadius:"10px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.6rem",fontFamily:"Georgia,serif",cursor:"pointer",textAlign:"left",whiteSpace:"nowrap"}}>{p.name}</button>;})}
+                  <div style={{display:"flex",flexDirection:"row",alignItems:"stretch",gap:"8px"}}>
+                    <div style={{display:"flex",flexDirection:"column",gap:"3px",padding:"4px 0",alignItems:"flex-start",minWidth:"80px"}}>
+                      {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map((p)=>{const i=players.findIndex(x=>x.id===p.id),on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"2px 6px",borderRadius:"8px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.55rem",fontFamily:"Georgia,serif",cursor:"pointer",textAlign:"left",whiteSpace:"nowrap"}}>{p.name}</button>;})}
+                    </div>
+                    <div style={{flex:1,minHeight:0}}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={standingsMetric==="pts"?chartData:buildMetricData(standingsMetric)} margin={{top:4,right:8,left:0,bottom:0}}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+                          <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
+                          <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
+                          <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
+                          {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
               )}
