@@ -674,7 +674,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     nwg[pidStr]={...(nwg[pidStr]||{})};
     nwg[pidStr][wk]=[...(nwg[pidStr][wk]||[]).filter(g=>!g.absent),
       {gameId:addPlayerGroupId,position:insertPos,groupSize:maxGs,actualGroupSize:newGroupSize,
-       pts:calcPoints(insertPos,maxGs),sotd:parseInt(addPlayerSotd)||0,absent:false,label:ref.label||"Gp 1",venue:ref.venue||"",date:ref.date||""}
+       pts:calcPoints(insertPos,maxGs),sotd:parseInt(addPlayerSotd)||0,absent:false,label:ref.label||"Gp 1",venue:ref.venue||"",date:ref.date||"",gameRound:ref.gameRound||1}
     ];
     update({weeklyGames:nwg});
     setAddPlayerModal(null); setAddPlayerPid(""); setAddPlayerGroupId(""); setAddPlayerPos(""); setAddPlayerSotd(0);
