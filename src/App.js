@@ -959,7 +959,58 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 <button style={btnSt2(standingsView==="chart")} onClick={()=>setStandingsView("chart")}>📈 Chart</button>
               </div>
 
-              
+              {(()=>{
+                const lastWk=Math.max(0,...Object.values(weeklyGames).flatMap(wg=>Object.entries(wg).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>parseInt(w))));
+                if(!lastWk) return null;
+                const lastWkTotals=players.map(p=>{
+                  const games=weeklyGames[p.id]?.[lastWk]||[];
+                  const pts=games.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
+                  const absent=games.every(g=>g.absent);
+                  return{name:p.name,imageUrl:p.imageUrl,pts,absent};
+                }).filter(p=>!p.absent&&p.pts>0);
+                const maxPts=Math.max(0,...lastWkTotals.map(p=>p.pts));
+                const winners=lastWkTotals.filter(p=>p.pts===maxPts);
+                const venueName=(()=>{
+                  for(const p of players){
+                    const gs=weeklyGames[p.id]?.[lastWk]||[];
+                    const g=gs.find(g=>!g.absent&&g.venue);
+                    if(g?.venue) return g.venue;
+                  }
+                  return null;
+                })();
+                const venueObj=venueName?venues.find(v=>v.name===venueName):null;
+                if(!winners.length) return null;
+                const isTie=winners.length>1;
+                return(
+                  <div style={{marginBottom:"10px",borderRadius:"10px",overflow:"hidden",border:`1px solid ${isTie?C.blue+"66":C.accent+"66"}`}}>
+                    {venueObj?.imageUrl&&(
+                      <div style={{position:"relative",height:"90px",overflow:"hidden"}}>
+                        <img src={venueObj.imageUrl} alt={venueObj.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",filter:"brightness(0.55)"}}/>
+                        <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,#0e0e0e 100%)"}}/>
+                        <div style={{position:"absolute",bottom:"8px",left:"12px",fontSize:"0.62rem",color:C.muted,letterSpacing:"0.08em"}}>{venueObj.name}</div>
+                      </div>
+                    )}
+                    <div style={{padding:"10px 14px",background:isTie?"#0e101a":"#0e1a0e",display:"flex",alignItems:"center",gap:"10px"}}>
+                      <span style={{fontSize:"1.2rem"}}>{isTie?"🤝":"🏆"}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:"0.6rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>
+                          {isTie?"WEEK "+lastWk+" — TIED":"WEEK "+lastWk+" WINNER"}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
+                          {winners.map(w=>(
+                            <div key={w.name} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                              {w.imageUrl&&<img src={w.imageUrl} alt={w.name} style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",border:`1.5px solid ${isTie?C.blue:C.accent}`}}/>}
+                              <span style={{color:isTie?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>{w.name}</span>
+                            </div>
+                          ))}
+                          <span style={{color:C.muted,fontWeight:"normal",fontSize:"0.72rem"}}>· {maxPts} pts</span>
+                        </div>
+                        {!venueObj?.imageUrl&&venueName&&<div style={{fontSize:"0.6rem",color:C.muted,marginTop:"2px"}}>📍 {venueName}</div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {standingsView==="list"&&(
                 <div style={{flex:1,overflowY:"auto",minHeight:0,scrollbarWidth:"none",msOverflowStyle:"none"}}>
