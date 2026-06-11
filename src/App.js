@@ -163,13 +163,34 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
           {leagueLogo&&<img src={leagueLogo} style={{width:"64px",height:"64px",borderRadius:"12px",objectFit:"cover",marginBottom:"10px"}}/>}
           <h1 style={{color:C.cream,fontSize:"1.8rem",margin:"0 0 4px",letterSpacing:"0.04em"}}>{leagueName||"Croquet De-Twah"}</h1>
           <p style={{color:C.muted,fontSize:"0.82rem",margin:0}}>2026 Season · Week {wk}</p>
-          {nextMatch&&<p style={{color:C.accentLight,fontSize:"0.82rem",margin:"4px 0 0"}}>📅 {nextMatch.date} · {nextMatch.name}</p>}
         </div>
 
-        {/* Last week winner + venue banner */}
+        {/* Next venue image card */}
+        {nextMatch&&(
+          <div style={{marginBottom:"16px",borderRadius:"10px",overflow:"hidden",border:`1px solid ${C.accent}44`}}>
+            {nextMatch.imageUrl?(
+              <div style={{position:"relative",height:"130px",overflow:"hidden"}}>
+                <img src={nextMatch.imageUrl} alt={nextMatch.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",filter:"brightness(0.45)"}}/>
+                <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 20%,#0e0e0e 100%)"}}/>
+                <div style={{position:"absolute",bottom:0,left:0,right:0,padding:"12px 14px"}}>
+                  <div style={{fontSize:"0.6rem",color:C.accent,letterSpacing:"0.12em",marginBottom:"3px",fontWeight:"bold"}}>NEXT MATCH · WEEK {wk}</div>
+                  <div style={{fontSize:"0.92rem",color:C.cream,fontWeight:"bold",marginBottom:"2px"}}>{nextMatch.name}</div>
+                  <div style={{fontSize:"0.72rem",color:C.muted}}>📅 {nextMatch.date}</div>
+                </div>
+              </div>
+            ):(
+              <div style={{padding:"12px 14px",background:C.card}}>
+                <div style={{fontSize:"0.6rem",color:C.accent,letterSpacing:"0.12em",marginBottom:"3px",fontWeight:"bold"}}>NEXT MATCH · WEEK {wk}</div>
+                <div style={{fontSize:"0.88rem",color:C.cream,fontWeight:"bold"}}>📍 {nextMatch.name}</div>
+                <div style={{fontSize:"0.72rem",color:C.muted,marginTop:"2px"}}>📅 {nextMatch.date}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Last week winner */}
         {(()=>{
           const wg=weeklyGames||{};
-          const vns=venues||[];
           const lastWk=Math.max(0,...Object.values(wg).flatMap(wkMap=>Object.entries(wkMap).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>parseInt(w))));
           if(!lastWk) return null;
           const totals=(players||[]).map(p=>{
@@ -182,31 +203,19 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
           const winners=totals.filter(p=>p.pts===maxPts);
           if(!winners.length) return null;
           const isTie=winners.length>1;
-          const venueName=(()=>{for(const p of (players||[])){const gs=wg[p.id]?.[lastWk]||[];const g=gs.find(g=>!g.absent&&g.venue);if(g?.venue)return g.venue;}return null;})();
-          const venueObj=venueName?vns.find(v=>v.name===venueName):null;
           return(
-            <div style={{marginBottom:"16px",borderRadius:"10px",overflow:"hidden",border:`1px solid ${isTie?C.blue+"66":C.accent+"66"}`}}>
-              {venueObj?.imageUrl&&(
-                <div style={{position:"relative",height:"100px",overflow:"hidden"}}>
-                  <img src={venueObj.imageUrl} alt={venueObj.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",filter:"brightness(0.5)"}}/>
-                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,#0e0e0e 100%)"}}/>
-                  <div style={{position:"absolute",bottom:"8px",left:"12px",fontSize:"0.62rem",color:C.muted,letterSpacing:"0.08em"}}>{venueObj.name}</div>
-                </div>
-              )}
-              <div style={{padding:"10px 14px",background:isTie?"#0e101a":"#0e1a0e",display:"flex",alignItems:"center",gap:"10px"}}>
-                <span style={{fontSize:"1.2rem"}}>{isTie?"🤝":"🏆"}</span>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:"0.6rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{isTie?"WEEK "+lastWk+" — TIED":"WEEK "+lastWk+" WINNER"}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
-                    {winners.map(w=>(
-                      <div key={w.name} style={{display:"flex",alignItems:"center",gap:"5px"}}>
-                        {w.imageUrl&&<img src={w.imageUrl} alt={w.name} style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",border:`1.5px solid ${isTie?C.blue:C.accent}`}}/>}
-                        <span style={{color:isTie?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>{w.name}</span>
-                      </div>
-                    ))}
-                    <span style={{color:C.muted,fontWeight:"normal",fontSize:"0.72rem"}}>· {maxPts} pts</span>
-                  </div>
-                  {!venueObj?.imageUrl&&venueName&&<div style={{fontSize:"0.6rem",color:C.muted,marginTop:"2px"}}>📍 {venueName}</div>}
+            <div style={{marginBottom:"16px",borderRadius:"10px",overflow:"hidden",border:`1px solid ${isTie?C.blue+"66":C.accent+"44"}`,background:isTie?"#0e101a":"#0e1a0e",padding:"10px 14px",display:"flex",alignItems:"center",gap:"10px"}}>
+              <span style={{fontSize:"1.2rem"}}>{isTie?"🤝":"🏆"}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:"0.6rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{isTie?"WEEK "+lastWk+" — TIED":"WEEK "+lastWk+" WINNER"}</div>
+                <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
+                  {winners.map(w=>(
+                    <div key={w.name} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                      {w.imageUrl&&<img src={w.imageUrl} alt={w.name} style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",border:`1.5px solid ${isTie?C.blue:C.accent}`}}/>}
+                      <span style={{color:isTie?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>{w.name}</span>
+                    </div>
+                  ))}
+                  <span style={{color:C.muted,fontWeight:"normal",fontSize:"0.72rem"}}>· {maxPts} pts</span>
                 </div>
               </div>
             </div>
