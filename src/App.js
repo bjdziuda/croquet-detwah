@@ -740,11 +740,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         const weekGroups={};
         players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{
           if(!g.absent&&g.gameId){
-            if(!weekGroups[g.gameId]) weekGroups[g.gameId]={gameId:g.gameId,label:g.label,size:0};
+            if(!weekGroups[g.gameId]) weekGroups[g.gameId]={gameId:g.gameId,label:g.label,size:0,gameRound:g.gameRound||1};
             weekGroups[g.gameId].size++;
           }
         });});
-        const groupList=Object.values(weekGroups);
+        const groupList=Object.values(weekGroups).sort((a,b)=>a.gameRound-b.gameRound||a.label.localeCompare(b.label));
+        const hasMultipleRounds=new Set(groupList.map(g=>g.gameRound)).size>1;
         const alreadyIn=new Set(players.filter(p=>(weeklyGames[p.id]?.[wk]||[]).some(g=>!g.absent)).map(p=>String(p.id)));
         const available=players.filter(p=>!alreadyIn.has(String(p.id)));
         const selGroup=groupList.find(g=>g.gameId===addPlayerGroupId);
@@ -766,7 +767,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 <label style={lbSt}>GROUP</label>
                 <select style={inputSt} value={addPlayerGroupId} onChange={e=>{setAddPlayerGroupId(e.target.value);setAddPlayerPos("");}}>
                   <option value="">Select group…</option>
-                  {groupList.map(g=><option key={g.gameId} value={g.gameId}>{g.label} ({g.size} players)</option>)}
+                  {groupList.map(g=><option key={g.gameId} value={g.gameId}>{hasMultipleRounds?`Game ${g.gameRound} · `:""}{g.label} ({g.size} players)</option>)}
                 </select>
               </div>
               {addPlayerGroupId&&(
@@ -1126,12 +1127,14 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                       </select>
                                       <div style={{fontSize:"0.65rem",color:C.muted,marginBottom:"6px",letterSpacing:"0.06em"}}>SHOT OF THE DAY</div>
                                       <input type="number" min="0" max="10" style={{...inputSt,marginBottom:"8px"}} value={gridEditSotd} onChange={e=>setGridEditSotd(e.target.value)}/>
-                                      <div style={{display:"flex",gap:"6px"}}>
+                                      <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
                                         <button onClick={()=>saveGridPos(p.pid,parseInt(selWk),p.gi,parseInt(gridEditPos),gridEditSotd)}
                                           style={{...btnSt(C.green,true),padding:"5px 14px",fontSize:"0.78rem"}}>Save</button>
                                         <button onClick={()=>setGridEditKey(null)}
                                           style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",
                                             padding:"5px 10px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Cancel</button>
+                                        <button onClick={()=>{if(window.confirm(`Remove ${p.name} from this game? Positions will be recalculated.`)){deleteGame(p.pid,parseInt(selWk),p.gi);setGridEditKey(null);}}}
+                                          style={{...btnSt(C.red,true),padding:"5px 10px",fontSize:"0.78rem",marginLeft:"auto"}}>✕ Remove</button>
                                       </div>
                                     </div>
                                   )}
