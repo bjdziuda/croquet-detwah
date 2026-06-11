@@ -1608,6 +1608,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                 );
                               }
                               let wkPts=0,isWin=false,isLast=false,hasSotd=false;
+                              const allAbsent=entries.every(g=>g.absent);
                               entries.forEach(g=>{
                                 if(g.absent){abs++;return;}
                                 wkPts+=g.pts+(g.sotd||0);
@@ -1615,6 +1616,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                 if(g.position===(g.actualGroupSize||g.groupSize))isLast=true;
                                 if(g.sotd>0)hasSotd=true;
                               });
+                              if(allAbsent){
+                                return(
+                                  <td key={col.key} style={{padding:"2px"}}>
+                                    <div style={cellSt(false,false)}>
+                                      <span style={{color:C.muted,fontSize:"0.65rem"}}>—</span>
+                                    </div>
+                                  </td>
+                                );
+                              }
                               if(isWin)wins++;
                               if(hasSotd)sotds++;
                               return(
