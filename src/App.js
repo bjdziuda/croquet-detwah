@@ -133,7 +133,7 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues}) {
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -165,6 +165,53 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
           <p style={{color:C.muted,fontSize:"0.82rem",margin:0}}>2026 Season · Week {wk}</p>
           {nextMatch&&<p style={{color:C.accentLight,fontSize:"0.82rem",margin:"4px 0 0"}}>📅 {nextMatch.date} · {nextMatch.name}</p>}
         </div>
+
+        {/* Last week winner + venue banner */}
+        {(()=>{
+          const wg=weeklyGames||{};
+          const vns=venues||[];
+          const lastWk=Math.max(0,...Object.values(wg).flatMap(wkMap=>Object.entries(wkMap).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>parseInt(w))));
+          if(!lastWk) return null;
+          const totals=(players||[]).map(p=>{
+            const games=wg[p.id]?.[lastWk]||[];
+            const pts=games.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
+            const absent=games.every(g=>g.absent);
+            return{name:p.name,imageUrl:p.imageUrl,pts,absent};
+          }).filter(p=>!p.absent&&p.pts>0);
+          const maxPts=Math.max(0,...totals.map(p=>p.pts));
+          const winners=totals.filter(p=>p.pts===maxPts);
+          if(!winners.length) return null;
+          const isTie=winners.length>1;
+          const venueName=(()=>{for(const p of (players||[])){const gs=wg[p.id]?.[lastWk]||[];const g=gs.find(g=>!g.absent&&g.venue);if(g?.venue)return g.venue;}return null;})();
+          const venueObj=venueName?vns.find(v=>v.name===venueName):null;
+          return(
+            <div style={{marginBottom:"16px",borderRadius:"10px",overflow:"hidden",border:`1px solid ${isTie?C.blue+"66":C.accent+"66"}`}}>
+              {venueObj?.imageUrl&&(
+                <div style={{position:"relative",height:"100px",overflow:"hidden"}}>
+                  <img src={venueObj.imageUrl} alt={venueObj.name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",filter:"brightness(0.5)"}}/>
+                  <div style={{position:"absolute",inset:0,background:"linear-gradient(to bottom,transparent 30%,#0e0e0e 100%)"}}/>
+                  <div style={{position:"absolute",bottom:"8px",left:"12px",fontSize:"0.62rem",color:C.muted,letterSpacing:"0.08em"}}>{venueObj.name}</div>
+                </div>
+              )}
+              <div style={{padding:"10px 14px",background:isTie?"#0e101a":"#0e1a0e",display:"flex",alignItems:"center",gap:"10px"}}>
+                <span style={{fontSize:"1.2rem"}}>{isTie?"🤝":"🏆"}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:"0.6rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{isTie?"WEEK "+lastWk+" — TIED":"WEEK "+lastWk+" WINNER"}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
+                    {winners.map(w=>(
+                      <div key={w.name} style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                        {w.imageUrl&&<img src={w.imageUrl} alt={w.name} style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",border:`1.5px solid ${isTie?C.blue:C.accent}`}}/>}
+                        <span style={{color:isTie?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>{w.name}</span>
+                      </div>
+                    ))}
+                    <span style={{color:C.muted,fontWeight:"normal",fontSize:"0.72rem"}}>· {maxPts} pts</span>
+                  </div>
+                  {!venueObj?.imageUrl&&venueName&&<div style={{fontSize:"0.6rem",color:C.muted,marginTop:"2px"}}>📍 {venueName}</div>}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* BUBBLE MODE */}
         {mode==="bubbles"&&(
@@ -357,6 +404,8 @@ export default function App() {
     players={appState?.players||[]}
     weekSignups={appState?.weekSignups||{}}
     nextMatchWeek={appState?.nextMatchWeek||1}
+    weeklyGames={appState?.weeklyGames||{}}
+    venues={appState?.venues||[]}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
