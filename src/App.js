@@ -420,7 +420,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}} = appState;
+  const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[]} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -457,6 +457,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [editingProfileName, setEditingProfileName] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileWeek, setProfileWeek] = useState(1);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [expForm, setExpForm] = useState({desc:"",amount:""});
 
   const [addPlayerModal, setAddPlayerModal] = useState(null); // {week}
   const [addPlayerPid, setAddPlayerPid]     = useState("");
@@ -2043,47 +2045,135 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           </div>
         )}
 
-        {tab==="dues"&&user?.role==="superadmin"&&(
+        {tab==="dues"&&user?.role==="superadmin"&&(()=>{
+          const DUE_AMTS=[10,15,20];
+          const totalCollected=players.reduce((s,p)=>{const a=membershipDues[String(p.id)];return s+(typeof a==="number"?a:0);},0);
+          const totalSpent=leagueExpenses.reduce((s,e)=>s+(e.amount||0),0);
+          const balance=totalCollected-totalSpent;
+          const paidCount=players.filter(p=>typeof membershipDues[String(p.id)]==="number"&&membershipDues[String(p.id)]>0).length;
+          const amtBg={10:"#1a3a1a",15:"#0a2a40",20:"#3a2a00"};
+          const amtColor={10:"#7ec87e",15:"#7ab8e8",20:"#e8c46a"};
+          const amtBorder={10:"#4a9a4a",15:"#3a88cc",20:"#cc9a20"};
+          return(
           <div style={{maxWidth:"600px",margin:"0 auto",padding:"16px 10px"}}>
-            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>💰 Membership Dues</h2>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"14px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>💰 Membership Dues</h2>
+
+            {/* Treasury summary cards */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px",marginBottom:"16px"}}>
+              {[
+                {label:"Collected",val:`$${totalCollected}`,col:"#7ec87e"},
+                {label:"Spent",val:`$${totalSpent}`,col:"#e87a7a"},
+                {label:"Balance",val:`$${balance}`,col:balance>=0?"#7ec87e":"#e87a7a"}
+              ].map(({label,val,col})=>(
+                <div key={label} style={{background:C.surface,borderRadius:"8px",padding:"12px 10px",textAlign:"center",border:`1px solid ${C.border}`}}>
+                  <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"4px"}}>{label.toUpperCase()}</div>
+                  <div style={{color:col,fontSize:"1.3rem",fontWeight:"bold"}}>{val}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Member dues list */}
             <div style={{...cardSt,marginBottom:"14px"}}>
-              <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 10px",lineHeight:"1.5"}}>Track annual membership dues. Only visible to the Commissioner.</p>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
-                <span style={{fontSize:"0.72rem",color:C.accent,letterSpacing:"0.08em"}}>{players.filter(p=>membershipDues[String(p.id)]).length} / {players.length} PAID</span>
-                <span style={{color:C.muted,fontSize:"0.72rem"}}>{players.length-players.filter(p=>membershipDues[String(p.id)]).length} outstanding</span>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold"}}>Member Dues</span>
+                <span style={{color:C.accent,fontSize:"0.72rem",letterSpacing:"0.06em"}}>{paidCount} / {players.length} PAID</span>
               </div>
-              <div style={{height:"4px",background:C.surface,borderRadius:"2px",marginBottom:"4px"}}>
-                <div style={{height:"4px",background:C.green,borderRadius:"2px",width:`${players.length>0?(players.filter(p=>membershipDues[String(p.id)]).length/players.length)*100:0}%`,transition:"width 0.4s"}}/>
+              <div style={{height:"4px",background:C.surface,borderRadius:"2px",marginBottom:"14px"}}>
+                <div style={{height:"4px",background:C.green,borderRadius:"2px",width:`${players.length>0?(paidCount/players.length)*100:0}%`,transition:"width 0.4s"}}/>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+                  const curAmt=typeof membershipDues[String(p.id)]==="number"?membershipDues[String(p.id)]:0;
+                  const paid=curAmt>0;
+                  return(
+                    <div key={p.id} style={{background:C.bg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${paid?C.green:C.border}`,borderRadius:"0 8px 8px 0",padding:"8px 12px",display:"flex",alignItems:"center",gap:"10px"}}>
+                      {p.imageUrl
+                        ?<img src={p.imageUrl} alt={p.name} style={{width:"34px",height:"34px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${paid?C.green:C.border}`,flexShrink:0}}/>
+                        :<div style={{width:"34px",height:"34px",borderRadius:"50%",background:C.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.9rem",flexShrink:0}}>👤</div>
+                      }
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                        <div style={{color:C.muted,fontSize:"0.68rem"}}>Joined Wk {p.joinedWeek||1}</div>
+                      </div>
+                      <div style={{display:"flex",gap:"5px",flexShrink:0}}>
+                        <button
+                          onClick={()=>{const nd={...membershipDues,[String(p.id)]:0};update({membershipDues:nd});notify("Marked unpaid.");}}
+                          style={{background:curAmt===0?"#2a1a1a":"transparent",border:`1px solid ${curAmt===0?"#e87a7a":C.border}`,borderRadius:"5px",color:curAmt===0?"#e87a7a":C.muted,padding:"4px 7px",cursor:"pointer",fontSize:"0.72rem",fontWeight:"bold"}}>—</button>
+                        {DUE_AMTS.map(amt=>(
+                          <button key={amt}
+                            onClick={()=>{const nd={...membershipDues,[String(p.id)]:amt};update({membershipDues:nd});notify(`Dues set to $${amt}!`);}}
+                            style={{background:curAmt===amt?amtBg[amt]:"transparent",border:`1px solid ${curAmt===amt?amtBorder[amt]:C.border}`,borderRadius:"5px",color:curAmt===amt?amtColor[amt]:C.muted,padding:"4px 7px",cursor:"pointer",fontSize:"0.72rem",fontWeight:"bold"}}>
+                            ${amt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-              {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
-                const paid=!!membershipDues[String(p.id)];
-                return(
-                  <div key={p.id} style={{...cardSt,padding:"10px 14px",display:"flex",alignItems:"center",gap:"12px",borderLeft:`3px solid ${paid?C.green:C.border}`,borderRadius:"0 10px 10px 0"}}>
-                    {p.imageUrl
-                      ?<img src={p.imageUrl} alt={p.name} style={{width:"36px",height:"36px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${paid?C.green:C.border}`,flexShrink:0}}/>
-                      :<div style={{width:"36px",height:"36px",borderRadius:"50%",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1rem",flexShrink:0}}>👤</div>
-                    }
-                    <div style={{flex:1}}>
-                      <div style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>{p.name}</div>
-                      <div style={{color:C.muted,fontSize:"0.7rem"}}>Joined Wk {p.joinedWeek||1}</div>
-                    </div>
+
+            {/* Expenses ledger */}
+            <div style={{...cardSt}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
+                <span style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold"}}>Expenses</span>
+                <button
+                  onClick={()=>{setShowExpenseForm(v=>!v);setExpForm({desc:"",amount:""}); }}
+                  style={{background:"transparent",border:`1px solid ${C.accent}`,borderRadius:"6px",color:C.accent,padding:"4px 10px",cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif"}}>
+                  {showExpenseForm?"✕ Cancel":"+ Add"}
+                </button>
+              </div>
+              {showExpenseForm&&(
+                <div style={{background:C.surface,borderRadius:"8px",padding:"12px",marginBottom:"12px",display:"flex",flexDirection:"column",gap:"8px"}}>
+                  <input
+                    value={expForm.desc}
+                    onChange={e=>setExpForm(f=>({...f,desc:e.target.value}))}
+                    placeholder="Description (e.g. Mallets & wickets)"
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.cream,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",width:"100%"}}/>
+                  <div style={{display:"flex",gap:"8px"}}>
+                    <input
+                      type="number"
+                      value={expForm.amount}
+                      onChange={e=>setExpForm(f=>({...f,amount:e.target.value}))}
+                      placeholder="Amount ($)"
+                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.cream,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",width:"120px"}}/>
                     <button
                       onClick={()=>{
-                        const newDues={...membershipDues,[String(p.id)]:!paid};
-                        update({membershipDues:newDues});
-                        notify(paid?"Marked unpaid":"Marked paid!");
+                        const amt=parseFloat(expForm.amount);
+                        if(!expForm.desc.trim()||isNaN(amt)||amt<=0){notify("Enter a description and amount.");return;}
+                        const entry={id:Date.now(),desc:expForm.desc.trim(),amount:amt,date:new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})};
+                        update({leagueExpenses:[...leagueExpenses,entry]});
+                        setShowExpenseForm(false);
+                        setExpForm({desc:"",amount:""});
+                        notify("Expense added!");
                       }}
-                      style={{background:paid?C.green+"22":"transparent",border:`1px solid ${paid?C.green:C.border}`,borderRadius:"6px",color:paid?C.green:C.muted,padding:"5px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem",fontWeight:"bold",minWidth:"72px"}}>
-                      {paid?"✓ Paid":"Unpaid"}
+                      style={{background:C.green+"33",border:`1px solid ${C.green}`,borderRadius:"6px",color:C.green,padding:"7px 14px",cursor:"pointer",fontSize:"0.82rem",fontFamily:"Georgia,serif",fontWeight:"bold"}}>
+                      Save
                     </button>
                   </div>
-                );
-              })}
+                </div>
+              )}
+              {leagueExpenses.length===0&&!showExpenseForm&&(
+                <div style={{color:C.muted,fontSize:"0.78rem",textAlign:"center",padding:"16px 0"}}>No expenses recorded yet.</div>
+              )}
+              <div style={{display:"flex",flexDirection:"column",gap:"0"}}>
+                {[...leagueExpenses].reverse().map((e,i)=>(
+                  <div key={e.id} style={{display:"flex",alignItems:"center",gap:"10px",padding:"9px 0",borderBottom:i<leagueExpenses.length-1?`1px solid ${C.border}`:"none"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{color:C.cream,fontSize:"0.85rem",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.desc}</div>
+                      <div style={{color:C.muted,fontSize:"0.68rem"}}>{e.date}</div>
+                    </div>
+                    <div style={{color:"#e87a7a",fontSize:"0.88rem",fontWeight:"bold",flexShrink:0}}>-${e.amount.toFixed(2)}</div>
+                    <button
+                      onClick={()=>{if(window.confirm(`Remove "${e.desc}"?`)){update({leagueExpenses:leagueExpenses.filter(x=>x.id!==e.id)});notify("Expense removed.");}}}
+                      style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.9rem",padding:"2px 4px",lineHeight:1}}>✕</button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
