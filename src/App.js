@@ -459,6 +459,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [profileWeek, setProfileWeek] = useState(1);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expForm, setExpForm] = useState({desc:"",amount:""});
+  const [paidCollapsed, setPaidCollapsed] = useState(false);
 
   const [addPlayerModal, setAddPlayerModal] = useState(null); // {week}
   const [addPlayerPid, setAddPlayerPid]     = useState("");
@@ -2081,38 +2082,69 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <div style={{height:"4px",background:C.surface,borderRadius:"2px",marginBottom:"14px"}}>
                 <div style={{height:"4px",background:C.green,borderRadius:"2px",width:`${players.length>0?(paidCount/players.length)*100:0}%`,transition:"width 0.4s"}}/>
               </div>
-              <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-                {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+              {(()=>{
+                const sortedPlayers=[...players].sort((a,b)=>a.name.localeCompare(b.name));
+                const unpaidPlayers=sortedPlayers.filter(p=>{const a=membershipDues[String(p.id)];return!(typeof a==="number"&&a>0);});
+                const paidPlayers=sortedPlayers.filter(p=>{const a=membershipDues[String(p.id)];return typeof a==="number"&&a>0;});
+                const renderCard=(p)=>{
                   const curAmt=typeof membershipDues[String(p.id)]==="number"?membershipDues[String(p.id)]:0;
                   const paid=curAmt>0;
+                  const weeksInLeague=Math.max(1,(totalWeeks||1)-(p.joinedWeek||1)+1);
+                  const gamesPlayed=Object.values(weeklyGames[String(p.id)]||{}).filter(g=>g&&!g.absent).length;
                   return(
-                    <div key={p.id} style={{background:C.bg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${paid?C.green:C.border}`,borderRadius:"0 8px 8px 0",padding:"8px 12px",display:"flex",alignItems:"center",gap:"10px"}}>
-                      {p.imageUrl
-                        ?<img src={p.imageUrl} alt={p.name} style={{width:"34px",height:"34px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${paid?C.green:C.border}`,flexShrink:0}}/>
-                        :<div style={{width:"34px",height:"34px",borderRadius:"50%",background:C.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.9rem",flexShrink:0}}>👤</div>
-                      }
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{color:C.cream,fontSize:"0.85rem",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
-                        <div style={{color:C.muted,fontSize:"0.68rem"}}>Joined Wk {p.joinedWeek||1}</div>
+                    <div key={p.id} style={{background:C.bg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${paid?C.green:C.border}`,borderRadius:"0 8px 8px 0",padding:"8px 10px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"7px"}}>
+                        {p.imageUrl
+                          ?<img src={p.imageUrl} alt={p.name} style={{width:"30px",height:"30px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${paid?C.green:C.border}`,flexShrink:0}}/>
+                          :<div style={{width:"30px",height:"30px",borderRadius:"50%",background:C.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.8rem",flexShrink:0}}>👤</div>
+                        }
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{color:C.cream,fontSize:"0.82rem",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                          <div style={{color:C.muted,fontSize:"0.65rem"}}>{weeksInLeague} wk{weeksInLeague!==1?"s":""} · {gamesPlayed} game{gamesPlayed!==1?"s":""}</div>
+                        </div>
                       </div>
-                      <div style={{display:"flex",gap:"5px",flexShrink:0}}>
+                      <div style={{display:"flex",gap:"4px"}}>
                         <button
                           onClick={()=>{const nd={...membershipDues,[String(p.id)]:0};update({membershipDues:nd});notify("Marked unpaid.");}}
-                          style={{background:curAmt===0?"#2a1a1a":"transparent",border:`1px solid ${curAmt===0?"#e87a7a":C.border}`,borderRadius:"5px",color:curAmt===0?"#e87a7a":C.muted,padding:"4px 7px",cursor:"pointer",fontSize:"0.72rem",fontWeight:"bold"}}>—</button>
+                          style={{flex:1,background:curAmt===0?"#2a1a1a":"transparent",border:`1px solid ${curAmt===0?"#e87a7a":C.border}`,borderRadius:"5px",color:curAmt===0?"#e87a7a":C.muted,padding:"4px 0",cursor:"pointer",fontSize:"0.7rem",fontWeight:"bold"}}>—</button>
                         {DUE_AMTS.map(amt=>(
                           <button key={amt}
                             onClick={()=>{const nd={...membershipDues,[String(p.id)]:amt};update({membershipDues:nd});notify(`Dues set to $${amt}!`);}}
-                            style={{background:curAmt===amt?amtBg[amt]:"transparent",border:`1px solid ${curAmt===amt?amtBorder[amt]:C.border}`,borderRadius:"5px",color:curAmt===amt?amtColor[amt]:C.muted,padding:"4px 7px",cursor:"pointer",fontSize:"0.72rem",fontWeight:"bold"}}>
+                            style={{flex:1,background:curAmt===amt?amtBg[amt]:"transparent",border:`1px solid ${curAmt===amt?amtBorder[amt]:C.border}`,borderRadius:"5px",color:curAmt===amt?amtColor[amt]:C.muted,padding:"4px 0",cursor:"pointer",fontSize:"0.7rem",fontWeight:"bold"}}>
                             ${amt}
                           </button>
                         ))}
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                };
+                return(<>
+                  {unpaidPlayers.length>0&&(
+                    <div style={{marginBottom:"14px"}}>
+                      <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"8px"}}>OUTSTANDING ({unpaidPlayers.length})</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                        {unpaidPlayers.map(p=>renderCard(p))}
+                      </div>
+                    </div>
+                  )}
+                  {paidPlayers.length>0&&(
+                    <div>
+                      <button
+                        onClick={()=>setPaidCollapsed(v=>!v)}
+                        style={{display:"flex",alignItems:"center",gap:"6px",background:"transparent",border:"none",cursor:"pointer",padding:"0",marginBottom:"8px"}}>
+                        <span style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em"}}>PAID ({paidPlayers.length})</span>
+                        <span style={{color:C.muted,fontSize:"0.65rem"}}>{paidCollapsed?"▶":"▼"}</span>
+                      </button>
+                      {!paidCollapsed&&(
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                          {paidPlayers.map(p=>renderCard(p))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>);
+              })()}
             </div>
-
             {/* Expenses ledger */}
             <div style={{...cardSt}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
