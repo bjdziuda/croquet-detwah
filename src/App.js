@@ -108,7 +108,7 @@ const MOTTO_ENTRIES = [
 ];
 
 const EMPTY_STATE = {
-  players: [], weeklyGames: {}, totalWeeks: 1,
+  players: [], weeklyGames: {}, weeklyGuests: {}, totalWeeks: 1, announcement: {title:"", body:""},
   leagueName: "Croquet De-Twah", leagueLogo: null,
   venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
   votes: {},
@@ -133,7 +133,7 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}}) {
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -185,6 +185,15 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                 <div style={{fontSize:"0.72rem",color:C.muted,marginTop:"2px"}}>📅 {nextMatch.date}</div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Announcement */}
+        {announcement?.body&&(
+          <div style={{marginBottom:"16px",borderRadius:"10px",border:`1px solid ${C.accent}66`,background:"#1a1400",padding:"14px 16px"}}>
+            <div style={{fontSize:"0.6rem",color:C.accent,letterSpacing:"0.12em",fontWeight:"bold",marginBottom:"6px"}}>📣 COMMISSIONER MESSAGE</div>
+            {announcement.title&&<div style={{color:C.cream,fontWeight:"bold",fontSize:"0.88rem",marginBottom:"5px"}}>{announcement.title}</div>}
+            <div style={{color:C.muted,fontSize:"0.82rem",lineHeight:"1.55",whiteSpace:"pre-wrap"}}>{announcement.body}</div>
           </div>
         )}
 
@@ -415,12 +424,13 @@ export default function App() {
     nextMatchWeek={appState?.nextMatchWeek||1}
     weeklyGames={appState?.weeklyGames||{}}
     venues={appState?.venues||[]}
+    announcement={appState?.announcement||{title:"",body:""}}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[]} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -578,7 +588,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     const wk=parseInt(gameWeek); let errors=[],updates={};
     const validGroups = [];
     groups.forEach((grp,gi)=>{
-      const rows=grp.players.filter(r=>r.playerId&&r.position);
+      const allRows=grp.players.filter(r=>(r.playerId||r.isGuest)&&r.position);
+      const rows=allRows; // includes guests for sizing
       if(rows.length<2){errors.push(`Group ${gi+1} needs at least 2 players.`);return;}
       const pos=rows.map(r=>parseInt(r.position));
       if(new Set(pos).size!==pos.length){errors.push(`Group ${gi+1} has duplicate positions.`);return;}
@@ -587,10 +598,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     });
     if(errors.length){notify(errors[0]);return;}
     const maxGroupSize = Math.max(...validGroups.map(({rows})=>rows.length));
+    const newGuestEntries=[];
     validGroups.forEach(({grp,gi,rows})=>{
       const gameId=`g-${Date.now()}-${gi}`;
       rows.forEach(r=>{
         const p2=parseInt(r.position),pts=p2===rows.length?0:calcPoints(p2,maxGroupSize);
+        if(r.isGuest){
+          newGuestEntries.push({gameId,guestName:r.guestName||"Guest",position:p2,groupSize:maxGroupSize,actualGroupSize:rows.length,pts,gameRound:parseInt(gameRound),label:`Gp ${gi+1}`,venue:gameVenue,date:gameDate});
+          return;
+        }
         if(!updates[r.playerId]) updates[r.playerId]={};
         if(!updates[r.playerId][wk]) updates[r.playerId][wk]=[];
         updates[r.playerId][wk].push({gameId,position:p2,groupSize:maxGroupSize,actualGroupSize:rows.length,pts,sotd:0,absent:false,label:`Gp ${gi+1}`,venue:gameVenue,date:gameDate,gameRound:parseInt(gameRound)});
@@ -612,7 +628,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       nwg[p.id]={...(nwg[p.id]||{})};
       if(!(nwg[p.id][wk]?.length>0)) nwg[p.id][wk]=[{gameId:`abs-auto-${Date.now()}-${p.id}`,position:null,groupSize:null,pts:1,sotd:0,absent:true,label:"Absent"}];
     });
-    update({weeklyGames:nwg,venues:venues.map(v=>v.name===gameVenue?{...v,timesPlayed:(v.timesPlayed||0)+1}:v),totalWeeks:Math.max(totalWeeks,wk)});
+    const nwGuests={...weeklyGuests,[wk]:[...(weeklyGuests[wk]||[]),...newGuestEntries]};
+    update({weeklyGames:nwg,weeklyGuests:nwGuests,venues:venues.map(v=>v.name===gameVenue?{...v,timesPlayed:(v.timesPlayed||0)+1}:v),totalWeeks:Math.max(totalWeeks,wk)});
     setGroups([{id:Date.now(),players:[{playerId:"",position:""}]}]);
     setSotdEntries([{playerId:"",count:1}]); setAbsentPreview([]);
     const names=autoAbsent.map(p=>p.name);
@@ -807,8 +824,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         });});
         const groupList=Object.values(weekGroups).sort((a,b)=>a.gameRound-b.gameRound||a.label.localeCompare(b.label));
         const hasMultipleRounds=new Set(groupList.map(g=>g.gameRound)).size>1;
-        const alreadyIn=new Set(players.filter(p=>(weeklyGames[p.id]?.[wk]||[]).some(g=>!g.absent)).map(p=>String(p.id)));
-        const available=players.filter(p=>!alreadyIn.has(String(p.id)));
+        const alreadyInGroup=addPlayerGroupId?new Set(players.filter(p=>(weeklyGames[p.id]?.[wk]||[]).some(g=>!g.absent&&g.gameId===addPlayerGroupId)).map(p=>String(p.id))):new Set();
+        const available=players.filter(p=>!alreadyInGroup.has(String(p.id)));
         const selGroup=groupList.find(g=>g.gameId===addPlayerGroupId);
         const maxPos=selGroup?selGroup.size+1:1;
         return(
@@ -822,7 +839,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   <option value="">Select player…</option>
                   {available.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
                 </select>
-                {available.length===0&&<p style={{color:C.muted,fontSize:"0.72rem",margin:"4px 0 0"}}>All eligible players are already recorded this week.</p>}
+                {addPlayerGroupId&&available.length===0&&<p style={{color:C.muted,fontSize:"0.72rem",margin:"4px 0 0"}}>All players are already in this group.</p>}
               </div>
               <div style={{marginBottom:"14px"}}>
                 <label style={lbSt}>GROUP</label>
@@ -1144,6 +1161,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 grps[g.gameId].players.push({pid:p.id,name:p.name,gi,...g});
               });
             });
+            (weeklyGuests[wk]||[]).forEach(g=>{
+              if((g.gameRound||1)!==round) return;
+              if(!grps[g.gameId]) grps[g.gameId]={gameId:g.gameId,label:g.label,players:[]};
+              grps[g.gameId].players.push({pid:`guest-${g.guestName}`,name:g.guestName||"Guest",gi:-1,isGuest:true,...g});
+            });
             return Object.values(grps).sort((a,b)=>a.label.localeCompare(b.label));
           };
           const saveGridPos=(pid,wk,gi,newPos,newSotd)=>{
@@ -1222,10 +1244,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                       color:isFirst?C.gold:isLast?C.red:p.position===2?C.greenLight:C.muted}}>
                                       {ordinal(p.position)}
                                     </span>
-                                    <span style={{flex:1,fontSize:"0.82rem",color:C.cream,fontWeight:"bold"}}>{p.name}</span>
+                                    <span style={{flex:1,fontSize:"0.82rem",color:p.isGuest?C.accentLight:C.cream,fontWeight:"bold"}}>
+                                      {p.name}{p.isGuest&&<span style={{color:C.muted,fontSize:"0.68rem",fontWeight:"normal",marginLeft:"5px"}}>guest</span>}
+                                    </span>
                                     {p.sotd>0&&<span style={{fontSize:"0.7rem"}}>⭐</span>}
                                     <span style={{fontSize:"0.78rem",color:C.accent,fontWeight:"bold"}}>{p.pts}pt</span>
-                                    {isAdmin&&<button onClick={()=>{setGridEditKey(isEditing?null:ekey);setGridEditPos(String(p.position));setGridEditSotd(p.sotd||0);}}
+                                    {isAdmin&&!p.isGuest&&<button onClick={()=>{setGridEditKey(isEditing?null:ekey);setGridEditPos(String(p.position));setGridEditSotd(p.sotd||0);}}
                                       style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",
                                         padding:"1px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✎</button>}
                                   </div>
@@ -1565,7 +1589,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   {groups.length>1&&<button onClick={()=>removeGroup(grp.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"2px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>}
                 </div>
 
-                {unselected.length>0&&(
+                {(unselected.length>0||true)&&(
                   <div style={{marginBottom:"12px"}}>
                     <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"6px"}}>TAP TO ADD</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
@@ -1577,6 +1601,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                           {p.name}
                         </button>
                       ))}
+                      <button onClick={()=>handleGroupChange(prev=>prev.map(g=>g.id===grp.id?{...g,players:[...g.players,{isGuest:true,guestName:"",position:String(g.players.filter(r=>r.playerId||r.isGuest).length+1)}]}:g))}
+                        style={{padding:"5px 14px",borderRadius:"20px",border:`1px solid ${C.accent}55`,
+                          background:"transparent",cursor:"pointer",fontFamily:"Georgia,serif",
+                          fontSize:"0.78rem",color:C.accentLight}}>
+                        + Guest
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1590,11 +1620,16 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       return(
                         <div key={ri} style={{display:"flex",alignItems:"center",gap:"8px",
                           background:C.surface,borderRadius:"8px",padding:"8px 10px",
-                          marginBottom:"5px",border:`1px solid ${C.border}`}}>
+                          marginBottom:"5px",border:`1px solid ${row.isGuest?C.accent+"44":C.border}`}}>
                           <span style={{color:C.accent,fontSize:"0.82rem",fontWeight:"bold",minWidth:"30px"}}>
                             {ri+1}{ri===0?"st":ri===1?"nd":ri===2?"rd":"th"}
                           </span>
-                          <span style={{flex:1,color:C.cream,fontSize:"0.85rem"}}>{p?.name||row.playerId}</span>
+                          {row.isGuest
+                            ?<input value={row.guestName} onChange={e=>updateGroupRow(grp.id,grp.players.findIndex(r=>r===row),"guestName",e.target.value)}
+                                placeholder="Guest name (optional)"
+                                style={{...inputSt,flex:1,padding:"4px 8px",fontSize:"0.82rem",color:C.accentLight,background:C.bg}}/>
+                            :<span style={{flex:1,color:C.cream,fontSize:"0.85rem"}}>{p?.name||row.playerId}</span>
+                          }
                           <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.8rem"}}>{pts}pt</span>
                           <div style={{display:"flex",flexDirection:"column",gap:"2px"}}>
                             <button disabled={ri===0} onClick={()=>{
@@ -1608,7 +1643,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                               handleGroupChange(prev=>prev.map(g=>g.id===grp.id?{...g,players:withPos}:g));
                             }} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"3px",padding:"0px 5px",cursor:"pointer",fontSize:"0.75rem",lineHeight:"1.5",opacity:ri===ranked.length-1?0.3:1}}>▼</button>
                           </div>
-                          <button onClick={()=>removeRowFromGroup(grp.id,grp.players.findIndex(r=>r.playerId===row.playerId))}
+                          <button onClick={()=>removeRowFromGroup(grp.id,grp.players.indexOf(row))}
                             style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"1rem",padding:"2px"}}>✕</button>
                         </div>
                       );
@@ -1632,6 +1667,30 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <button onClick={addSotdRow} style={{...btnSt(C.gold),padding:"6px 12px",fontSize:"0.75rem"}}>+ Add SOTD</button>
             </div>
             <button onClick={submitGames} style={{...btnSt(),padding:"12px",fontSize:"0.9rem",width:"100%"}}>Submit Week {gameWeek} Game {gameRound} Results</button>
+
+            {user?.role==="superadmin"&&(
+              <div style={{...cardSt,marginTop:"24px",borderColor:C.accent+"44",background:"#1a1400"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"12px"}}>
+                  <span style={{fontSize:"1rem"}}>📣</span>
+                  <span style={{color:C.accentLight,fontWeight:"bold",fontSize:"0.85rem"}}>Login Screen Announcement</span>
+                </div>
+                <div style={{marginBottom:"10px"}}>
+                  <label style={lbSt}>TITLE (optional)</label>
+                  <input style={inputSt} value={announcement.title||""} placeholder="e.g. This week's venue change"
+                    onChange={e=>update({announcement:{...announcement,title:e.target.value}})}/>
+                </div>
+                <div style={{marginBottom:"12px"}}>
+                  <label style={lbSt}>MESSAGE</label>
+                  <textarea style={textareaSt} value={announcement.body||""} placeholder="Write a message for all members to see on the login screen…"
+                    onChange={e=>update({announcement:{...announcement,body:e.target.value}})}/>
+                </div>
+                <div style={{display:"flex",gap:"8px"}}>
+                  <button style={{...btnSt(C.accent),flex:1}} onClick={()=>update({announcement:{...announcement}})}>Save Message</button>
+                  {announcement.body&&<button style={{...btnSt(C.red,true)}} onClick={()=>update({announcement:{title:"",body:""}})}>Clear</button>}
+                </div>
+                {announcement.body&&<p style={{color:C.green,fontSize:"0.72rem",margin:"8px 0 0"}}>✓ Message is live on the login screen</p>}
+              </div>
+            )}
           </div>
         )}
 
