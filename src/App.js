@@ -445,7 +445,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [reviewVenue, setReviewVenue] = useState(null);
   const [reviewForm, setReviewForm] = useState({rating:0,comment:""});
 
-  const [gameWeek, setGameWeek]     = useState(1);
+  const [gameWeek, setGameWeek]     = useState(appState.nextMatchWeek||1);
   const [gameVenue, setGameVenue]   = useState(venues[0]?.name||"");
   const [gameDate, setGameDate]     = useState(new Date().toISOString().slice(0,10));
   const [groups, setGroups]         = useState([{id:1,players:[{playerId:"",position:""}]}]);
@@ -476,6 +476,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [addPlayerGroupId, setAddPlayerGroupId] = useState("");
   const [addPlayerPos, setAddPlayerPos]     = useState("");
   const [addPlayerSotd, setAddPlayerSotd]   = useState(0);
+  const [addIsGuest, setAddIsGuest]         = useState(false);
+  const [addGuestName, setAddGuestName]     = useState("");
   const [weekGroupFilter, setWeekGroupFilter] = useState({});
   const [gameRound, setGameRound]           = useState(1);
   const [gridEditKey, setGridEditKey]       = useState(null);
@@ -758,6 +760,43 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     setAddPlayerModal(null); setAddPlayerPid(""); setAddPlayerGroupId(""); setAddPlayerPos(""); setAddPlayerSotd(0);
     notify("Player added and scores updated!");
   };
+  const addGuestRetroactively=()=>{
+    if(!addPlayerModal||!addPlayerGroupId||!addPlayerPos) return;
+    const wk=parseInt(addPlayerModal.week), insertPos=parseInt(addPlayerPos);
+    const memberEntries=[];
+    players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(g.gameId===addPlayerGroupId&&!g.absent) memberEntries.push({pid:String(p.id),g});});});
+    const existingGuests=(weeklyGuests[wk]||[]).filter(g=>g.gameId===addPlayerGroupId);
+    const newGroupSize=memberEntries.length+existingGuests.length+1;
+    const gameIdCounts={};
+    players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});});
+    (weeklyGuests[wk]||[]).forEach(g=>{if(g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});
+    gameIdCounts[addPlayerGroupId]=newGroupSize;
+    const maxGs=Math.max(1,...Object.values(gameIdCounts));
+    const nwg={...weeklyGames};
+    memberEntries.forEach(({pid,g})=>{
+      const newPos=g.position>=insertPos?g.position+1:g.position;
+      nwg[pid]={...(nwg[pid]||{}),[wk]:(nwg[pid]?.[wk]||[]).map(gg=>{
+        if(gg.gameId===addPlayerGroupId) return {...gg,position:newPos,groupSize:maxGs,pts:calcPoints(newPos,maxGs)};
+        if(!gg.absent&&gg.gameId) return {...gg,groupSize:maxGs,pts:calcPoints(gg.position,maxGs)};
+        return gg;
+      })};
+    });
+    const ref=memberEntries[0]?.g||existingGuests[0]||{};
+    const updatedGuests=(weeklyGuests[wk]||[]).map(g=>{
+      if(g.gameId===addPlayerGroupId){
+        const newPos=g.position>=insertPos?g.position+1:g.position;
+        return {...g,position:newPos,groupSize:maxGs,pts:calcPoints(newPos,maxGs)};
+      }
+      if(g.gameId) return {...g,groupSize:maxGs,pts:calcPoints(g.position,maxGs)};
+      return g;
+    });
+    updatedGuests.push({gameId:addPlayerGroupId,guestName:addGuestName||"Guest",position:insertPos,
+      groupSize:maxGs,actualGroupSize:newGroupSize,pts:calcPoints(insertPos,maxGs),
+      gameRound:ref.gameRound||1,label:ref.label||"Gp 1",venue:ref.venue||"",date:ref.date||""});
+    update({weeklyGames:nwg,weeklyGuests:{...weeklyGuests,[wk]:updatedGuests}});
+    setAddPlayerModal(null);setAddPlayerPid("");setAddPlayerGroupId("");setAddPlayerPos("");setAddPlayerSotd(0);setAddIsGuest(false);setAddGuestName("");
+    notify("Guest added!");
+  };
   const toggleChart=id=>setChartPlayers(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
 
   const curSignupWk=appState.nextMatchWeek||1;
@@ -830,17 +869,27 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         const maxPos=selGroup?selGroup.size+1:1;
         return(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
-            <div style={{...cardSt,maxWidth:"380px",width:"100%",background:C.surface,border:`1px solid ${C.green}55`}}>
-              <h3 style={{color:C.cream,margin:"0 0 4px",fontSize:"1rem"}}>➕ Add Missed Player</h3>
-              <p style={{color:C.muted,fontSize:"0.78rem",margin:"0 0 18px"}}>Week {wk}</p>
-              <div style={{marginBottom:"14px"}}>
-                <label style={lbSt}>PLAYER</label>
-                <select style={inputSt} value={addPlayerPid} onChange={e=>setAddPlayerPid(e.target.value)}>
-                  <option value="">Select player…</option>
-                  {available.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
-                </select>
-                {addPlayerGroupId&&available.length===0&&<p style={{color:C.muted,fontSize:"0.72rem",margin:"4px 0 0"}}>All players are already in this group.</p>}
+            <div style={{...cardSt,maxWidth:"380px",width:"100%",background:C.surface,border:`1px solid ${addIsGuest?C.accent:C.green}55`}}>
+              <h3 style={{color:C.cream,margin:"0 0 4px",fontSize:"1rem"}}>➕ Add to Game · Week {wk}</h3>
+              <div style={{display:"flex",gap:"6px",marginBottom:"18px"}}>
+                <button onClick={()=>{setAddIsGuest(false);setAddGuestName("");}} style={{flex:1,padding:"7px",borderRadius:"6px",border:`1px solid ${!addIsGuest?C.green:C.border}`,background:!addIsGuest?C.green+"22":"transparent",color:!addIsGuest?C.greenLight:C.muted,cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem",fontWeight:!addIsGuest?"bold":"normal"}}>Member</button>
+                <button onClick={()=>{setAddIsGuest(true);setAddPlayerPid("");}} style={{flex:1,padding:"7px",borderRadius:"6px",border:`1px solid ${addIsGuest?C.accent:C.border}`,background:addIsGuest?C.accent+"22":"transparent",color:addIsGuest?C.accentLight:C.muted,cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem",fontWeight:addIsGuest?"bold":"normal"}}>Guest</button>
               </div>
+              {!addIsGuest?(
+                <div style={{marginBottom:"14px"}}>
+                  <label style={lbSt}>PLAYER</label>
+                  <select style={inputSt} value={addPlayerPid} onChange={e=>setAddPlayerPid(e.target.value)}>
+                    <option value="">Select player…</option>
+                    {available.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                  </select>
+                  {addPlayerGroupId&&available.length===0&&<p style={{color:C.muted,fontSize:"0.72rem",margin:"4px 0 0"}}>All players are already in this group.</p>}
+                </div>
+              ):(
+                <div style={{marginBottom:"14px"}}>
+                  <label style={lbSt}>GUEST NAME (optional)</label>
+                  <input style={inputSt} value={addGuestName} onChange={e=>setAddGuestName(e.target.value)} placeholder="e.g. Guest – Mike"/>
+                </div>
+              )}
               <div style={{marginBottom:"14px"}}>
                 <label style={lbSt}>GROUP</label>
                 <select style={inputSt} value={addPlayerGroupId} onChange={e=>{setAddPlayerGroupId(e.target.value);setAddPlayerPos("");}}>
@@ -849,7 +898,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 </select>
               </div>
               {addPlayerGroupId&&(
-                <div style={{marginBottom:"20px"}}>
+                <div style={{marginBottom:addIsGuest?"20px":"14px"}}>
                   <label style={lbSt}>FINISHING POSITION (others shift down)</label>
                   <select style={inputSt} value={addPlayerPos} onChange={e=>setAddPlayerPos(e.target.value)}>
                     <option value="">Select position…</option>
@@ -857,13 +906,18 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   </select>
                 </div>
               )}
-              <div style={{marginBottom:"16px"}}>
-                <label style={lbSt}>SHOT OF THE DAY (+1 pt bonus)</label>
-                <input style={inputSt} type="number" min="0" max="10" value={addPlayerSotd} onChange={e=>setAddPlayerSotd(e.target.value)} placeholder="0"/>
-              </div>
+              {!addIsGuest&&(
+                <div style={{marginBottom:"16px"}}>
+                  <label style={lbSt}>SHOT OF THE DAY (+1 pt bonus)</label>
+                  <input style={inputSt} type="number" min="0" max="10" value={addPlayerSotd} onChange={e=>setAddPlayerSotd(e.target.value)} placeholder="0"/>
+                </div>
+              )}
               <div style={{display:"flex",gap:"8px"}}>
-                <button style={{...btnSt(C.green,true),flex:1}} onClick={addMissedPlayer} disabled={!addPlayerPid||!addPlayerGroupId||!addPlayerPos}>Add Player</button>
-                <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>setAddPlayerModal(null)}>Cancel</button>
+                {addIsGuest
+                  ?<button style={{...btnSt(C.accent),flex:1}} onClick={addGuestRetroactively} disabled={!addPlayerGroupId||!addPlayerPos}>Add Guest</button>
+                  :<button style={{...btnSt(C.green,true),flex:1}} onClick={addMissedPlayer} disabled={!addPlayerPid||!addPlayerGroupId||!addPlayerPos}>Add Player</button>
+                }
+                <button style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem"}} onClick={()=>{setAddPlayerModal(null);setAddIsGuest(false);setAddGuestName("");}}>Cancel</button>
               </div>
             </div>
           </div>
