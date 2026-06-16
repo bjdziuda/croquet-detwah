@@ -785,7 +785,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
   const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],
-    ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"]]:[]),
+    ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
   ];
@@ -1530,37 +1530,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Record Week Results</h2>
 
-            <div style={{...cardSt,marginBottom:"16px",borderColor:C.green+"44",background:"#0f1a0f"}}>
-              <div style={{color:C.greenLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"10px"}}>🏑 WEEK {curSignupWk} SIGN-UPS</div>
-              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px"}}>
-                {!curSignup.open
-                  ?<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:true}}})} style={{...btnSt(C.green,true),padding:"6px 14px",fontSize:"0.78rem"}}>Open sign-ups</button>
-                  :<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Close sign-ups</button>
-                }
-                {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⇄ Randomise groups</button>}
-                {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
-                {curSignup.published&&<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
-              </div>
-              {(curSignup.signups||[]).length>0&&(
-                <>
-                  <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"8px"}}>{(curSignup.signups||[]).length}/24 signed up{(curSignup.waitlist||[]).length>0&&` · ${curSignup.waitlist.length} waitlist`}</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:curSignup.groups?"10px":"0"}}>
-                    {(curSignup.signups||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.green+"22",border:`1px solid ${C.green}44`,color:C.greenLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>✓ {p.name}</span>:null;})}
-                    {(curSignup.waitlist||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.accent+"22",border:`1px solid ${C.accent}44`,color:C.accentLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>⏳ {p.name}</span>:null;})}
-                  </div>
-                </>
-              )}
-              {curSignup.groups&&(
-                <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                  {curSignup.groups.map((grp,gi)=>(
-                    <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",padding:"8px 10px",flex:1,minWidth:"100px"}}>
-                      <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold",marginBottom:"5px"}}>Group {gi+1}</div>
-                      {grp.map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<div key={pid} style={{color:C.cream,fontSize:"0.75rem",padding:"2px 0"}}>{p.name}</div>:null;})}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
             <div style={{...cardSt,marginBottom:"12px"}}>
               <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
                 <div><label style={lbSt}>WEEK #</label><select style={inputSt} value={gameWeek} onChange={e=>handleWeekChange(e.target.value)}>{weekOptions.map(w=><option key={w} value={w}>Week {w}</option>)}</select></div>
@@ -1668,29 +1637,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
             <button onClick={submitGames} style={{...btnSt(),padding:"12px",fontSize:"0.9rem",width:"100%"}}>Submit Week {gameWeek} Game {gameRound} Results</button>
 
-            {user?.role==="superadmin"&&(
-              <div style={{...cardSt,marginTop:"24px",borderColor:C.accent+"44",background:"#1a1400"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"12px"}}>
-                  <span style={{fontSize:"1rem"}}>📣</span>
-                  <span style={{color:C.accentLight,fontWeight:"bold",fontSize:"0.85rem"}}>Login Screen Announcement</span>
-                </div>
-                <div style={{marginBottom:"10px"}}>
-                  <label style={lbSt}>TITLE (optional)</label>
-                  <input style={inputSt} value={announcement.title||""} placeholder="e.g. This week's venue change"
-                    onChange={e=>update({announcement:{...announcement,title:e.target.value}})}/>
-                </div>
-                <div style={{marginBottom:"12px"}}>
-                  <label style={lbSt}>MESSAGE</label>
-                  <textarea style={textareaSt} value={announcement.body||""} placeholder="Write a message for all members to see on the login screen…"
-                    onChange={e=>update({announcement:{...announcement,body:e.target.value}})}/>
-                </div>
-                <div style={{display:"flex",gap:"8px"}}>
-                  <button style={{...btnSt(C.accent),flex:1}} onClick={()=>update({announcement:{...announcement}})}>Save Message</button>
-                  {announcement.body&&<button style={{...btnSt(C.red,true)}} onClick={()=>update({announcement:{title:"",body:""}})}>Clear</button>}
-                </div>
-                {announcement.body&&<p style={{color:C.green,fontSize:"0.72rem",margin:"8px 0 0"}}>✓ Message is live on the login screen</p>}
-              </div>
-            )}
+
           </div>
         )}
 
@@ -1852,9 +1799,47 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               ))}
               <span style={{color:C.muted,fontSize:"0.65rem"}}>⭐ = Shot of the Day &nbsp;·&nbsp; — = absent</span>
             </div>
+          </div>
+        )}
 
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:"16px",marginTop:"8px"}}>
-              <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"12px"}}>ADMIN TOOLS</div>
+        {tab==="admin"&&isAdmin&&(
+          <div>
+            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>⚙ Admin Tools</h2>
+
+            {/* Sign-ups */}
+            <div style={{...cardSt,marginBottom:"14px",borderColor:C.green+"44",background:"#0f1a0f"}}>
+              <div style={{color:C.greenLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"10px"}}>🏑 WEEK {curSignupWk} SIGN-UPS</div>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px"}}>
+                {!curSignup.open
+                  ?<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:true}}})} style={{...btnSt(C.green,true),padding:"6px 14px",fontSize:"0.78rem"}}>Open sign-ups</button>
+                  :<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Close sign-ups</button>
+                }
+                {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⇄ Randomise groups</button>}
+                {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
+                {curSignup.published&&<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
+              </div>
+              {(curSignup.signups||[]).length>0&&(
+                <>
+                  <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"8px"}}>{(curSignup.signups||[]).length}/24 signed up{(curSignup.waitlist||[]).length>0&&` · ${curSignup.waitlist.length} waitlist`}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:curSignup.groups?"10px":"0"}}>
+                    {(curSignup.signups||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.green+"22",border:`1px solid ${C.green}44`,color:C.greenLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>✓ {p.name}</span>:null;})}
+                    {(curSignup.waitlist||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.accent+"22",border:`1px solid ${C.accent}44`,color:C.accentLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>⏳ {p.name}</span>:null;})}
+                  </div>
+                </>
+              )}
+              {curSignup.groups&&(
+                <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                  {curSignup.groups.map((grp,gi)=>(
+                    <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",padding:"8px 10px",flex:1,minWidth:"100px"}}>
+                      <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold",marginBottom:"5px"}}>Group {gi+1}</div>
+                      {grp.map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<div key={pid} style={{color:C.cream,fontSize:"0.75rem",padding:"2px 0"}}>{p.name}</div>:null;})}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Rain Out */}
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.blue+"44",background:"#0a0f1a"}}>
               <div style={{color:C.blue,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>☔ RAIN OUT WEEK</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
@@ -1876,6 +1861,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>Marks all eligible players as absent with 1 point. Overwrites any existing data for that week.</p>
             </div>
+
+            {/* Rebalance */}
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.accent+"44",background:"#1a140a"}}>
               <div style={{color:C.accent,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚖ REBALANCE WEEK SCORES</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
@@ -1910,6 +1897,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>Recalculates all scores for a week so every group uses the largest group's size as the max points.</p>
             </div>
+
+            {/* Delete Week */}
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.red+"44",background:"#1a0f0f"}}>
               <div style={{color:C.red,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚠ DELETE WEEK DATA</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
@@ -1932,11 +1921,35 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>This removes all recorded scores for that week. Players will need to be re-recorded.</p>
             </div>
-            </div>
+
+            {/* Announcement - superadmin only */}
+            {user?.role==="superadmin"&&(
+              <div style={{...cardSt,borderColor:C.accent+"44",background:"#1a1400"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"12px"}}>
+                  <span style={{fontSize:"1rem"}}>📣</span>
+                  <span style={{color:C.accentLight,fontWeight:"bold",fontSize:"0.85rem"}}>Login Screen Announcement</span>
+                </div>
+                <div style={{marginBottom:"10px"}}>
+                  <label style={lbSt}>TITLE (optional)</label>
+                  <input style={inputSt} value={announcement.title||""} placeholder="e.g. This week's venue change"
+                    onChange={e=>update({announcement:{...announcement,title:e.target.value}})}/>
+                </div>
+                <div style={{marginBottom:"12px"}}>
+                  <label style={lbSt}>MESSAGE</label>
+                  <textarea style={textareaSt} value={announcement.body||""} placeholder="Write a message for all members to see on the login screen…"
+                    onChange={e=>update({announcement:{...announcement,body:e.target.value}})}/>
+                </div>
+                <div style={{display:"flex",gap:"8px"}}>
+                  <button style={{...btnSt(C.accent),flex:1}} onClick={()=>update({announcement:{...announcement}})}>Save Message</button>
+                  {announcement.body&&<button style={{...btnSt(C.red,true)}} onClick={()=>update({announcement:{title:"",body:""}})}>Clear</button>}
+                </div>
+                {announcement.body&&<p style={{color:C.green,fontSize:"0.72rem",margin:"8px 0 0"}}>✓ Message is live on the login screen</p>}
+              </div>
+            )}
           </div>
         )}
 
-        {tab==="profile"&&(()=>{
+                {tab==="profile"&&(()=>{
           const myPlayer = players.find(p=>p.name===user.name);
           const myStats = myPlayer ? standings.find(s=>s.id===myPlayer.id) : null;
           
