@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { subscribeToPush } from "./serviceWorkerRegistration";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -351,6 +352,25 @@ export default function App() {
     return () => unsub();
   }, []);
 
+  // Register push subscription when user logs in
+  useEffect(() => {
+    if (!user) return;
+    const saveSub = async () => {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") return;
+        const sub = await subscribeToPush();
+        if (!sub?.endpoint) return;
+        const endpointHash = btoa(sub.endpoint).replace(/[^a-zA-Z0-9]/g,"").slice(0,40);
+        const existing = await import("firebase/firestore").then(({getFirestore,doc,getDoc,setDoc})=>{
+          const db=getFirestore(); const ref=doc(db,"pushSubscriptions",endpointHash);
+          return setDoc(ref,{subscription:sub,playerName:user.name,role:user.role,updatedAt:Date.now()},{merge:true});
+        });
+      } catch(e) { console.error("Push setup error:",e); }
+    };
+    saveSub();
+  }, [user?.name]);
+
   const uploadImage = async (file) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -476,6 +496,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [addPlayerGroupId, setAddPlayerGroupId] = useState("");
   const [addPlayerPos, setAddPlayerPos]     = useState("");
   const [addPlayerSotd, setAddPlayerSotd]   = useState(0);
+  const [matchNote, setMatchNote]           = useState("");
+  const [matchSending, setMatchSending]     = useState(false);
+  const [resultsNote, setResultsNote]       = useState("");
+  const [resultsSending, setResultsSending] = useState(false);
   const [addIsGuest, setAddIsGuest]         = useState(false);
   const [addGuestName, setAddGuestName]     = useState("");
   const [weekGroupFilter, setWeekGroupFilter] = useState({});
@@ -2000,6 +2024,98 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 {announcement.body&&<p style={{color:C.green,fontSize:"0.72rem",margin:"8px 0 0"}}>✓ Message is live on the login screen</p>}
               </div>
             )}
+
+            {/* Push Notifications */}
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:"16px",marginTop:"8px"}}>
+              <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"12px"}}>PUSH NOTIFICATIONS</div>
+
+              {/* Match Details notification */}
+              <div style={{...cardSt,marginBottom:"14px",borderColor:C.green+"44",background:"#0a1a0f"}}>
+                <div style={{color:C.greenLight,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>📅 MATCH DETAILS</div>
+                <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 10px",lineHeight:"1.5"}}>Sends next match date, time, and venue to all members. Add any extra notes below.</p>
+                {(()=>{
+                  const nextVenue=venues.find(v=>v.name===(appState.weekSignups?.[appState.nextMatchWeek||1]?.venue||venues[0]?.name))||venues[0];
+                  const matchDate=appState.nextMatchDate||"TBD";
+                  const matchTime=appState.nextMatchTime||"";
+                  const matchWeek=appState.nextMatchWeek||1;
+                  const sendMatchNotif=async()=>{
+                    setMatchSending(true);
+                    try{
+                      const {collection,getDocs}=await import("firebase/firestore");
+                      const {getFirestore}=await import("firebase/firestore");
+                      const db2=getFirestore();
+                      const snap=await getDocs(collection(db2,"pushSubscriptions"));
+                      const subs=snap.docs.map(d=>d.data().subscription).filter(Boolean);
+                      if(!subs.length){notify("No subscribers yet.");setMatchSending(false);return;}
+                      const body=[nextVenue?.name,matchDate,matchTime,matchNote].filter(Boolean).join(" · ");
+                      const res=await fetch("/.netlify/functions/send-push",{
+                        method:"POST",headers:{"Content-Type":"application/json"},
+                        body:JSON.stringify({subscriptions:subs,title:`🏑 Week ${matchWeek} – Match Details`,body,tag:"match-details"})
+                      });
+                      const data=await res.json();
+                      notify(`Sent to ${data.sent} member${data.sent!==1?"s":""}!`);
+                      setMatchNote("");
+                    }catch(e){console.error(e);notify("Failed to send.");}
+                    setMatchSending(false);
+                  };
+                  return(<>
+                    <div style={{marginBottom:"10px"}}><label style={lbSt}>EXTRA NOTES (optional)</label><textarea style={textareaSt} value={matchNote} onChange={e=>setMatchNote(e.target.value)} placeholder="e.g. Meet at the east entrance, bring sunscreen"/></div>
+                    <button style={{...btnSt(C.green,true),width:"100%",padding:"9px",opacity:matchSending?0.6:1}} onClick={sendMatchNotif} disabled={matchSending}>{matchSending?"Sending…":"📤 Send Match Details to All Members"}</button>
+                  </>);
+                })()}
+              </div>
+
+              {/* Week Results notification */}
+              <div style={{...cardSt,marginBottom:"14px",borderColor:C.gold+"44",background:"#1a1400"}}>
+                <div style={{color:C.gold,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>🏆 WEEK RESULTS</div>
+                <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 10px",lineHeight:"1.5"}}>Sends this week's winner and Shot of the Day to all members.</p>
+                {(()=>{
+                  const lastWk=Math.max(0,...Object.values(weeklyGames).flatMap(wg=>Object.keys(wg).map(Number)).filter(n=>!isNaN(n)));
+                  if(!lastWk) return <p style={{color:C.muted,fontSize:"0.75rem"}}>No weeks recorded yet.</p>;
+                  const totals=players.map(p=>{
+                    const games=weeklyGames[p.id]?.[lastWk]||[];
+                    const pts=games.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
+                    const absent=games.every(g=>g.absent);
+                    const sotd=games.reduce((s,g)=>s+(g.sotd||0),0);
+                    return{name:p.name,pts,absent,sotd};
+                  }).filter(p=>!p.absent);
+                  const maxPts=Math.max(0,...totals.map(p=>p.pts));
+                  const winners=totals.filter(p=>p.pts===maxPts).map(p=>p.name);
+                  const sotdPlayers=totals.filter(p=>p.sotd>0).map(p=>p.name);
+                  const winnerStr=winners.join(" & ");
+                  const sotdStr=sotdPlayers.length?sotdPlayers.join(" & "):"";
+                  const sendResultsNotif=async()=>{
+                    setResultsSending(true);
+                    try{
+                      const {collection,getDocs,getFirestore}=await import("firebase/firestore");
+                      const db2=getFirestore();
+                      const snap=await getDocs(collection(db2,"pushSubscriptions"));
+                      const subs=snap.docs.map(d=>d.data().subscription).filter(Boolean);
+                      if(!subs.length){notify("No subscribers yet.");setResultsSending(false);return;}
+                      let body=`🥇 ${winnerStr} won Week ${lastWk} with ${maxPts} pts`;
+                      if(sotdStr) body+=` · ⭐ Shot of the Day: ${sotdStr}`;
+                      if(resultsNote) body+=` · ${resultsNote}`;
+                      const res=await fetch("/.netlify/functions/send-push",{
+                        method:"POST",headers:{"Content-Type":"application/json"},
+                        body:JSON.stringify({subscriptions:subs,title:`🏑 Week ${lastWk} Results`,body,tag:"week-results"})
+                      });
+                      const data=await res.json();
+                      notify(`Sent to ${data.sent} member${data.sent!==1?"s":""}!`);
+                      setResultsNote("");
+                    }catch(e){console.error(e);notify("Failed to send.");}
+                    setResultsSending(false);
+                  };
+                  return(<>
+                    <div style={{...cardSt,padding:"8px 12px",marginBottom:"10px",background:C.bg}}>
+                      <div style={{color:C.cream,fontSize:"0.78rem",marginBottom:"3px"}}>🥇 <strong>{winnerStr}</strong> · {maxPts} pts</div>
+                      {sotdStr&&<div style={{color:C.gold,fontSize:"0.75rem"}}>⭐ SOTD: {sotdStr}</div>}
+                    </div>
+                    <div style={{marginBottom:"10px"}}><label style={lbSt}>EXTRA NOTE (optional)</label><textarea style={textareaSt} value={resultsNote} onChange={e=>setResultsNote(e.target.value)} placeholder="e.g. Great game everyone, see you next week!"/></div>
+                    <button style={{...btnSt(C.gold),width:"100%",padding:"9px",opacity:resultsSending?0.6:1}} onClick={sendResultsNotif} disabled={resultsSending}>{resultsSending?"Sending…":"📤 Send Results to All Members"}</button>
+                  </>);
+                })()}
+              </div>
+            </div>
           </div>
         )}
 
