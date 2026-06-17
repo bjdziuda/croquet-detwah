@@ -134,7 +134,7 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[]}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}}) {
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -198,16 +198,6 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
           </div>
         )}
 
-        {/* Login Posts (match details + results notifications) */}
-        {loginPosts.length>0&&[...loginPosts].reverse().map((post,i)=>(
-          <div key={i} style={{marginBottom:"12px",borderRadius:"10px",border:`1px solid ${post.type==="results"?C.gold+"66":C.green+"66"}`,background:post.type==="results"?"#1a1400":"#0a1a0f",padding:"14px 16px"}}>
-            <div style={{fontSize:"0.6rem",color:post.type==="results"?C.gold:C.greenLight,letterSpacing:"0.12em",fontWeight:"bold",marginBottom:"6px"}}>{post.type==="results"?"🏆 WEEK RESULTS":"📅 MATCH DETAILS"}</div>
-            <div style={{color:C.cream,fontWeight:"bold",fontSize:"0.88rem",marginBottom:"4px"}}>{post.title}</div>
-            <div style={{color:C.muted,fontSize:"0.82rem",lineHeight:"1.55"}}>{post.body}</div>
-            {post.sentAt&&<div style={{color:C.muted,fontSize:"0.62rem",marginTop:"6px",opacity:0.6}}>{new Date(post.sentAt).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</div>}
-          </div>
-        ))}
-
         {/* Last week winner */}
         {(()=>{
           const wg=weeklyGames||{};
@@ -263,7 +253,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                         background:isIn?C.green+"33":isWait?C.accent+"22":"transparent",
                         color:isIn?C.greenLight:isWait?C.accentLight:C.cream,
                         fontFamily:"Georgia,serif",fontSize:"0.85rem",cursor:"pointer"}}>
-                      {isIn?"✓ ":isWait?"⏳ ":""}{p.name}
+                      {isIn?"✓ ":isWait?"⏳ ":""}{p.name}{(typeof membershipDues[String(p.id)]==="number"&&membershipDues[String(p.id)]>0)&&" 🏑"}
                     </button>
                   );
                 })}
@@ -280,7 +270,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                       <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",marginBottom:"8px"}}>Group {gi+1}</div>
                       {grp.map(pid=>{
                         const p=(players||[]).find(x=>String(x.id)===String(pid));
-                        return p?<div key={pid} style={{color:C.cream,fontSize:"0.82rem",padding:"3px 0",borderBottom:`1px solid ${C.border}22`}}>{p.name}</div>:null;
+                        return p?<div key={pid} style={{color:C.cream,fontSize:"0.82rem",padding:"3px 0",borderBottom:`1px solid ${C.border}22`}}>{p.name}{(typeof membershipDues[String(p.id)]==="number"&&membershipDues[String(p.id)]>0)&&" 🏑"}</div>:null;
                       })}
                     </div>
                   ))}
@@ -456,6 +446,7 @@ export default function App() {
     venues={appState?.venues||[]}
     announcement={appState?.announcement||{title:"",body:""}}
     loginPosts={appState?.loginPosts||[]}
+    membershipDues={appState?.membershipDues||{}}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
