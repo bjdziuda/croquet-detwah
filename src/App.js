@@ -109,7 +109,7 @@ const MOTTO_ENTRIES = [
 ];
 
 const EMPTY_STATE = {
-  players: [], weeklyGames: {}, weeklyGuests: {}, totalWeeks: 1, announcement: {title:"", body:""},
+  players: [], weeklyGames: {}, weeklyGuests: {}, totalWeeks: 1, announcement: {title:"", body:""}, loginPosts: [],
   leagueName: "Croquet De-Twah", leagueLogo: null,
   venues: DEFAULT_VENUES.map((name,i) => ({id:i+1,name,rating:0,comment:"",timesPlayed:0,reviews:[]})),
   votes: {},
@@ -134,7 +134,7 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[]}) {
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -197,6 +197,16 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
             <div style={{color:C.muted,fontSize:"0.82rem",lineHeight:"1.55",whiteSpace:"pre-wrap"}}>{announcement.body}</div>
           </div>
         )}
+
+        {/* Login Posts (match details + results notifications) */}
+        {loginPosts.length>0&&[...loginPosts].reverse().map((post,i)=>(
+          <div key={i} style={{marginBottom:"12px",borderRadius:"10px",border:`1px solid ${post.type==="results"?C.gold+"66":C.green+"66"}`,background:post.type==="results"?"#1a1400":"#0a1a0f",padding:"14px 16px"}}>
+            <div style={{fontSize:"0.6rem",color:post.type==="results"?C.gold:C.greenLight,letterSpacing:"0.12em",fontWeight:"bold",marginBottom:"6px"}}>{post.type==="results"?"🏆 WEEK RESULTS":"📅 MATCH DETAILS"}</div>
+            <div style={{color:C.cream,fontWeight:"bold",fontSize:"0.88rem",marginBottom:"4px"}}>{post.title}</div>
+            <div style={{color:C.muted,fontSize:"0.82rem",lineHeight:"1.55"}}>{post.body}</div>
+            {post.sentAt&&<div style={{color:C.muted,fontSize:"0.62rem",marginTop:"6px",opacity:0.6}}>{new Date(post.sentAt).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}</div>}
+          </div>
+        ))}
 
         {/* Last week winner */}
         {(()=>{
@@ -445,12 +455,13 @@ export default function App() {
     weeklyGames={appState?.weeklyGames||{}}
     venues={appState?.venues||[]}
     announcement={appState?.announcement||{title:"",body:""}}
+    loginPosts={appState?.loginPosts||[]}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[]} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -2053,6 +2064,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                         body:JSON.stringify({subscriptions:subs,title:`🏑 Week ${matchWeek} – Match Details`,body,tag:"match-details"})
                       });
                       const data=await res.json();
+                      const newPost={type:"match",title:`🏑 Week ${matchWeek} – Match Details`,body,sentAt:Date.now()};
+                      update({loginPosts:[...(loginPosts||[]).slice(-4),newPost]});
                       notify(`Sent to ${data.sent} member${data.sent!==1?"s":""}!`);
                       setMatchNote("");
                     }catch(e){console.error(e);notify("Failed to send.");}
@@ -2060,7 +2073,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   };
                   return(<>
                     <div style={{marginBottom:"10px"}}><label style={lbSt}>EXTRA NOTES (optional)</label><textarea style={textareaSt} value={matchNote} onChange={e=>setMatchNote(e.target.value)} placeholder="e.g. Meet at the east entrance, bring sunscreen"/></div>
-                    <button style={{...btnSt(C.green,true),width:"100%",padding:"9px",opacity:matchSending?0.6:1}} onClick={sendMatchNotif} disabled={matchSending}>{matchSending?"Sending…":"📤 Send Match Details to All Members"}</button>
+                    <div style={{display:"flex",gap:"8px"}}>
+                      <button style={{...btnSt(C.green,true),flex:1,padding:"9px",opacity:matchSending?0.6:1}} onClick={sendMatchNotif} disabled={matchSending}>{matchSending?"Sending…":"📤 Send to All Members"}</button>
+                      {loginPosts.some(p=>p.type==="match")&&<button style={{...btnSt(C.red,true)}} onClick={()=>update({loginPosts:loginPosts.filter(p=>p.type!=="match")})}>Clear</button>}
+                    </div>
+                    {loginPosts.some(p=>p.type==="match")&&<p style={{color:C.green,fontSize:"0.72rem",margin:"6px 0 0"}}>✓ Match details visible on login screen</p>}
                   </>);
                 })()}
               </div>
@@ -2100,6 +2117,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                         body:JSON.stringify({subscriptions:subs,title:`🏑 Week ${lastWk} Results`,body,tag:"week-results"})
                       });
                       const data=await res.json();
+                      const newPost={type:"results",title:`🏑 Week ${lastWk} Results`,body,sentAt:Date.now()};
+                      update({loginPosts:[...(loginPosts||[]).slice(-4),newPost]});
                       notify(`Sent to ${data.sent} member${data.sent!==1?"s":""}!`);
                       setResultsNote("");
                     }catch(e){console.error(e);notify("Failed to send.");}
@@ -2111,7 +2130,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       {sotdStr&&<div style={{color:C.gold,fontSize:"0.75rem"}}>⭐ SOTD: {sotdStr}</div>}
                     </div>
                     <div style={{marginBottom:"10px"}}><label style={lbSt}>EXTRA NOTE (optional)</label><textarea style={textareaSt} value={resultsNote} onChange={e=>setResultsNote(e.target.value)} placeholder="e.g. Great game everyone, see you next week!"/></div>
-                    <button style={{...btnSt(C.gold),width:"100%",padding:"9px",opacity:resultsSending?0.6:1}} onClick={sendResultsNotif} disabled={resultsSending}>{resultsSending?"Sending…":"📤 Send Results to All Members"}</button>
+                    <div style={{display:"flex",gap:"8px"}}>
+                      <button style={{...btnSt(C.gold),flex:1,padding:"9px",opacity:resultsSending?0.6:1}} onClick={sendResultsNotif} disabled={resultsSending}>{resultsSending?"Sending…":"📤 Send to All Members"}</button>
+                      {loginPosts.some(p=>p.type==="results")&&<button style={{...btnSt(C.red,true)}} onClick={()=>update({loginPosts:loginPosts.filter(p=>p.type!=="results")})}>Clear</button>}
+                    </div>
+                    {loginPosts.some(p=>p.type==="results")&&<p style={{color:C.green,fontSize:"0.72rem",margin:"6px 0 0"}}>✓ Results visible on login screen</p>}
                   </>);
                 })()}
               </div>
