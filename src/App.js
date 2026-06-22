@@ -134,7 +134,7 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[]}) {
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -242,7 +242,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               {signup.open&&<div style={{color:C.muted,fontSize:"0.75rem",marginBottom:"14px"}}>{signupIds.size}/24 signed up{waitlistIds.size>0&&` · ${waitlistIds.size} waitlist`}</div>}
               {!signup.open&&<div style={{color:C.muted,fontSize:"0.75rem",marginBottom:"14px"}}>Select your name below</div>}
               <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
-                {(players||[]).filter(p=>p.joinedWeek<=wk).map(p=>{
+                {(players||[]).filter(p=>p.joinedWeek<=wk&&!suspendedPlayers.includes(String(p.id))).map(p=>{
                   const pid=String(p.id);
                   const isIn=signupIds.has(pid);
                   const isWait=waitlistIds.has(pid);
@@ -447,12 +447,13 @@ export default function App() {
     announcement={appState?.announcement||{title:"",body:""}}
     loginPosts={appState?.loginPosts||[]}
     membershipDues={appState?.membershipDues||{}}
+    suspendedPlayers={appState?.suspendedPlayers||[]}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[]} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[]} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -466,6 +467,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [editVenue, setEditVenue]   = useState(null);
   const [reviewVenue, setReviewVenue] = useState(null);
   const [reviewForm, setReviewForm] = useState({rating:0,comment:""});
+  const [collapsedReviews, setCollapsedReviews] = useState({});
 
   const [gameWeek, setGameWeek]     = useState(appState.nextMatchWeek||1);
   const [gameVenue, setGameVenue]   = useState(venues[0]?.name||"");
@@ -540,7 +542,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     }
   };
 
-  const standings = useMemo(()=>[...players].map(p=>{
+  const standings = useMemo(()=>[...players].filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
     const pts=totalPts(p.id,weeklyGames);
     const allG=Object.values(weeklyGames[p.id]||{}).flat();
     const wins=allG.filter(g=>g.position===1&&!g.absent).length;
@@ -643,7 +645,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     const sotdMap={};
     sotdEntries.filter(s=>s.playerId).forEach(s=>{sotdMap[s.playerId]=(sotdMap[s.playerId]||0)+parseInt(s.count||1);});
     const includedIds=new Set(Object.keys(updates));
-    const autoAbsent=players.filter(p=>p.joinedWeek<=wk&&!includedIds.has(String(p.id)));
+    const autoAbsent=players.filter(p=>p.joinedWeek<=wk&&!includedIds.has(String(p.id))&&!suspendedPlayers.includes(String(p.id)));
     const nwg={...weeklyGames};
     Object.entries(updates).forEach(([pid,wkData])=>{
       nwg[pid]={...(nwg[pid]||{})};
@@ -838,7 +840,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   };
 
   const publishGroups=()=>{
-    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:true}}});
+    const newWS={...weekSignups,[curSignupWk]:{...curSignup,published:true}};
+    const newState={...appState,weekSignups:newWS};
+    update({weekSignups:newWS});
+    // Write immediately (in addition to debounced write) to prevent onSnapshot race condition
+    setDoc(LEAGUE_DOC,newState).catch(e=>console.error("Publish save failed:",e));
     notify("Groups published!");
   };
 
@@ -890,7 +896,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         const groupList=Object.values(weekGroups).sort((a,b)=>a.gameRound-b.gameRound||a.label.localeCompare(b.label));
         const hasMultipleRounds=new Set(groupList.map(g=>g.gameRound)).size>1;
         const alreadyInGroup=addPlayerGroupId?new Set(players.filter(p=>(weeklyGames[p.id]?.[wk]||[]).some(g=>!g.absent&&g.gameId===addPlayerGroupId)).map(p=>String(p.id))):new Set();
-        const available=players.filter(p=>!alreadyInGroup.has(String(p.id)));
+        const available=players.filter(p=>!alreadyInGroup.has(String(p.id))&&!suspendedPlayers.includes(String(p.id)));
         const selGroup=groupList.find(g=>g.gameId===addPlayerGroupId);
         const maxPos=selGroup?selGroup.size+1:1;
         return(
@@ -1460,24 +1466,29 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     )}
                     {reviews.length>0&&(
                       <div>
-                        <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"6px"}}>MEMBER REVIEWS</div>
-                        <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-                          {reviews.map(r=>(
-                            <div key={r.id} style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
-                              <div style={{flex:1}}>
-                                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px",flexWrap:"wrap"}}>
-                                  <span style={{color:C.cream,fontSize:"0.8rem",fontWeight:"bold"}}>{r.author}</span>
-                                  <StarRating value={r.rating} size={11}/>
-                                  <span style={{color:C.muted,fontSize:"0.68rem"}}>{r.date}</span>
+                        <button onClick={()=>setCollapsedReviews(prev=>({...prev,[v.id]:!prev[v.id]}))} style={{display:"flex",alignItems:"center",gap:"5px",background:"transparent",border:"none",cursor:"pointer",padding:"0",marginBottom:collapsedReviews[v.id]?"0":"6px"}}>
+                          <span style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em"}}>MEMBER REVIEWS ({reviews.length})</span>
+                          <span style={{color:C.muted,fontSize:"0.6rem"}}>{collapsedReviews[v.id]?"▶":"▼"}</span>
+                        </button>
+                        {!collapsedReviews[v.id]&&(
+                          <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                            {reviews.map(r=>(
+                              <div key={r.id} style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+                                <div style={{flex:1}}>
+                                  <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px",flexWrap:"wrap"}}>
+                                    <span style={{color:C.cream,fontSize:"0.8rem",fontWeight:"bold"}}>{r.author}</span>
+                                    <StarRating value={r.rating} size={11}/>
+                                    <span style={{color:C.muted,fontSize:"0.68rem"}}>{r.date}</span>
+                                  </div>
+                                  {r.comment&&<p style={{margin:0,color:C.muted,fontSize:"0.76rem",lineHeight:"1.4",fontStyle:"italic"}}>"{r.comment}"</p>}
                                 </div>
-                                {r.comment&&<p style={{margin:0,color:C.muted,fontSize:"0.76rem",lineHeight:"1.4",fontStyle:"italic"}}>"{r.comment}"</p>}
+                                {(isAdmin||r.author===user.name)&&(
+                                  <button onClick={()=>deleteReview(v.id,r.id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif",padding:"2px 4px",flexShrink:0}}>✕</button>
+                                )}
                               </div>
-                              {(isAdmin||r.author===user.name)&&(
-                                <button onClick={()=>deleteReview(v.id,r.id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif",padding:"2px 4px",flexShrink:0}}>✕</button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {reviews.length===0&&!v.comment&&<p style={{margin:0,color:C.border,fontSize:"0.74rem",fontStyle:"italic"}}>No reviews yet — be the first!</p>}
@@ -1629,7 +1640,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             )}
             {groups.map((grp,gi)=>{
               const allUsedIds=new Set(groups.flatMap(g=>g.players.map(r=>r.playerId)).filter(Boolean));
-              const unselected=[...players].filter(p=>p.joinedWeek<=parseInt(gameWeek)&&!allUsedIds.has(String(p.id))).sort((a,b)=>a.name.localeCompare(b.name));
+              const unselected=[...players].filter(p=>p.joinedWeek<=parseInt(gameWeek)&&!allUsedIds.has(String(p.id))&&!suspendedPlayers.includes(String(p.id))).sort((a,b)=>a.name.localeCompare(b.name));
               const ranked=grp.players.filter(r=>r.playerId);
               return(
               <div key={grp.id} style={{...cardSt,marginBottom:"10px"}}>
@@ -1708,7 +1719,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"10px"}}><span style={{fontSize:"1rem"}}>⭐</span><span style={{color:C.gold,fontWeight:"bold",fontSize:"0.85rem"}}>Shot of the Day</span><span style={{color:C.muted,fontSize:"0.72rem"}}>+1 bonus pt each</span></div>
               {sotdEntries.map((row,i)=>(
                 <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 26px",gap:"6px",marginBottom:"6px",alignItems:"center"}}>
-                  <select style={inputSt} value={row.playerId} onChange={e=>updateSotdRow(i,"playerId",e.target.value)}><option value="">Player…</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+                  <select style={inputSt} value={row.playerId} onChange={e=>updateSotdRow(i,"playerId",e.target.value)}><option value="">Player…</option>{players.filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
                   <input style={inputSt} type="number" min="1" max="10" value={row.count} onChange={e=>updateSotdRow(i,"count",e.target.value)} placeholder="# awards"/>
                   <button onClick={()=>removeSotdRow(i)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"1rem",padding:"2px"}}>✕</button>
                 </div>
@@ -2345,21 +2356,31 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 const renderCard=(p)=>{
                   const curAmt=typeof membershipDues[String(p.id)]==="number"?membershipDues[String(p.id)]:0;
                   const paid=curAmt>0;
+                  const isSuspended=suspendedPlayers.includes(String(p.id));
                   const weeksInLeague=Math.max(1,(totalWeeks||1)-(p.joinedWeek||1)+1);
                   const gamesPlayed=Object.values(weeklyGames[String(p.id)]||{}).filter(g=>g&&!g.absent).length;
+                  const toggleSuspend=()=>{
+                    const newList=isSuspended?suspendedPlayers.filter(x=>x!==String(p.id)):[...suspendedPlayers,String(p.id)];
+                    update({suspendedPlayers:newList});
+                    notify(isSuspended?`${p.name} reinstated.`:`${p.name} suspended.`);
+                  };
+                  const leftBorderCol=paid?C.green:isSuspended?C.red:C.border;
                   return(
-                    <div key={p.id} style={{background:C.bg,border:`1px solid ${C.border}`,borderLeft:`3px solid ${paid?C.green:C.border}`,borderRadius:"0 8px 8px 0",padding:"8px 10px"}}>
+                    <div key={p.id} style={{background:C.bg,border:`1px solid ${isSuspended?C.red+"44":C.border}`,borderLeft:`3px solid ${leftBorderCol}`,borderRadius:"0 8px 8px 0",padding:"8px 10px"}}>
                       <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"7px"}}>
                         {p.imageUrl
-                          ?<img src={p.imageUrl} alt={p.name} style={{width:"30px",height:"30px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${paid?C.green:C.border}`,flexShrink:0}}/>
+                          ?<img src={p.imageUrl} alt={p.name} style={{width:"30px",height:"30px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${paid?C.green:isSuspended?C.red:C.border}`,flexShrink:0}}/>
                           :<div style={{width:"30px",height:"30px",borderRadius:"50%",background:C.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.8rem",flexShrink:0}}>👤</div>
                         }
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{color:C.cream,fontSize:"0.82rem",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                            <span style={{color:C.cream,fontSize:"0.82rem",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
+                            {isSuspended&&<span style={{background:C.red+"22",border:`1px solid ${C.red}44`,color:C.red,borderRadius:"4px",padding:"1px 5px",fontSize:"0.6rem",fontWeight:"bold",flexShrink:0}}>SUSPENDED</span>}
+                          </div>
                           <div style={{color:C.muted,fontSize:"0.65rem"}}>{weeksInLeague} wk{weeksInLeague!==1?"s":""} · {gamesPlayed} game{gamesPlayed!==1?"s":""}</div>
                         </div>
                       </div>
-                      <div style={{display:"flex",gap:"4px"}}>
+                      <div style={{display:"flex",gap:"4px",marginBottom:paid?"0":"4px"}}>
                         <button
                           onClick={()=>{const nd={...membershipDues,[String(p.id)]:0};update({membershipDues:nd});notify("Marked unpaid.");}}
                           style={{flex:1,background:curAmt===0?"#2a1a1a":"transparent",border:`1px solid ${curAmt===0?"#e87a7a":C.border}`,borderRadius:"5px",color:curAmt===0?"#e87a7a":C.muted,padding:"4px 0",cursor:"pointer",fontSize:"0.7rem",fontWeight:"bold"}}>—</button>
@@ -2371,6 +2392,11 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                           </button>
                         ))}
                       </div>
+                      {!paid&&(
+                        <button onClick={toggleSuspend} style={{width:"100%",background:isSuspended?"#1a0800":"transparent",border:`1px solid ${isSuspended?"#cc6600":C.red+"55"}`,borderRadius:"5px",color:isSuspended?"#cc9933":C.red,padding:"4px 0",cursor:"pointer",fontSize:"0.7rem",fontWeight:"bold"}}>
+                          {isSuspended?"✓ Reinstate":"🚫 Suspend"}
+                        </button>
+                      )}
                     </div>
                   );
                 };
