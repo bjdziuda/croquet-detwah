@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { subscribeToPush } from "./serviceWorkerRegistration";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, onSnapshot, setDoc } from "firebase/firestore";
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 
@@ -290,9 +290,17 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"28px",maxWidth:"320px",width:"100%",textAlign:"center"}}>
               <div style={{fontSize:"1.8rem",marginBottom:"8px"}}>👋</div>
               <div style={{color:C.cream,fontSize:"1.1rem",fontWeight:"bold",marginBottom:"6px"}}>Hey {selected.name}!</div>
-              <div style={{color:C.muted,fontSize:"0.88rem",marginBottom:"24px"}}>
+              <div style={{color:C.muted,fontSize:"0.88rem",marginBottom:signup.published&&signup.groups?"8px":"24px"}}>
                 {signup.open?`Are you coming to Week ${wk}?`:`Enter the league as ${selected.name}?`}
               </div>
+              {signup.published&&signup.groups&&signup.open&&(()=>{
+                const pid=String(selected.id);
+                const alreadyIn=signup.groups.findIndex(g=>g.includes(pid));
+                if(alreadyIn>=0) return <div style={{background:C.accent+"22",border:`1px solid ${C.accent}44`,borderRadius:"8px",padding:"8px 12px",marginBottom:"16px",fontSize:"0.8rem",color:C.accentLight}}>You're in <strong>Group {alreadyIn+1}</strong></div>;
+                const minSize=Math.min(...signup.groups.map(g=>g.length));
+                const targetIdx=signup.groups.findIndex(g=>g.length===minSize);
+                return <div style={{background:C.green+"22",border:`1px solid ${C.green}44`,borderRadius:"8px",padding:"8px 12px",marginBottom:"16px",fontSize:"0.8rem",color:C.greenLight}}>You'll be added to <strong>Group {targetIdx+1}</strong></div>;
+              })()}
               <div style={{display:"flex",gap:"10px",marginBottom:"12px"}}>
                 {signup.open&&(
                   <button onClick={()=>{onSignup(selected.id,true);onLogin({name:selected.name,role:"viewer"});setSelected(null);}}
@@ -434,7 +442,30 @@ export default function App() {
         signups=signups.filter(x=>x!==pid);
         waitlist=waitlist.filter(x=>x!==pid);
       }
-      persist({...appState,weekSignups:{...appState.weekSignups,[wk]:{...cur,signups,waitlist}}});
+      // Auto-adjust groups if already published
+      let groups=cur.groups?cur.groups.map(g=>[...g]):null;
+      let groupsChanged=false;
+      if(cur.published&&groups){
+        if(coming){
+          const alreadyIn=groups.some(g=>g.includes(pid));
+          if(!alreadyIn){
+            const minSize=Math.min(...groups.map(g=>g.length));
+            const targetIdx=groups.findIndex(g=>g.length===minSize);
+            groups=groups.map((g,i)=>i===targetIdx?[...g,pid]:g);
+            groupsChanged=true;
+          }
+        } else {
+          const inGroup=groups.some(g=>g.includes(pid));
+          if(inGroup){ groups=groups.map(g=>g.filter(id=>id!==pid)); groupsChanged=true; }
+        }
+      }
+      const newWkData={...cur,signups,waitlist,groups};
+      // Update local state immediately
+      setAppState({...appState,weekSignups:{...appState.weekSignups,[wk]:newWkData}});
+      // Use targeted updateDoc so this NEVER overwrites groups/published written by the admin
+      const updates={[`weekSignups.${wk}.signups`]:signups,[`weekSignups.${wk}.waitlist`]:waitlist};
+      if(groupsChanged) updates[`weekSignups.${wk}.groups`]=groups;
+      updateDoc(LEAGUE_DOC,updates).catch(e=>console.error("Signup save failed:",e));
     }}
     nextMatch={nextMatch}
     leagueLogo={appState?.leagueLogo}
@@ -836,15 +867,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     const grps=Array.from({length:numGroups},()=>[]);
     ids.forEach((id,i)=>grps[i%numGroups].push(id));
     update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps,published:false}}});
+    // Targeted write — ensures groups land in Firestore immediately, separate from any debounced full writes
+    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false}).catch(e=>console.error("Generate groups save failed:",e));
     notify("Groups randomised!");
   };
 
   const publishGroups=()=>{
-    const newWS={...weekSignups,[curSignupWk]:{...curSignup,published:true}};
-    const newState={...appState,weekSignups:newWS};
-    update({weekSignups:newWS});
-    // Write immediately (in addition to debounced write) to prevent onSnapshot race condition
-    setDoc(LEAGUE_DOC,newState).catch(e=>console.error("Publish save failed:",e));
+    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:true}}});
+    // Targeted write — only flips the published flag, can never accidentally wipe the groups field
+    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:true}).catch(e=>console.error("Publish save failed:",e));
     notify("Groups published!");
   };
 
