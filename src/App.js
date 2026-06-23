@@ -540,6 +540,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expForm, setExpForm] = useState({desc:"",amount:""});
   const [paidCollapsed, setPaidCollapsed] = useState(false);
+  const [suspendedCollapsed, setSuspendedCollapsed] = useState(false);
 
   const [addPlayerModal, setAddPlayerModal] = useState(null); // {week}
   const [addPlayerPid, setAddPlayerPid]     = useState("");
@@ -2442,7 +2443,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
               {(()=>{
                 const sortedPlayers=[...players].sort((a,b)=>a.name.localeCompare(b.name));
-                const unpaidPlayers=sortedPlayers.filter(p=>{const a=membershipDues[String(p.id)];return!(typeof a==="number"&&a>0);});
+                const unpaidPlayers=sortedPlayers.filter(p=>{const a=membershipDues[String(p.id)];return!(typeof a==="number"&&a>0)&&!suspendedPlayers.includes(String(p.id));});
+                const suspendedDuePlayers=sortedPlayers.filter(p=>{const a=membershipDues[String(p.id)];return!(typeof a==="number"&&a>0)&&suspendedPlayers.includes(String(p.id));});
                 const paidPlayers=sortedPlayers.filter(p=>{const a=membershipDues[String(p.id)];return typeof a==="number"&&a>0;});
                 const renderCard=(p)=>{
                   const curAmt=typeof membershipDues[String(p.id)]==="number"?membershipDues[String(p.id)]:0;
@@ -2498,6 +2500,21 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
                         {unpaidPlayers.map(p=>renderCard(p))}
                       </div>
+                    </div>
+                  )}
+                  {suspendedDuePlayers.length>0&&(
+                    <div style={{marginBottom:"14px"}}>
+                      <button
+                        onClick={()=>setSuspendedCollapsed(v=>!v)}
+                        style={{display:"flex",alignItems:"center",gap:"6px",background:"transparent",border:"none",cursor:"pointer",padding:"0",marginBottom:"8px"}}>
+                        <span style={{color:C.red,fontSize:"0.68rem",letterSpacing:"0.08em"}}>🚫 SUSPENDED ({suspendedDuePlayers.length})</span>
+                        <span style={{color:C.muted,fontSize:"0.65rem"}}>{suspendedCollapsed?"▶":"▼"}</span>
+                      </button>
+                      {!suspendedCollapsed&&(
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                          {suspendedDuePlayers.map(p=>renderCard(p))}
+                        </div>
+                      )}
                     </div>
                   )}
                   {paidPlayers.length>0&&(
