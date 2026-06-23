@@ -134,7 +134,7 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[]}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}}) {
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -145,6 +145,9 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
   const signup = weekSignups?.[wk] || {open:false,signups:[],waitlist:[],groups:null,published:false};
   const signupIds = new Set((signup.signups||[]).map(String));
   const waitlistIds = new Set((signup.waitlist||[]).map(String));
+  // Use flat publishedGroups field for reliable display (avoids nested Firestore issues)
+  const groupsForDisplay = publishedGroups && publishedGroups.week===wk && publishedGroups.published ? publishedGroups.groups : null;
+  console.log("[CroquetLogin] wk=",wk,"publishedGroups=",JSON.stringify(publishedGroups),"signup.published=",signup.published,"signup.groups=",signup.groups);
 
   const tryAdmin = () => {
     const match = DEFAULT_ADMINS.find(a => a.username===username.trim() && a.password===password);
@@ -207,19 +210,23 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
             const games=wg[p.id]?.[lastWk]||[];
             const pts=games.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
             const absent=games.every(g=>g.absent);
-            return{name:p.name,imageUrl:p.imageUrl,pts,absent};
+            return{id:String(p.id),name:p.name,imageUrl:p.imageUrl,pts,absent};
           }).filter(p=>!p.absent&&p.pts>0);
           const maxPts=Math.max(0,...totals.map(p=>p.pts));
-          const winners=totals.filter(p=>p.pts===maxPts);
+          let winners=totals.filter(p=>p.pts===maxPts);
           if(!winners.length) return null;
-          const isTie=winners.length>1;
+          const rawTie=winners.length>1;
+          const tbId=weekTiebreakers?.[lastWk];
+          const tbWinner=rawTie&&tbId?winners.find(w=>w.id===String(tbId)):null;
+          const displayWinners=tbWinner?[tbWinner]:winners;
+          const isTie=rawTie&&!tbWinner;
           return(
             <div style={{marginBottom:"16px",borderRadius:"10px",overflow:"hidden",border:`1px solid ${isTie?C.blue+"66":C.accent+"44"}`,background:isTie?"#0e101a":"#0e1a0e",padding:"10px 14px",display:"flex",alignItems:"center",gap:"10px"}}>
               <span style={{fontSize:"1.2rem"}}>{isTie?"🤝":"🏆"}</span>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:"0.6rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{isTie?"WEEK "+lastWk+" — TIED":"WEEK "+lastWk+" WINNER"}</div>
+                <div style={{fontSize:"0.6rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{isTie?"WEEK "+lastWk+" — TIED":tbWinner?"WEEK "+lastWk+" WINNER (TB)":"WEEK "+lastWk+" WINNER"}</div>
                 <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
-                  {winners.map(w=>(
+                  {displayWinners.map(w=>(
                     <div key={w.name} style={{display:"flex",alignItems:"center",gap:"5px"}}>
                       {w.imageUrl&&<img src={w.imageUrl} alt={w.name} style={{width:"20px",height:"20px",borderRadius:"50%",objectFit:"cover",border:`1.5px solid ${isTie?C.blue:C.accent}`}}/>}
                       <span style={{color:isTie?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>{w.name}</span>
@@ -261,11 +268,11 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
             </div>
 
             {/* Groups display */}
-            {signup.published&&signup.groups&&signup.groups.length>0&&(
+            {groupsForDisplay&&groupsForDisplay.length>0&&(
               <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"12px",padding:"20px",marginBottom:"12px"}}>
                 <div style={{color:C.muted,fontSize:"0.7rem",letterSpacing:"0.1em",marginBottom:"12px"}}>WEEK {wk} GROUPS</div>
                 <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                  {signup.groups.map((grp,gi)=>(
+                  {groupsForDisplay.map((grp,gi)=>(
                     <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px 12px",flex:1,minWidth:"120px"}}>
                       <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",marginBottom:"8px"}}>Group {gi+1}</div>
                       {grp.map(pid=>{
@@ -290,15 +297,15 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"28px",maxWidth:"320px",width:"100%",textAlign:"center"}}>
               <div style={{fontSize:"1.8rem",marginBottom:"8px"}}>👋</div>
               <div style={{color:C.cream,fontSize:"1.1rem",fontWeight:"bold",marginBottom:"6px"}}>Hey {selected.name}!</div>
-              <div style={{color:C.muted,fontSize:"0.88rem",marginBottom:signup.published&&signup.groups?"8px":"24px"}}>
+              <div style={{color:C.muted,fontSize:"0.88rem",marginBottom:groupsForDisplay&&signup.open?"8px":"24px"}}>
                 {signup.open?`Are you coming to Week ${wk}?`:`Enter the league as ${selected.name}?`}
               </div>
-              {signup.published&&signup.groups&&signup.open&&(()=>{
+              {groupsForDisplay&&signup.open&&(()=>{
                 const pid=String(selected.id);
-                const alreadyIn=signup.groups.findIndex(g=>g.includes(pid));
+                const alreadyIn=groupsForDisplay.findIndex(g=>g.includes(pid));
                 if(alreadyIn>=0) return <div style={{background:C.accent+"22",border:`1px solid ${C.accent}44`,borderRadius:"8px",padding:"8px 12px",marginBottom:"16px",fontSize:"0.8rem",color:C.accentLight}}>You're in <strong>Group {alreadyIn+1}</strong></div>;
-                const minSize=Math.min(...signup.groups.map(g=>g.length));
-                const targetIdx=signup.groups.findIndex(g=>g.length===minSize);
+                const minSize=Math.min(...groupsForDisplay.map(g=>g.length));
+                const targetIdx=groupsForDisplay.findIndex(g=>g.length===minSize);
                 return <div style={{background:C.green+"22",border:`1px solid ${C.green}44`,borderRadius:"8px",padding:"8px 12px",marginBottom:"16px",fontSize:"0.8rem",color:C.greenLight}}>You'll be added to <strong>Group {targetIdx+1}</strong></div>;
               })()}
               <div style={{display:"flex",gap:"10px",marginBottom:"12px"}}>
@@ -442,29 +449,33 @@ export default function App() {
         signups=signups.filter(x=>x!==pid);
         waitlist=waitlist.filter(x=>x!==pid);
       }
-      // Auto-adjust groups if already published
-      let groups=cur.groups?cur.groups.map(g=>[...g]):null;
-      let groupsChanged=false;
-      if(cur.published&&groups){
+      // Auto-adjust publishedGroups if published
+      const pg=appState.publishedGroups;
+      let newPG=pg||null;
+      if(pg&&pg.published&&pg.week===wk&&pg.groups){
+        let grps=pg.groups.map(g=>[...g]);
+        let changed=false;
         if(coming){
-          const alreadyIn=groups.some(g=>g.includes(pid));
+          const alreadyIn=grps.some(g=>g.includes(pid));
           if(!alreadyIn){
-            const minSize=Math.min(...groups.map(g=>g.length));
-            const targetIdx=groups.findIndex(g=>g.length===minSize);
-            groups=groups.map((g,i)=>i===targetIdx?[...g,pid]:g);
-            groupsChanged=true;
+            const minSize=Math.min(...grps.map(g=>g.length));
+            const targetIdx=grps.findIndex(g=>g.length===minSize);
+            grps=grps.map((g,i)=>i===targetIdx?[...g,pid]:g);
+            changed=true;
           }
         } else {
-          const inGroup=groups.some(g=>g.includes(pid));
-          if(inGroup){ groups=groups.map(g=>g.filter(id=>id!==pid)); groupsChanged=true; }
+          const inGroup=grps.some(g=>g.includes(pid));
+          if(inGroup){ grps=grps.map(g=>g.filter(id=>id!==pid)); changed=true; }
         }
+        if(changed) newPG={...pg,groups:grps};
       }
-      const newWkData={...cur,signups,waitlist,groups};
+      const newWkData={...cur,signups,waitlist};
       // Update local state immediately
-      setAppState({...appState,weekSignups:{...appState.weekSignups,[wk]:newWkData}});
-      // Use targeted updateDoc so this NEVER overwrites groups/published written by the admin
+      const newAppState={...appState,weekSignups:{...appState.weekSignups,[wk]:newWkData},...(newPG!==pg?{publishedGroups:newPG}:{})};
+      setAppState(newAppState);
+      // Use targeted updateDoc so this NEVER overwrites admin-written group/publish data
       const updates={[`weekSignups.${wk}.signups`]:signups,[`weekSignups.${wk}.waitlist`]:waitlist};
-      if(groupsChanged) updates[`weekSignups.${wk}.groups`]=groups;
+      if(newPG!==pg) updates.publishedGroups=newPG;
       updateDoc(LEAGUE_DOC,updates).catch(e=>console.error("Signup save failed:",e));
     }}
     nextMatch={nextMatch}
@@ -479,12 +490,15 @@ export default function App() {
     loginPosts={appState?.loginPosts||[]}
     membershipDues={appState?.membershipDues||{}}
     suspendedPlayers={appState?.suspendedPlayers||[]}
+    publishedGroups={appState?.publishedGroups||null}
+    weekTiebreakers={appState?.weekTiebreakers||{}}
+    weekVenues={appState?.weekVenues||{}}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[]} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -499,6 +513,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [reviewVenue, setReviewVenue] = useState(null);
   const [reviewForm, setReviewForm] = useState({rating:0,comment:""});
   const [collapsedReviews, setCollapsedReviews] = useState({});
+  const [venueWeekPick, setVenueWeekPick] = useState("");
 
   const [gameWeek, setGameWeek]     = useState(appState.nextMatchWeek||1);
   const [gameVenue, setGameVenue]   = useState(venues[0]?.name||"");
@@ -866,16 +881,17 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     const numGroups=Math.max(1,Math.ceil(ids.length/8));
     const grps=Array.from({length:numGroups},()=>[]);
     ids.forEach((id,i)=>grps[i%numGroups].push(id));
-    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps,published:false}}});
-    // Targeted write — ensures groups land in Firestore immediately, separate from any debounced full writes
-    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false}).catch(e=>console.error("Generate groups save failed:",e));
+    const newPG={week:curSignupWk,groups:grps,published:false};
+    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps,published:false}},publishedGroups:newPG});
+    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false,publishedGroups:newPG}).catch(e=>console.error("Generate groups save failed:",e));
     notify("Groups randomised!");
   };
 
   const publishGroups=()=>{
-    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:true}}});
-    // Targeted write — only flips the published flag, can never accidentally wipe the groups field
-    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:true}).catch(e=>console.error("Publish save failed:",e));
+    const grps=curSignup.groups||[];
+    const newPG={week:curSignupWk,groups:grps,published:true};
+    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:true}},publishedGroups:newPG});
+    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:true,publishedGroups:newPG}).catch(e=>console.error("Publish save failed:",e));
     notify("Groups published!");
   };
 
@@ -1161,11 +1177,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   const games=weeklyGames[p.id]?.[lastWk]||[];
                   const pts=games.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
                   const absent=games.every(g=>g.absent);
-                  return{name:p.name,imageUrl:p.imageUrl,pts,absent};
+                  return{id:String(p.id),name:p.name,imageUrl:p.imageUrl,pts,absent};
                 }).filter(p=>!p.absent&&p.pts>0);
                 const maxPts=Math.max(0,...lastWkTotals.map(p=>p.pts));
-                const winners=lastWkTotals.filter(p=>p.pts===maxPts);
-                const venueName=(()=>{
+                const rawWinners=lastWkTotals.filter(p=>p.pts===maxPts);
+                const tbId=weekTiebreakers?.[lastWk];
+                const tbWinner=rawWinners.length>1&&tbId?rawWinners.find(w=>w.id===String(tbId)):null;
+                const winners=tbWinner?[tbWinner]:rawWinners;
+                // weekVenues override takes priority over game-entry venue
+                const venueName=weekVenues?.[lastWk]||(()=>{
                   for(const p of players){
                     const gs=weeklyGames[p.id]?.[lastWk]||[];
                     const g=gs.find(g=>!g.absent&&g.venue);
@@ -1189,7 +1209,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       <span style={{fontSize:"1.2rem"}}>{isTie?"🤝":"🏆"}</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:"0.6rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>
-                          {isTie?"WEEK "+lastWk+" — TIED":"WEEK "+lastWk+" WINNER"}
+                          {isTie?"WEEK "+lastWk+" — TIED":tbWinner?"WEEK "+lastWk+" WINNER (TB)":"WEEK "+lastWk+" WINNER"}
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:"6px",flexWrap:"wrap"}}>
                           {winners.map(w=>(
@@ -1300,13 +1320,16 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               const games=weeklyGames[p.id]?.[wk]||[];
               const pts=games.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
               const absent=games.every(g=>g.absent);
-              return{name:p.name,pts,absent};
+              return{id:String(p.id),name:p.name,pts,absent};
             }).filter(p=>!p.absent&&p.pts>0);
             if(!totals.length) return[];
             const max=Math.max(...totals.map(p=>p.pts));
             return totals.filter(p=>p.pts===max);
           };
           const weekLeaders=selWk?getWeekLeaders(parseInt(selWk)):[];
+          const selWkInt=parseInt(selWk)||0;
+          const tbId=weekTiebreakers[selWkInt]||"";
+          const tbWinner=weekLeaders.length>1&&tbId?weekLeaders.find(l=>l.id===String(tbId)):null;
           return(
             <div>
               <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Scores</h2>
@@ -1315,16 +1338,26 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 {weeksWithData.map(w=><option key={w} value={w}>Week {w}</option>)}
               </select>
               {selWk&&weekLeaders.length>0&&(
-                <div style={{margin:"12px 0",padding:"10px 14px",background:weekLeaders.length>1?"#1a1a2e":"#1e2a0e",border:`1px solid ${weekLeaders.length>1?C.blue:C.accent}`,borderRadius:"8px",display:"flex",alignItems:"center",gap:"10px"}}>
-                  <span style={{fontSize:"1.2rem"}}>{weekLeaders.length>1?"🤝":"🏆"}</span>
-                  <div>
-                    <div style={{fontSize:"0.65rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{weekLeaders.length>1?"TIED — MOST POINTS":"MOST POINTS"}</div>
-                    <div style={{color:weekLeaders.length>1?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>
-                      {weekLeaders.map(l=>l.name).join(" & ")}
-                      <span style={{color:C.muted,fontWeight:"normal",fontSize:"0.75rem"}}> · {weekLeaders[0].pts} pts</span>
+                <div style={{margin:"12px 0",padding:"10px 14px",background:weekLeaders.length>1&&!tbWinner?"#1a1a2e":"#1e2a0e",border:`1px solid ${weekLeaders.length>1&&!tbWinner?C.blue:C.accent}`,borderRadius:"8px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:isAdmin&&weekLeaders.length>1?"8px":"0"}}>
+                    <span style={{fontSize:"1.2rem"}}>{weekLeaders.length>1&&!tbWinner?"🤝":"🏆"}</span>
+                    <div>
+                      <div style={{fontSize:"0.65rem",color:C.muted,letterSpacing:"0.1em",marginBottom:"2px"}}>{tbWinner?"WINNER (TB)":weekLeaders.length>1?"TIED — MOST POINTS":"MOST POINTS"}</div>
+                      <div style={{color:weekLeaders.length>1&&!tbWinner?C.blue:C.accentLight,fontWeight:"bold",fontSize:"0.88rem"}}>
+                        {(tbWinner?[tbWinner]:weekLeaders).map(l=>l.name).join(" & ")}
+                        <span style={{color:C.muted,fontWeight:"normal",fontSize:"0.75rem"}}> · {weekLeaders[0].pts} pts</span>
+                      </div>
                     </div>
-                    {weekLeaders.length>1&&<div style={{fontSize:"0.62rem",color:C.muted,marginTop:"3px"}}>Tiebreaker pending</div>}
                   </div>
+                  {isAdmin&&weekLeaders.length>1&&(
+                    <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                      <select value={tbId} onChange={e=>{const v=e.target.value;update({weekTiebreakers:{...weekTiebreakers,[selWkInt]:v||null}});}} style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"5px 8px",fontSize:"0.78rem",fontFamily:"Georgia,serif"}}>
+                        <option value="">— Set tiebreaker winner —</option>
+                        {weekLeaders.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+                      </select>
+                      {tbId&&<button onClick={()=>update({weekTiebreakers:{...weekTiebreakers,[selWkInt]:null}})} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:"5px",color:C.muted,padding:"5px 8px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.72rem"}}>✕ Clear</button>}
+                    </div>
+                  )}
                 </div>
               )}
               {selWk&&rounds.length===0&&<p style={{color:C.muted,marginTop:"12px"}}>No data for this week.</p>}
@@ -1443,6 +1476,33 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <button style={{...btnSt(C.green,true),width:"100%",padding:"10px"}} onClick={addVenue}>Add Venue</button>
             </div>
             {sortedVenues.length===0&&<p style={{color:C.muted}}>No venues yet!</p>}
+            {isAdmin&&totalWeeks>0&&(
+              <div style={{...cardSt,marginBottom:"20px",borderColor:C.blue+"55"}}>
+                <h3 style={{color:C.blue,fontSize:"0.85rem",letterSpacing:"0.06em",margin:"0 0 12px"}}>📅 CORRECT WEEK VENUE</h3>
+                <div style={{display:"flex",gap:"8px",alignItems:"flex-end"}}>
+                  <div style={{flex:"0 0 90px"}}>
+                    <label style={lbSt}>WEEK</label>
+                    <select value={venueWeekPick} onChange={e=>setVenueWeekPick(e.target.value)} style={{...inputSt,padding:"7px 8px"}}>
+                      <option value="">—</option>
+                      {Array.from({length:totalWeeks},(_,i)=>i+1).map(w=><option key={w} value={w}>Week {w}{weekVenues[w]?" ✓":""}</option>)}
+                    </select>
+                  </div>
+                  <div style={{flex:1}}>
+                    <label style={lbSt}>VENUE</label>
+                    <select value={venueWeekPick?weekVenues[venueWeekPick]||"":"" } onChange={e=>{if(venueWeekPick){const v=e.target.value;update({weekVenues:{...weekVenues,[venueWeekPick]:v||undefined}});notify(v?`Week ${venueWeekPick} venue set to ${v}.`:`Week ${venueWeekPick} venue cleared.`);}}} style={{...inputSt,padding:"7px 8px"}}>
+                      <option value="">— select venue —</option>
+                      {venues.map(v=><option key={v.id} value={v.name}>{v.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {venueWeekPick&&weekVenues[venueWeekPick]&&(
+                  <div style={{marginTop:"8px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{color:C.muted,fontSize:"0.72rem"}}>Week {venueWeekPick}: <span style={{color:C.cream}}>{weekVenues[venueWeekPick]}</span></span>
+                    <button onClick={()=>{const nv={...weekVenues};delete nv[venueWeekPick];update({weekVenues:nv});notify("Venue override cleared.");}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:"5px",color:C.muted,padding:"3px 8px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.7rem"}}>✕ Clear</button>
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
               {sortedVenues.map((v,i)=>{
                 const reviews=v.reviews||[];
@@ -1938,7 +1998,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 }
                 {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⇄ Randomise groups</button>}
                 {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
-                {curSignup.published&&<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
+                {curSignup.published&&<button onClick={()=>{update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:false}},publishedGroups:{week:curSignupWk,groups:curSignup.groups||[],published:false}});updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:false,"publishedGroups.published":false}).catch(e=>console.error(e));}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
               </div>
               {(curSignup.signups||[]).length>0&&(
                 <>
