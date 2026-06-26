@@ -502,6 +502,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
+  const [courseLayouts, setCourseLayouts] = useState([]);
+  const [coursesLoaded, setCoursesLoaded] = useState(false);
+  useEffect(()=>{
+    const unsub=onSnapshot(collection(db,'courseLayouts'),snap=>{
+      setCourseLayouts(snap.docs.map(d=>({id:d.id,...d.data()})));
+      setCoursesLoaded(true);
+    });
+    return unsub;
+  },[]);
   const [chartPlayers, setChartPlayers] = useState([]);
   const [note, setNote]             = useState("");
   const [editingName, setEditingName] = useState(false);
@@ -1590,7 +1599,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           </div>
         )}
-        {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin}/>}
+        {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={courseLayouts} coursesLoaded={coursesLoaded}/>}
 
         {tab==="logo"&&(
           <div style={{maxWidth:"700px",margin:"0 auto",padding:"16px 10px"}}>
@@ -3165,20 +3174,12 @@ function CourseDesigner({initialItems=[], initialPaths=[[],[],[]], initialName='
   );
 }
 
-function CoursesTab({user, isAdmin}) {
+function CoursesTab({user, isAdmin, courseLayouts=[], coursesLoaded=false}) {
   const [view, setView] = useState('list');
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [loadedCourse, setLoadedCourse] = useState(null);
   const [sort, setSort] = useState('newest');
-
-  useEffect(()=>{
-    const unsub=onSnapshot(collection(db,'courseLayouts'),snap=>{
-      setCourses(snap.docs.map(d=>({id:d.id,...d.data()})));
-      setLoading(false);
-    });
-    return unsub;
-  },[]);
+  const courses = courseLayouts;
+  const loading = !coursesLoaded;
 
   const saveCourse=async(name,items,paths)=>{
     try {
