@@ -502,15 +502,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
-  const [courseLayouts, setCourseLayouts] = useState([]);
-  const [coursesLoaded, setCoursesLoaded] = useState(false);
-  useEffect(()=>{
-    const unsub=onSnapshot(collection(db,'courseLayouts'),snap=>{
-      setCourseLayouts(snap.docs.map(d=>({id:d.id,...d.data()})));
-      setCoursesLoaded(true);
-    });
-    return unsub;
-  },[]);
   const [chartPlayers, setChartPlayers] = useState([]);
   const [note, setNote]             = useState("");
   const [editingName, setEditingName] = useState(false);
@@ -1599,7 +1590,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           </div>
         )}
-        {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={courseLayouts} coursesLoaded={coursesLoaded}/>}
+        {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
           <div style={{maxWidth:"700px",margin:"0 auto",padding:"16px 10px"}}>
@@ -2902,8 +2893,10 @@ const CD_GSIZES = [0,30,50,80];
 const CD_GLBLS = {0:'Grid: off',30:'Fine',50:'Medium',80:'Coarse'};
 const cdAvg = r => { const v=Object.values(r||{}); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; };
 const cdAge = ts => {
-  if(!ts?.toMillis) return '';
-  const d=Math.floor((Date.now()-ts.toMillis())/864e5);
+  if(!ts) return '';
+  const ms=typeof ts==='string'?Date.parse(ts):ts?.toMillis?.();
+  if(!ms) return '';
+  const d=Math.floor((Date.now()-ms)/864e5);
   if(d<1) return 'today'; if(d<2) return '1d ago'; if(d<7) return `${d}d ago`;
   if(d<14) return '1wk ago'; return `${Math.floor(d/7)}wk ago`;
 };
@@ -3174,24 +3167,23 @@ function CourseDesigner({initialItems=[], initialPaths=[[],[],[]], initialName='
   );
 }
 
-function CoursesTab({user, isAdmin, courseLayouts=[], coursesLoaded=false}) {
+function CoursesTab({user, isAdmin, courseLayouts=[], update}) {
   const [view, setView] = useState('list');
   const [loadedCourse, setLoadedCourse] = useState(null);
   const [sort, setSort] = useState('newest');
   const courses = courseLayouts;
-  const loading = !coursesLoaded;
+  const loading = false;
 
-  const saveCourse=async(name,items,paths)=>{
-    try {
-      await addDoc(collection(db,'courseLayouts'),{name,items,paths,createdBy:user.name,createdAt:serverTimestamp(),ratings:{}});
-    } catch(e){ console.error('Save course failed',e); }
+  const saveCourse=(name,items,paths)=>{
+    const newCourse={id:Date.now().toString(),name,items,paths,createdBy:user.name,createdAt:new Date().toISOString(),ratings:{}};
+    update({courseLayouts:[...courseLayouts,newCourse]});
   };
-  const deleteCourse=async(id)=>{
+  const deleteCourse=(id)=>{
     if(!window.confirm('Delete this course layout?')) return;
-    try { await deleteDoc(doc(db,'courseLayouts',id)); } catch(e){ console.error(e); }
+    update({courseLayouts:courseLayouts.filter(c=>c.id!==id)});
   };
-  const rateCourse=async(id,rating)=>{
-    try { await updateDoc(doc(db,'courseLayouts',id),{[`ratings.${user.name}`]:rating}); } catch(e){ console.error(e); }
+  const rateCourse=(id,rating)=>{
+    update({courseLayouts:courseLayouts.map(c=>c.id===id?{...c,ratings:{...(c.ratings||{}),[user.name]:rating}}:c)});
   };
 
   const sorted=useMemo(()=>{
