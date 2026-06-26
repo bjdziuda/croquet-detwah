@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { subscribeToPush } from "./serviceWorkerRegistration";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
+import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 
@@ -903,7 +903,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],
+  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["courses","🏑 Courses"],["profile","👤 Profile"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
@@ -1264,12 +1264,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                         <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
                         <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
                         <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
-                        {players.filter(p=>chartPlayers.includes(p.id)&&!suspendedPlayers.includes(String(p.id))).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
+                        {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                   <div style={{display:"flex",gap:"4px",flexWrap:"wrap",padding:"8px 0",justifyContent:"center"}}>
-                    {[...players].filter(p=>!suspendedPlayers.includes(String(p.id))).sort((a,b)=>a.name.localeCompare(b.name)).map((p)=>{const i=players.findIndex(x=>x.id===p.id),on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"2px 8px",borderRadius:"10px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.58rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name}</button>;})}
+                    {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map((p)=>{const i=players.findIndex(x=>x.id===p.id),on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"2px 8px",borderRadius:"10px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.58rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name}</button>;})}
                   </div>
                 </div>
               )}
@@ -1590,6 +1590,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             </div>
           </div>
         )}
+        {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin}/>}
+
         {tab==="logo"&&(
           <div style={{maxWidth:"700px",margin:"0 auto",padding:"16px 10px"}}>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",
@@ -2880,6 +2882,404 @@ function LeagueHonours({appState, update, uploadImage, isAdmin, setLightbox}) {
 }
 
 // ── Cloudinary photo picker ──────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════
+// COURSES FEATURE — constants, components, tab
+// ══════════════════════════════════════════════════════════
+const CD_W = 620, CD_H = 440;
+const CD_GROUPS = [{color:'#D85A30'},{color:'#378ADD'},{color:'#EF9F27'}];
+const CD_PAL = ['#EDD57C','#f5f5f0','#E24B4A','#378ADD','#22c55e','#7F77DD','#EF9F27','#D4537E','#1D9E75','#5F5E5A'];
+const CD_GSIZES = [0,30,50,80];
+const CD_GLBLS = {0:'Grid: off',30:'Fine',50:'Medium',80:'Coarse'};
+const cdAvg = r => { const v=Object.values(r||{}); return v.length ? v.reduce((a,b)=>a+b,0)/v.length : 0; };
+const cdAge = ts => {
+  if(!ts?.toMillis) return '';
+  const d=Math.floor((Date.now()-ts.toMillis())/864e5);
+  if(d<1) return 'today'; if(d<2) return '1d ago'; if(d<7) return `${d}d ago`;
+  if(d<14) return '1wk ago'; return `${Math.floor(d/7)}wk ago`;
+};
+
+function CourseMiniPreview({items=[], paths=[]}) {
+  return (
+    <svg viewBox={`0 0 ${CD_W} ${CD_H}`} style={{width:'100%',display:'block',borderRadius:'8px 8px 0 0'}}>
+      <rect width={CD_W} height={CD_H} fill="#2d8622"/>
+      {[0,1,2,3,4,5,6,7].map(i=><rect key={i} x="0" y={i*56} width={CD_W} height="28" fill="rgba(255,255,255,0.03)"/>)}
+      {paths.map((path,gi)=>{
+        if(!path||path.length<2) return null;
+        const col=CD_GROUPS[gi]?.color||'#888';
+        return path.slice(0,-1).map((wid,i)=>{
+          const f=items.find(w=>w.id===path[i]),t=items.find(w=>w.id===path[i+1]);
+          if(!f||!t) return null;
+          const dx=t.x-f.x,dy=t.y-f.y,len=Math.sqrt(dx*dx+dy*dy)||1;
+          return <line key={`${gi}-${i}`} x1={f.x+(dx/len)*22} y1={f.y+(dy/len)*22} x2={t.x-(dx/len)*22} y2={t.y-(dy/len)*22} stroke={col} strokeWidth="7" strokeOpacity="0.85" strokeDasharray="20 8"/>;
+        });
+      })}
+      {items.map(it=>(
+        <g key={it.id} transform={`translate(${it.x},${it.y})`}>
+          {it.type==='wicket'?<>
+            <rect x="-9" y="-6" width="3.5" height="17" fill={it.color||'#EDD57C'} rx="1"/>
+            <rect x="5.5" y="-6" width="3.5" height="17" fill={it.color||'#EDD57C'} rx="1"/>
+            <rect x="-11" y="-13" width="22" height="6" fill={it.color||'#EDD57C'} rx="2"/>
+          </>:<>
+            <rect x="-3" y="-14" width="6" height="24" fill={it.color||'#E24B4A'} rx="2"/>
+            <circle cx="0" cy="-17" r="5" fill={it.color||'#E24B4A'}/>
+          </>}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function CourseDesigner({initialItems=[], initialPaths=[[],[],[]], initialName='', isReadOnly=false, courseInfo=null, onSave, onBack}) {
+  const svgRef = useRef(null);
+  const [items, setItems] = useState(initialItems);
+  const [paths, setPaths] = useState((initialPaths||[[],[],[]]).map(p=>p||[]));
+  const [vis, setVis] = useState([true,true,true]);
+  const [mode, setMode] = useState(isReadOnly?'view':'wicket');
+  const [sg, setSg] = useState(0);
+  const [gridSize, setGridSize] = useState(0);
+  const [sc, setSc] = useState(CD_PAL[0]);
+  const [courseName, setCourseName] = useState(initialName);
+  const [drag, setDrag] = useState(null);
+  const [saveMsg, setSaveMsg] = useState('');
+
+  const pathSet = useMemo(()=>new Set(paths[sg]||[]),[paths,sg]);
+
+  const getSVGPt = (e) => {
+    if(!svgRef.current) return {x:0,y:0};
+    const r=svgRef.current.getBoundingClientRect();
+    return {x:(e.clientX-r.left)*(CD_W/r.width),y:(e.clientY-r.top)*(CD_H/r.height)};
+  };
+  const snapPt = (p,gs) => {
+    const g=gs??gridSize;
+    if(!g) return {x:Math.round(p.x),y:Math.round(p.y)};
+    return {x:Math.max(22,Math.min(CD_W-22,Math.round(p.x/g)*g)),y:Math.max(22,Math.min(CD_H-22,Math.round(p.y/g)*g))};
+  };
+
+  useEffect(()=>{
+    if(!drag) return;
+    const {id,dx,dy,gs} = drag;
+    const move=(e)=>{
+      if(!svgRef.current) return;
+      const r=svgRef.current.getBoundingClientRect();
+      const raw={x:(e.clientX-r.left)*(CD_W/r.width),y:(e.clientY-r.top)*(CD_H/r.height)};
+      const s=snapPt({x:raw.x-dx,y:raw.y-dy},gs);
+      setItems(prev=>prev.map(it=>it.id===id?{...it,x:Math.max(22,Math.min(CD_W-22,s.x)),y:Math.max(22,Math.min(CD_H-22,s.y))}:it));
+    };
+    const up=()=>setDrag(null);
+    document.addEventListener('mousemove',move);
+    document.addEventListener('mouseup',up);
+    return ()=>{document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);};
+  },[drag]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFieldClick=(e)=>{
+    if(isReadOnly||(mode!=='wicket'&&mode!=='stake')) return;
+    const p=snapPt(getSVGPt(e));
+    if(p.x<22||p.x>CD_W-22||p.y<22||p.y>CD_H-22) return;
+    const minDist=gridSize?gridSize*0.9:24;
+    if(items.some(w=>Math.hypot(w.x-p.x,w.y-p.y)<minDist)) return;
+    setItems(prev=>[...prev,{id:Date.now(),x:p.x,y:p.y,color:sc,type:mode}]);
+  };
+  const handleItemClick=(id)=>{
+    if(isReadOnly) return;
+    if(mode==='path') setPaths(prev=>prev.map((p,i)=>i===sg?[...p,id]:p));
+    else if(mode==='delete'){setItems(prev=>prev.filter(w=>w.id!==id));setPaths(prev=>prev.map(p=>p.filter(x=>x!==id)));}
+    else if(mode==='paint') setItems(prev=>prev.map(w=>w.id===id?{...w,color:sc}:w));
+  };
+  const startDrag=(e,id)=>{
+    if(isReadOnly||mode!=='move') return;
+    const p=getSVGPt(e),it=items.find(w=>w.id===id);
+    if(!it) return;
+    setDrag({id,dx:p.x-it.x,dy:p.y-it.y,gs:gridSize});
+  };
+  const handleSave=()=>{
+    if(!courseName.trim()){setSaveMsg('Enter a name first');setTimeout(()=>setSaveMsg(''),2000);return;}
+    onSave(courseName.trim(),items,paths);
+    setSaveMsg('Saved ✓');
+    setTimeout(()=>setSaveMsg(''),2500);
+  };
+
+  // Badge data — group repeated visits per wicket per group
+  const buildByWK=(path)=>{const m={};(path||[]).forEach((wid,si)=>{if(!m[wid])m[wid]=[];m[wid].push(si+1);});return m;};
+  const allByWK=paths.map(p=>buildByWK(p));
+  const OFF=[-15,0,15];
+  const badgeConns=[], badgePts=[];
+  allByWK.forEach((byWK,gi)=>{
+    if(!vis[gi]) return;
+    const col=CD_GROUPS[gi].color,ox=OFF[gi];
+    Object.entries(byWK).forEach(([wid,steps])=>{
+      const it=items.find(w=>w.id===+wid);if(!it) return;
+      if(steps.length>1) badgeConns.push(<line key={`c${gi}${wid}`} x1={it.x+ox} y1={it.y-32-(steps.length-1)*22} x2={it.x+ox} y2={it.y-32} stroke={col} strokeWidth="2.5" opacity="0.45" pointerEvents="none"/>);
+      steps.forEach((step,idx)=>{
+        const by=it.y-32-idx*22;
+        badgePts.push(
+          <g key={`b${gi}${wid}${idx}`} pointerEvents="none">
+            <circle cx={it.x+ox} cy={by} r="9" fill={col} stroke="rgba(255,255,255,0.85)" strokeWidth="1.5"/>
+            <text x={it.x+ox} y={by} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="9" fontWeight="bold" fontFamily="sans-serif">{step}</text>
+          </g>
+        );
+      });
+    });
+  });
+
+  const tbSt=(on,danger=false)=>({display:'inline-flex',alignItems:'center',gap:'4px',padding:'5px 9px',fontSize:'12px',fontWeight:'bold',border:`1px solid ${danger?C.red:on?C.accent:C.border}`,background:on?C.accent:'transparent',color:danger?C.red:on?C.bg:C.muted,borderRadius:'6px',cursor:'pointer',fontFamily:'Georgia,serif',letterSpacing:'0.02em'});
+
+  return (
+    <div>
+      {/* Back / name / save */}
+      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'10px',flexWrap:'wrap'}}>
+        <button onClick={onBack} style={{background:'none',border:'none',color:C.accent,cursor:'pointer',fontFamily:'Georgia,serif',fontSize:'0.82rem',padding:0}}>← Courses</button>
+        <span style={{color:C.muted,fontSize:'0.8rem'}}>/</span>
+        {isReadOnly?(
+          <span style={{color:C.text,fontFamily:'Georgia,serif',fontSize:'0.82rem'}}>
+            {courseInfo?.name}
+            <span style={{color:C.muted,marginLeft:'8px',fontSize:'0.75rem'}}>by {courseInfo?.createdBy} · read only</span>
+          </span>
+        ):(
+          <>
+            <input value={courseName} onChange={e=>setCourseName(e.target.value)} placeholder="Name this course…"
+              style={{flex:1,minWidth:'140px',background:C.card,border:`1px solid ${C.border}`,borderRadius:'6px',padding:'5px 10px',color:C.text,fontFamily:'Georgia,serif',fontSize:'0.82rem',outline:'none'}}/>
+            <button onClick={handleSave} style={{background:C.accent,border:'none',borderRadius:'6px',color:C.bg,padding:'6px 13px',fontFamily:'Georgia,serif',fontSize:'0.8rem',fontWeight:'bold',cursor:'pointer',whiteSpace:'nowrap'}}>
+              💾 Save course
+            </button>
+            {saveMsg&&<span style={{color:C.greenLight,fontSize:'0.8rem',fontFamily:'Georgia,serif'}}>{saveMsg}</span>}
+          </>
+        )}
+      </div>
+
+      {/* Toolbar (hidden in read-only) */}
+      {!isReadOnly&&<>
+        <div style={{display:'flex',gap:'5px',flexWrap:'wrap',marginBottom:'6px',alignItems:'center'}}>
+          {[['wicket','+ Wicket'],['stake','⚑ Stake'],['move','✋ Move'],['paint','🎨 Color'],['path','→ Path'],['delete','✕ Delete']].map(([m,l])=>(
+            <button key={m} style={tbSt(mode===m)} onClick={()=>setMode(m)}>{l}</button>
+          ))}
+          <div style={{flex:1}}/>
+          <button style={tbSt(gridSize>0)} onClick={()=>setGridSize(CD_GSIZES[(CD_GSIZES.indexOf(gridSize)+1)%CD_GSIZES.length])}>⊞ {CD_GLBLS[gridSize]}</button>
+          <button onClick={()=>{setItems([]);setPaths([[],[],[]]);}} style={tbSt(false,true)}>↺ Clear</button>
+        </div>
+        {(mode==='wicket'||mode==='stake'||mode==='paint')&&(
+          <div style={{display:'flex',gap:'5px',alignItems:'center',marginBottom:'7px'}}>
+            <span style={{fontSize:'11px',color:C.muted,marginRight:'2px',fontFamily:'Georgia,serif'}}>Color:</span>
+            {CD_PAL.map((col,i)=>(
+              <div key={i} onClick={()=>setSc(col)} style={{width:'18px',height:'18px',borderRadius:'50%',background:col,cursor:'pointer',flexShrink:0,
+                boxShadow:sc===col?`0 0 0 2px ${C.bg},0 0 0 3.5px ${C.accent}`:'none',
+                border:col==='#f5f5f0'?`1px solid ${C.border}`:'none'}}/>
+            ))}
+          </div>
+        )}
+        {mode==='path'&&(
+          <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'7px'}}>
+            <span style={{fontSize:'11px',color:C.muted,fontFamily:'Georgia,serif'}}>Path for:</span>
+            {CD_GROUPS.map((g,i)=>(
+              <button key={i} onClick={()=>setSg(i)} style={{padding:'4px 12px',fontSize:'12px',fontWeight:'bold',borderRadius:'20px',border:`1.5px solid ${g.color}`,background:sg===i?g.color:'transparent',color:sg===i?'white':g.color,cursor:'pointer',fontFamily:'Georgia,serif'}}>Group {i+1}</button>
+            ))}
+          </div>
+        )}
+      </>}
+
+      {/* Field + Sidebar */}
+      <div style={{display:'flex',gap:'10px',alignItems:'flex-start'}}>
+        <svg ref={svgRef} viewBox={`0 0 ${CD_W} ${CD_H}`} overflow="visible"
+          style={{flex:1,minWidth:0,display:'block',borderRadius:'10px',border:`1px solid ${C.border}`,cursor:(!isReadOnly&&(mode==='wicket'||mode==='stake'))?'crosshair':'default'}}
+          onClick={handleFieldClick}>
+          <defs>
+            {CD_GROUPS.map((g,i)=>(
+              <marker key={i} id={`cda${i}`} markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0,8 3,0 6" fill={g.color}/>
+              </marker>
+            ))}
+          </defs>
+          <rect width={CD_W} height={CD_H} fill="#2d8622" rx="11"/>
+          {[0,1,2,3,4,5,6,7].map(i=><rect key={i} x="0" y={i*56} width={CD_W} height="28" fill="rgba(255,255,255,0.028)"/>)}
+          <rect x="10" y="10" width={CD_W-20} height={CD_H-20} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5" strokeDasharray="12 8" rx="7"/>
+          {gridSize>0&&Array.from({length:Math.floor(CD_W/gridSize)},(_,xi)=>
+            Array.from({length:Math.floor(CD_H/gridSize)},(_,yi)=>(
+              <circle key={`${xi}${yi}`} cx={(xi+1)*gridSize} cy={(yi+1)*gridSize} r="1.5" fill="rgba(255,255,255,0.22)" pointerEvents="none"/>
+            ))
+          )}
+          {!items.length&&<text x={CD_W/2} y={CD_H/2} textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.3)" fontSize="15" fontFamily="sans-serif">Click anywhere to place wickets and stakes</text>}
+          {paths.map((path,gi)=>{
+            if(!vis[gi]||!path||path.length<2) return null;
+            const col=CD_GROUPS[gi].color;
+            return path.slice(0,-1).map((wid,i)=>{
+              const f=items.find(w=>w.id===path[i]),t=items.find(w=>w.id===path[i+1]);
+              if(!f||!t) return null;
+              const dx=t.x-f.x,dy=t.y-f.y,len=Math.sqrt(dx*dx+dy*dy)||1;
+              return <line key={`${gi}-${i}`} x1={f.x+(dx/len)*22} y1={f.y+(dy/len)*22} x2={t.x-(dx/len)*22} y2={t.y-(dy/len)*22} stroke={col} strokeWidth="2.5" strokeOpacity="0.9" strokeDasharray="9 4" markerEnd={`url(#cda${gi})`}/>;
+            });
+          })}
+          {items.map(it=>(
+            <g key={it.id} transform={`translate(${it.x},${it.y})`} style={{cursor:(!isReadOnly&&mode==='move')?'grab':'pointer'}}
+              onClick={e=>{e.stopPropagation();handleItemClick(it.id);}}
+              onMouseDown={e=>{e.stopPropagation();e.preventDefault();startDrag(e,it.id);}}>
+              <circle cx="0" cy="0" r="20" fill="transparent"/>
+              {!isReadOnly&&mode==='path'&&pathSet.has(it.id)&&<circle cx="0" cy="0" r="18" fill={CD_GROUPS[sg].color} opacity="0.15" stroke={CD_GROUPS[sg].color} strokeWidth="1.5" strokeDasharray="5 3"/>}
+              {!isReadOnly&&mode==='delete'&&<circle cx="0" cy="0" r="18" fill="#dc2626" opacity="0.13"/>}
+              {!isReadOnly&&mode==='paint'&&<circle cx="0" cy="0" r="18" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.35)" strokeWidth="1.5" strokeDasharray="4 3"/>}
+              {it.type==='wicket'?<>
+                <rect x="-9" y="-6" width="3.5" height="17" fill={it.color} rx="1"/>
+                <rect x="5.5" y="-6" width="3.5" height="17" fill={it.color} rx="1"/>
+                <rect x="-11" y="-13" width="22" height="6" fill={it.color} rx="2"/>
+              </>:<>
+                <rect x="-3" y="-14" width="6" height="24" fill={it.color} rx="2"/>
+                <circle cx="0" cy="-17" r="5" fill={it.color}/>
+                <ellipse cx="0" cy="10" rx="8" ry="3" fill={it.color} opacity="0.4"/>
+              </>}
+            </g>
+          ))}
+          {badgeConns}
+          {badgePts}
+        </svg>
+
+        {/* Group sidebar */}
+        <div style={{width:'135px',flexShrink:0}}>
+          {CD_GROUPS.map((g,gi)=>(
+            <div key={gi} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:'8px',padding:'9px 11px',marginBottom:'7px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'3px'}}>
+                <span style={{fontWeight:'bold',fontSize:'13px',color:g.color,fontFamily:'Georgia,serif'}}>Group {gi+1}</span>
+                <span onClick={()=>setVis(prev=>prev.map((v,i)=>i===gi?!v:v))} style={{cursor:'pointer',color:vis[gi]?C.muted:C.border,fontSize:'13px'}}>
+                  {vis[gi]?'👁':'🙈'}
+                </span>
+              </div>
+              <div style={{fontSize:'11px',color:paths[gi]?.length?C.muted:C.border,fontStyle:paths[gi]?.length?'normal':'italic',fontFamily:'Georgia,serif'}}>
+                {paths[gi]?.length?`${paths[gi].length} stop${paths[gi].length!==1?'s':''}`:'No path set'}
+              </div>
+              {!isReadOnly&&<div style={{display:'flex',gap:'8px',marginTop:'4px'}}>
+                <button onClick={()=>setPaths(prev=>prev.map((p,i)=>i===gi?p.slice(0,-1):p))} style={{fontSize:'10px',color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline',fontFamily:'Georgia,serif'}}>undo</button>
+                <button onClick={()=>setPaths(prev=>prev.map((p,i)=>i===gi?[]:p))} style={{fontSize:'10px',color:C.muted,background:'none',border:'none',cursor:'pointer',padding:0,textDecoration:'underline',fontFamily:'Georgia,serif'}}>clear</button>
+              </div>}
+            </div>
+          ))}
+          {!isReadOnly&&(
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:'8px',padding:'9px 11px',fontSize:'10px',color:C.muted,lineHeight:'1.8',fontFamily:'Georgia,serif'}}>
+              <strong style={{color:C.text,display:'block',marginBottom:'2px'}}>How to use</strong>
+              Pick color, click to place<br/>
+              Move to drag items<br/>
+              Path → group → click in order<br/>
+              Revisits OK · undo removes last
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CoursesTab({user, isAdmin}) {
+  const [view, setView] = useState('list');
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadedCourse, setLoadedCourse] = useState(null);
+  const [sort, setSort] = useState('newest');
+
+  useEffect(()=>{
+    const unsub=onSnapshot(collection(db,'courseLayouts'),snap=>{
+      setCourses(snap.docs.map(d=>({id:d.id,...d.data()})));
+      setLoading(false);
+    });
+    return unsub;
+  },[]);
+
+  const saveCourse=async(name,items,paths)=>{
+    try {
+      await addDoc(collection(db,'courseLayouts'),{name,items,paths,createdBy:user.name,createdAt:serverTimestamp(),ratings:{}});
+    } catch(e){ console.error('Save course failed',e); }
+  };
+  const deleteCourse=async(id)=>{
+    if(!window.confirm('Delete this course layout?')) return;
+    try { await deleteDoc(doc(db,'courseLayouts',id)); } catch(e){ console.error(e); }
+  };
+  const rateCourse=async(id,rating)=>{
+    try { await updateDoc(doc(db,'courseLayouts',id),{[`ratings.${user.name}`]:rating}); } catch(e){ console.error(e); }
+  };
+
+  const sorted=useMemo(()=>{
+    let list=[...courses];
+    if(sort==='newest') list.sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));
+    else if(sort==='rated') list.sort((a,b)=>cdAvg(b.ratings)-cdAvg(a.ratings));
+    else if(sort==='mine') list=list.filter(c=>c.createdBy===user.name);
+    return list;
+  },[courses,sort,user.name]);
+
+  const sortBtnSt=(s)=>({padding:'5px 12px',fontSize:'12px',fontFamily:'Georgia,serif',border:`1px solid ${sort===s?C.accent:C.border}`,background:sort===s?C.accent:'transparent',color:sort===s?C.bg:C.muted,borderRadius:'6px',cursor:'pointer',fontWeight:sort===s?'bold':'normal'});
+
+  if(view==='design'||view==='readOnly') return (
+    <div style={{maxWidth:'900px',margin:'0 auto',padding:'16px 10px'}}>
+      <CourseDesigner
+        initialItems={loadedCourse?.items||[]}
+        initialPaths={loadedCourse?.paths||[[],[],[]]}
+        initialName={view==='readOnly'?loadedCourse?.name:''}
+        isReadOnly={view==='readOnly'}
+        courseInfo={loadedCourse}
+        onSave={saveCourse}
+        onBack={()=>{setView('list');setLoadedCourse(null);}}
+      />
+    </div>
+  );
+
+  return (
+    <div style={{maxWidth:'900px',margin:'0 auto',padding:'16px 10px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px',flexWrap:'wrap',gap:'8px'}}>
+        <h2 style={{color:C.cream,fontSize:'1rem',letterSpacing:'0.06em',margin:'0 0 6px',borderBottom:`1px solid ${C.border}`,paddingBottom:'6px',flex:'1 1 100%'}}>🏑 Courses</h2>
+        <div style={{display:'flex',gap:'5px'}}>
+          <button style={sortBtnSt('newest')} onClick={()=>setSort('newest')}>Newest</button>
+          <button style={sortBtnSt('rated')} onClick={()=>setSort('rated')}>Top rated</button>
+          <button style={sortBtnSt('mine')} onClick={()=>setSort('mine')}>Mine</button>
+        </div>
+        <button onClick={()=>{setLoadedCourse(null);setView('design');}} style={{background:C.accent,border:'none',borderRadius:'6px',color:C.bg,padding:'8px 14px',fontFamily:'Georgia,serif',fontSize:'0.82rem',fontWeight:'bold',cursor:'pointer',letterSpacing:'0.03em'}}>
+          + New course
+        </button>
+      </div>
+
+      {loading&&<div style={{color:C.muted,fontFamily:'Georgia,serif',fontSize:'0.85rem',textAlign:'center',padding:'40px 0'}}>Loading courses…</div>}
+
+      {!loading&&sorted.length===0&&(
+        <div style={{color:C.muted,fontFamily:'Georgia,serif',fontSize:'0.85rem',textAlign:'center',padding:'40px 0'}}>
+          {sort==='mine'?"You haven't saved any courses yet.":'No courses saved yet — be the first!'}
+        </div>
+      )}
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:'14px'}}>
+        {sorted.map(course=>{
+          const avg=cdAvg(course.ratings);
+          const count=Object.keys(course.ratings||{}).length;
+          const myRating=(course.ratings||{})[user.name]||0;
+          const canDelete=course.createdBy===user.name||isAdmin;
+          return (
+            <div key={course.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:'10px',overflow:'hidden'}}>
+              <CourseMiniPreview items={course.items||[]} paths={course.paths||[]}/>
+              <div style={{padding:'11px 13px'}}>
+                <div style={{fontWeight:'bold',fontFamily:'Georgia,serif',fontSize:'0.9rem',color:C.cream,marginBottom:'2px'}}>{course.name}</div>
+                <div style={{fontSize:'0.72rem',color:C.muted,fontFamily:'Georgia,serif',marginBottom:'8px'}}>By {course.createdBy} · {cdAge(course.createdAt)}</div>
+                {count>0&&(
+                  <div style={{display:'flex',alignItems:'center',gap:'5px',marginBottom:'5px'}}>
+                    <StarRating value={Math.round(avg)} size={13}/>
+                    <span style={{fontSize:'0.7rem',color:C.muted,fontFamily:'Georgia,serif'}}>{avg.toFixed(1)} ({count})</span>
+                  </div>
+                )}
+                <div style={{display:'flex',alignItems:'center',gap:'4px',marginBottom:'10px'}}>
+                  <span style={{fontSize:'0.7rem',color:C.muted,fontFamily:'Georgia,serif',marginRight:'2px'}}>{myRating?'Your rating:':'Rate:'}</span>
+                  <StarRating value={myRating} size={16} onChange={r=>rateCourse(course.id,r)}/>
+                </div>
+                <div style={{display:'flex',gap:'7px'}}>
+                  <button onClick={()=>{setLoadedCourse(course);setView('readOnly');}} style={{flex:1,padding:'6px',fontFamily:'Georgia,serif',fontSize:'0.75rem',fontWeight:'bold',border:`1px solid ${C.border}`,background:'transparent',color:C.text,borderRadius:'6px',cursor:'pointer'}}>
+                    👁 View
+                  </button>
+                  {canDelete&&(
+                    <button onClick={()=>deleteCourse(course.id)} style={{padding:'6px 10px',fontFamily:'Georgia,serif',fontSize:'0.75rem',border:`1px solid ${C.red}`,background:'transparent',color:C.red,borderRadius:'6px',cursor:'pointer'}}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function CloudinaryPicker({onSelect, onClose, appState}) {
   const allImages = [
     ...LOGO_ENTRIES.map(e=>({url:e.url,label:"Logo entry"})),
