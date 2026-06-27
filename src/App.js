@@ -3189,7 +3189,8 @@ function CoursesTab({user, isAdmin, courseLayouts=[], update}) {
 
   const sorted=useMemo(()=>{
     let list=[...courses];
-    if(sort==='newest') list.sort((a,b)=>(b.createdAt?.toMillis()||0)-(a.createdAt?.toMillis()||0));
+    const tsMs=ts=>typeof ts==='string'?Date.parse(ts):(ts?.toMillis?.()||0);
+    if(sort==='newest') list.sort((a,b)=>tsMs(b.createdAt)-tsMs(a.createdAt));
     else if(sort==='rated') list.sort((a,b)=>cdAvg(b.ratings)-cdAvg(a.ratings));
     else if(sort==='mine') list=list.filter(c=>c.createdBy===user.name);
     return list;
