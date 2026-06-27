@@ -3175,7 +3175,8 @@ function CoursesTab({user, isAdmin, courseLayouts=[], update}) {
   const loading = false;
 
   const saveCourse=(name,items,paths)=>{
-    const newCourse={id:Date.now().toString(),name,items,paths,createdBy:user.name,createdAt:new Date().toISOString(),ratings:{}};
+    // Firestore doesn't support nested arrays, so store each group path as a separate field
+    const newCourse={id:Date.now().toString(),name,items,path0:paths[0]||[],path1:paths[1]||[],path2:paths[2]||[],createdBy:user.name,createdAt:new Date().toISOString(),ratings:{}};
     update({courseLayouts:[...courseLayouts,newCourse]});
   };
   const deleteCourse=(id)=>{
@@ -3200,7 +3201,7 @@ function CoursesTab({user, isAdmin, courseLayouts=[], update}) {
     <div style={{maxWidth:'900px',margin:'0 auto',padding:'16px 10px'}}>
       <CourseDesigner
         initialItems={loadedCourse?.items||[]}
-        initialPaths={loadedCourse?.paths||[[],[],[]]}
+        initialPaths={loadedCourse?[loadedCourse.path0||[],loadedCourse.path1||[],loadedCourse.path2||[]]:[[],[],[]]}
         initialName={view==='readOnly'?loadedCourse?.name:''}
         isReadOnly={view==='readOnly'}
         courseInfo={loadedCourse}
@@ -3240,7 +3241,7 @@ function CoursesTab({user, isAdmin, courseLayouts=[], update}) {
           const canDelete=course.createdBy===user.name||isAdmin;
           return (
             <div key={course.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:'10px',overflow:'hidden'}}>
-              <CourseMiniPreview items={course.items||[]} paths={course.paths||[]}/>
+              <CourseMiniPreview items={course.items||[]} paths={[course.path0||[],course.path1||[],course.path2||[]]}/>
               <div style={{padding:'11px 13px'}}>
                 <div style={{fontWeight:'bold',fontFamily:'Georgia,serif',fontSize:'0.9rem',color:C.cream,marginBottom:'2px'}}>{course.name}</div>
                 <div style={{fontSize:'0.72rem',color:C.muted,fontFamily:'Georgia,serif',marginBottom:'8px'}}>By {course.createdBy} · {cdAge(course.createdAt)}</div>
