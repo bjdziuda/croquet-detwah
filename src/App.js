@@ -514,6 +514,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [reviewForm, setReviewForm] = useState({rating:0,comment:""});
   const [collapsedReviews, setCollapsedReviews] = useState({});
   const [venueWeekPick, setVenueWeekPick] = useState("");
+  const [expandedVenues, setExpandedVenues] = useState({});
+  const [showAddVenue, setShowAddVenue] = useState(false);
 
   const [gameWeek, setGameWeek]     = useState(appState.nextMatchWeek||1);
   const [gameVenue, setGameVenue]   = useState(venues[0]?.name||"");
@@ -618,8 +620,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const addVenue = () => {
     const name=venueForm.name.trim(); if(!name) return;
     if(venues.find(v=>v.name.toLowerCase()===name.toLowerCase())){notify("Venue already exists.");return;}
-    update({venues:[...venues,{id:Date.now(),name,rating:venueForm.rating,comment:venueForm.comment,timesPlayed:0,reviews:[]}]});
-    setVenueForm({name:"",rating:0,comment:""}); notify(`${name} added!`);
+    update({venues:[...venues,{id:Date.now(),name,rating:venueForm.rating,comment:venueForm.comment,hasGrill:venueForm.hasGrill||false,timesPlayed:0,reviews:[]}]});
+    setVenueForm({name:"",rating:0,comment:""}); setShowAddVenue(false); notify(`${name} added!`);
   };
   const saveVenueEdit = () => {
     if(!editVenue) return;
@@ -1538,18 +1540,26 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         {tab==="venues"&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>📍 Venues</h2>
-            <div style={{...cardSt,marginBottom:"20px",borderColor:C.green+"55"}}>
-              <h3 style={{color:C.greenLight,fontSize:"0.85rem",letterSpacing:"0.06em",margin:"0 0 12px"}}>ADD NEW VENUE</h3>
-              <div style={{marginBottom:"10px"}}><label style={lbSt}>VENUE NAME</label><input style={inputSt} placeholder="e.g. Riverside Park Lawn" value={venueForm.name} onChange={e=>setVenueForm(f=>({...f,name:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addVenue()}/></div>
-              <div style={{marginBottom:"10px"}}><label style={lbSt}>YOUR RATING</label><StarRating value={venueForm.rating} onChange={r=>setVenueForm(f=>({...f,rating:r}))} size={28}/></div>
-              <div style={{marginBottom:"12px"}}><label style={lbSt}>YOUR COMMENTS</label><textarea style={textareaSt} placeholder="Surface quality, parking, facilities…" value={venueForm.comment} onChange={e=>setVenueForm(f=>({...f,comment:e.target.value}))}/></div>
-              <div style={{marginBottom:"14px",display:"flex",alignItems:"center",gap:"10px"}}>
-                <input type="checkbox" id="venueGrill" checked={venueForm.hasGrill||false} onChange={e=>setVenueForm(f=>({...f,hasGrill:e.target.checked}))} style={{width:"18px",height:"18px",cursor:"pointer",accentColor:C.accent}}/>
-                <label htmlFor="venueGrill" style={{color:C.cream,fontSize:"0.85rem",cursor:"pointer"}}>🔥 Has grills / BBQ facilities</label>
+
+            <button onClick={()=>setShowAddVenue(s=>!s)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:"6px",padding:"10px",marginBottom:"14px",borderRadius:"8px",border:`1px dashed ${showAddVenue?C.green:C.border}`,background:"transparent",color:showAddVenue?C.greenLight:C.muted,fontSize:"0.8rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+              {showAddVenue?"✕ Cancel":"+ Add venue"}
+            </button>
+
+            {showAddVenue&&(
+              <div style={{...cardSt,marginBottom:"20px",borderColor:C.green+"55"}}>
+                <div style={{marginBottom:"10px"}}><label style={lbSt}>VENUE NAME</label><input style={inputSt} placeholder="e.g. Riverside Park Lawn" value={venueForm.name} onChange={e=>setVenueForm(f=>({...f,name:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addVenue()}/></div>
+                <div style={{marginBottom:"10px"}}><label style={lbSt}>YOUR RATING</label><StarRating value={venueForm.rating} onChange={r=>setVenueForm(f=>({...f,rating:r}))} size={28}/></div>
+                <div style={{marginBottom:"12px"}}><label style={lbSt}>YOUR COMMENTS</label><textarea style={textareaSt} placeholder="Surface quality, parking, facilities…" value={venueForm.comment} onChange={e=>setVenueForm(f=>({...f,comment:e.target.value}))}/></div>
+                <div style={{marginBottom:"14px",display:"flex",alignItems:"center",gap:"10px"}}>
+                  <input type="checkbox" id="venueGrill" checked={venueForm.hasGrill||false} onChange={e=>setVenueForm(f=>({...f,hasGrill:e.target.checked}))} style={{width:"18px",height:"18px",cursor:"pointer",accentColor:C.accent}}/>
+                  <label htmlFor="venueGrill" style={{color:C.cream,fontSize:"0.85rem",cursor:"pointer"}}>🔥 Has grills / BBQ facilities</label>
+                </div>
+                <button style={{...btnSt(C.green,true),width:"100%",padding:"10px"}} onClick={addVenue}>Add Venue</button>
               </div>
-              <button style={{...btnSt(C.green,true),width:"100%",padding:"10px"}} onClick={addVenue}>Add Venue</button>
-            </div>
+            )}
+
             {sortedVenues.length===0&&<p style={{color:C.muted}}>No venues yet!</p>}
+
             {isAdmin&&totalWeeks>0&&(
               <div style={{...cardSt,marginBottom:"20px",borderColor:C.blue+"55"}}>
                 <h3 style={{color:C.blue,fontSize:"0.85rem",letterSpacing:"0.06em",margin:"0 0 12px"}}>📅 CORRECT WEEK VENUE</h3>
@@ -1577,86 +1587,93 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 )}
               </div>
             )}
-            <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
+
+            <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
               {sortedVenues.map((v,i)=>{
                 const reviews=v.reviews||[];
                 const avgRating=v.avgRating||0;
                 const displayRating=Math.round(avgRating*10)/10;
                 const totalReviews=reviews.length+(v.rating>0?1:0);
+                const isTop=i===0&&avgRating>0;
+                const isOpen=!!expandedVenues[v.id];
                 return(
-                  <div key={v.id} style={{...cardSt,border:`1px solid ${i===0&&avgRating>0?C.gold+"44":C.border}`,background:i===0&&avgRating>0?`linear-gradient(135deg,#1e1a0a,#22200e)`:C.card}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"8px",flex:1,minWidth:0}}>
-                        {i===0&&avgRating>0&&<span style={{fontSize:"1rem"}}>🏆</span>}
-                        {v.imageUrl
-                          ? <img src={v.imageUrl} alt={v.name} style={{width:"40px",height:"40px",borderRadius:"6px",objectFit:"cover",flexShrink:0}}/>
-                          : <div style={{width:"40px",height:"40px",borderRadius:"6px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1.2rem",flexShrink:0}}>📍</div>
-                        }
-                        <div style={{minWidth:0}}>
-                          <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                            <div style={{color:i===0&&avgRating>0?C.accentLight:C.cream,fontWeight:"bold",fontSize:"0.9rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</div>
-                          </div>
-                          <div style={{marginTop:"3px"}}>
-                            {v.hasGrill===true
-                              ? <span style={{color:C.accent,fontSize:"0.72rem"}}>🔥 Grills available</span>
-                              : <span style={{color:C.muted,fontSize:"0.72rem"}}>🚫 No grills</span>
-                            }
-                          </div>
-                          <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"2px",flexWrap:"wrap"}}>
-                            <StarRating value={Math.round(avgRating)} size={13}/>
-                            <span style={{color:C.muted,fontSize:"0.7rem"}}>{avgRating>0?`${displayRating}/5`:"Unrated"}{totalReviews>0&&` · ${totalReviews}`}</span>
-                          </div>
-                          <label style={{fontSize:"0.68rem",color:C.muted,cursor:"pointer",textDecoration:"underline",display:"block",marginTop:"3px"}}>
-                            {v.imageUrl ? "Change photo" : "Upload photo"}
-                            <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
-                              const file = e.target.files[0]; if(!file) return;
-                              const url = await uploadImage(file);
-                              update({venues:venues.map(vn=>vn.id===v.id?{...vn,imageUrl:url}:vn)});
-                            }}/>
-                          </label>
+                  <div key={v.id} style={{borderRadius:"8px",overflow:"hidden",border:`1px solid ${isTop?C.gold+"44":C.border}`,background:isTop?`linear-gradient(135deg,#1e1a0a,#22200e)`:C.card}}>
+                    <button onClick={()=>setExpandedVenues(prev=>({...prev,[v.id]:!prev[v.id]}))} style={{width:"100%",display:"flex",alignItems:"center",gap:"10px",padding:"9px 12px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}>
+                      {v.imageUrl
+                        ? <img src={v.imageUrl} alt={v.name} style={{width:"36px",height:"36px",borderRadius:"6px",objectFit:"cover",flexShrink:0}}/>
+                        : <div style={{width:"36px",height:"36px",borderRadius:"6px",background:C.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"1rem",flexShrink:0}}>📍</div>
+                      }
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                          {isTop&&<span style={{fontSize:"0.85rem"}}>🏆</span>}
+                          <span style={{color:isTop?C.accentLight:C.cream,fontWeight:"bold",fontSize:"0.86rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.name}</span>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"2px",flexWrap:"wrap"}}>
+                          <StarRating value={Math.round(avgRating)} size={11}/>
+                          <span style={{color:C.muted,fontSize:"0.68rem"}}>{avgRating>0?`${displayRating}/5`:"Unrated"}{totalReviews>0&&` · ${totalReviews}`}</span>
+                          {v.hasGrill===true&&<span style={{color:C.accent,fontSize:"0.7rem"}}>🔥</span>}
                         </div>
                       </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:"5px",marginLeft:"8px",flexShrink:0}}>
-                        <button onClick={()=>{setReviewVenue(v);setReviewForm({rating:0,comment:""}); }} style={{...btnSt(C.green,true),padding:"5px 10px",fontSize:"0.72rem"}}>⭐ Review</button>
-                        {isAdmin&&<>
-                          <button onClick={()=>setEditVenue({...v})} style={{...btnSt(C.blue,true),padding:"5px 10px",fontSize:"0.72rem"}}>Edit</button>
-                          <button onClick={()=>removeVenue(v.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"5px",padding:"5px 8px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>
-                        </>}
-                      </div>
-                    </div>
-                    {v.comment&&(
-                      <div style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",borderLeft:`3px solid ${C.accent}55`,marginBottom:"10px"}}>
-                        <p style={{margin:0,color:C.muted,fontSize:"0.78rem",lineHeight:"1.5",fontStyle:"italic"}}>"{v.comment}"</p>
-                      </div>
-                    )}
-                    {reviews.length>0&&(
-                      <div>
-                        <button onClick={()=>setCollapsedReviews(prev=>({...prev,[v.id]:!prev[v.id]}))} style={{display:"flex",alignItems:"center",gap:"5px",background:"transparent",border:"none",cursor:"pointer",padding:"0",marginBottom:collapsedReviews[v.id]?"0":"6px"}}>
-                          <span style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em"}}>MEMBER REVIEWS ({reviews.length})</span>
-                          <span style={{color:C.muted,fontSize:"0.6rem"}}>{collapsedReviews[v.id]?"▶":"▼"}</span>
-                        </button>
-                        {!collapsedReviews[v.id]&&(
-                          <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
-                            {reviews.map(r=>(
-                              <div key={r.id} style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
-                                <div style={{flex:1}}>
-                                  <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px",flexWrap:"wrap"}}>
-                                    <span style={{color:C.cream,fontSize:"0.8rem",fontWeight:"bold"}}>{r.author}</span>
-                                    <StarRating value={r.rating} size={11}/>
-                                    <span style={{color:C.muted,fontSize:"0.68rem"}}>{r.date}</span>
-                                  </div>
-                                  {r.comment&&<p style={{margin:0,color:C.muted,fontSize:"0.76rem",lineHeight:"1.4",fontStyle:"italic"}}>"{r.comment}"</p>}
-                                </div>
-                                {(isAdmin||r.author===user.name)&&(
-                                  <button onClick={()=>deleteReview(v.id,r.id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif",padding:"2px 4px",flexShrink:0}}>✕</button>
-                                )}
-                              </div>
-                            ))}
+                      <span style={{color:C.muted,fontSize:"0.7rem",flexShrink:0,transform:isOpen?"rotate(180deg)":"none",transition:"transform 0.15s"}}>▼</span>
+                    </button>
+                    {isOpen&&(
+                      <div style={{padding:"0 12px 12px"}}>
+                        <div style={{marginTop:"4px",marginBottom:"10px"}}>
+                          {v.hasGrill===true
+                            ? <span style={{color:C.accent,fontSize:"0.72rem"}}>🔥 Grills available</span>
+                            : <span style={{color:C.muted,fontSize:"0.72rem"}}>🚫 No grills</span>
+                          }
+                        </div>
+                        <label style={{fontSize:"0.68rem",color:C.muted,cursor:"pointer",textDecoration:"underline",display:"block",marginBottom:"10px"}}>
+                          {v.imageUrl ? "Change photo" : "Upload photo"}
+                          <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                            const file = e.target.files[0]; if(!file) return;
+                            const url = await uploadImage(file);
+                            update({venues:venues.map(vn=>vn.id===v.id?{...vn,imageUrl:url}:vn)});
+                          }}/>
+                        </label>
+                        {v.comment&&(
+                          <div style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",borderLeft:`3px solid ${C.accent}55`,marginBottom:"10px"}}>
+                            <p style={{margin:0,color:C.muted,fontSize:"0.78rem",lineHeight:"1.5",fontStyle:"italic"}}>"{v.comment}"</p>
                           </div>
                         )}
+                        {reviews.length>0&&(
+                          <div style={{marginBottom:"10px"}}>
+                            <button onClick={()=>setCollapsedReviews(prev=>({...prev,[v.id]:!prev[v.id]}))} style={{display:"flex",alignItems:"center",gap:"5px",background:"transparent",border:"none",cursor:"pointer",padding:"0",marginBottom:collapsedReviews[v.id]?"0":"6px"}}>
+                              <span style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em"}}>MEMBER REVIEWS ({reviews.length})</span>
+                              <span style={{color:C.muted,fontSize:"0.6rem"}}>{collapsedReviews[v.id]?"▶":"▼"}</span>
+                            </button>
+                            {!collapsedReviews[v.id]&&(
+                              <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                                {reviews.map(r=>(
+                                  <div key={r.id} style={{background:C.surface,borderRadius:"6px",padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"8px"}}>
+                                    <div style={{flex:1}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px",flexWrap:"wrap"}}>
+                                        <span style={{color:C.cream,fontSize:"0.8rem",fontWeight:"bold"}}>{r.author}</span>
+                                        <StarRating value={r.rating} size={11}/>
+                                        <span style={{color:C.muted,fontSize:"0.68rem"}}>{r.date}</span>
+                                      </div>
+                                      {r.comment&&<p style={{margin:0,color:C.muted,fontSize:"0.76rem",lineHeight:"1.4",fontStyle:"italic"}}>"{r.comment}"</p>}
+                                    </div>
+                                    {(isAdmin||r.author===user.name)&&(
+                                      <button onClick={()=>deleteReview(v.id,r.id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.75rem",fontFamily:"Georgia,serif",padding:"2px 4px",flexShrink:0}}>✕</button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {reviews.length===0&&!v.comment&&<p style={{margin:0,color:C.border,fontSize:"0.74rem",fontStyle:"italic",marginBottom:"10px"}}>No reviews yet — be the first!</p>}
+                        <div style={{display:"flex",gap:"8px"}}>
+                          <button onClick={()=>{setReviewVenue(v);setReviewForm({rating:0,comment:""}); }} style={{...btnSt(C.green,true),flex:1,padding:"6px 10px",fontSize:"0.72rem"}}>⭐ Review</button>
+                          {isAdmin&&<>
+                            <button onClick={()=>setEditVenue({...v})} style={{...btnSt(C.blue,true),flex:1,padding:"6px 10px",fontSize:"0.72rem"}}>Edit</button>
+                            <button onClick={()=>removeVenue(v.id)} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"5px",padding:"6px 10px",cursor:"pointer",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>Remove</button>
+                          </>}
+                        </div>
                       </div>
                     )}
-                    {reviews.length===0&&!v.comment&&<p style={{margin:0,color:C.border,fontSize:"0.74rem",fontStyle:"italic"}}>No reviews yet — be the first!</p>}
                   </div>
                 );
               })}
