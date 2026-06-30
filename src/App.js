@@ -1299,10 +1299,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 grps[g.gameId].players.push({pid:p.id,name:p.name,gi,...g});
               });
             });
-            (weeklyGuests[wk]||[]).forEach(g=>{
+            (weeklyGuests[wk]||[]).forEach((g,gIndex)=>{
               if((g.gameRound||1)!==round) return;
               if(!grps[g.gameId]) grps[g.gameId]={gameId:g.gameId,label:g.label,players:[]};
-              grps[g.gameId].players.push({pid:`guest-${g.guestName}`,name:g.guestName||"Guest",gi:-1,isGuest:true,...g});
+              grps[g.gameId].players.push({pid:`guest-${g.guestName}`,name:g.guestName||"Guest",gi:-1,isGuest:true,gIndex,...g});
             });
             return Object.values(grps).sort((a,b)=>a.label.localeCompare(b.label));
           };
@@ -1312,6 +1312,49 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             const newPts=newPos===entry.actualGroupSize?0:calcPoints(newPos,entry.groupSize);
             const nwg={...weeklyGames,[pid]:{...weeklyGames[pid],[wk]:(weeklyGames[pid][wk]||[]).map((g,i)=>i===gi?{...g,position:newPos,pts:newPts,sotd:parseInt(newSotd)||0}:g)}};
             update({weeklyGames:nwg}); setGridEditKey(null); notify("Position updated!");
+          };
+          const saveGuestGrid=(gIndex,wk,newPos,newSotd)=>{
+            const list=weeklyGuests[wk]||[];
+            const guest=list[gIndex];
+            if(!guest) return;
+            const newPts=newPos===guest.actualGroupSize?0:calcPoints(newPos,guest.groupSize);
+            const updated=list.map((g,i)=>i===gIndex?{...g,position:newPos,pts:newPts,sotd:parseInt(newSotd)||0}:g);
+            update({weeklyGuests:{...weeklyGuests,[wk]:updated}}); setGridEditKey(null); notify("Guest updated!");
+          };
+          const removeGuestRetroactively=(gIndex,wk)=>{
+            const list=weeklyGuests[wk]||[];
+            const guest=list[gIndex];
+            if(!guest) return;
+            if(!window.confirm(`Remove guest "${guest.guestName||"Guest"}" from this week?`)) return;
+            const gameId=guest.gameId, removedPos=guest.position;
+            const memberEntries=[];
+            players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(g.gameId===gameId&&!g.absent) memberEntries.push({pid:String(p.id),g});});});
+            const otherGuestsInGroup=list.filter((g,i)=>i!==gIndex&&g.gameId===gameId);
+            const newGroupSize=memberEntries.length+otherGuestsInGroup.length;
+            const gameIdCounts={};
+            players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});});
+            list.forEach((g,i)=>{if(i!==gIndex&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});
+            gameIdCounts[gameId]=newGroupSize;
+            const maxGs=Math.max(1,...Object.values(gameIdCounts));
+            const nwg={...weeklyGames};
+            memberEntries.forEach(({pid,g})=>{
+              const newPos=g.position>removedPos?g.position-1:g.position;
+              nwg[pid]={...(nwg[pid]||{}),[wk]:(nwg[pid]?.[wk]||[]).map(gg=>{
+                if(gg.gameId===gameId) return {...gg,position:newPos,groupSize:maxGs,actualGroupSize:newGroupSize,pts:calcPoints(newPos,maxGs)};
+                if(!gg.absent&&gg.gameId) return {...gg,groupSize:maxGs,pts:calcPoints(gg.position,maxGs)};
+                return gg;
+              })};
+            });
+            const updatedGuests=list.filter((g,i)=>i!==gIndex).map(g=>{
+              if(g.gameId===gameId){
+                const newPos=g.position>removedPos?g.position-1:g.position;
+                return {...g,position:newPos,groupSize:maxGs,actualGroupSize:newGroupSize,pts:calcPoints(newPos,maxGs)};
+              }
+              if(g.gameId) return {...g,groupSize:maxGs,pts:calcPoints(g.position,maxGs)};
+              return g;
+            });
+            update({weeklyGames:nwg,weeklyGuests:{...weeklyGuests,[wk]:updatedGuests}});
+            setGridEditKey(null); notify("Guest removed and scores updated!");
           };
           const weeksWithData=Array.from({length:maxWk},(_,i)=>i+1).filter(wk=>players.some(p=>(weeklyGames[p.id]?.[wk]||[]).length>0));
           const absent=selWk?players.filter(p=>!(weeklyGames[p.id]?.[parseInt(selWk)]||[]).some(g=>!g.absent)):[];
@@ -1384,7 +1427,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                             {sorted.map(p=>{
                               const maxPosInGroup=Math.max(...sorted.map(x=>x.position));
                               const isFirst=p.position===1,isLast=p.position===maxPosInGroup;
-                              const ekey=`${p.pid}-${selWk}-${p.gi}`;
+                              const ekey=p.isGuest?`guest-${p.gIndex}-${selWk}`:`${p.pid}-${selWk}-${p.gi}`;
                               const isEditing=gridEditKey===ekey;
                               return(
                                 <div key={p.pid}>
@@ -1403,6 +1446,14 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                     {isAdmin&&!p.isGuest&&<button onClick={()=>{setGridEditKey(isEditing?null:ekey);setGridEditPos(String(p.position));setGridEditSotd(p.sotd||0);}}
                                       style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",
                                         padding:"1px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✎</button>}
+                                    {isAdmin&&p.isGuest&&<>
+                                      <button onClick={()=>{setGridEditKey(isEditing?null:ekey);setGridEditPos(String(p.position));setGridEditSotd(p.sotd||0);}}
+                                        style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",
+                                          padding:"1px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✎</button>
+                                      <button onClick={()=>removeGuestRetroactively(p.gIndex,parseInt(selWk))}
+                                        style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",
+                                          padding:"1px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif"}}>✕</button>
+                                    </>}
                                   </div>
                                   {isEditing&&isAdmin&&(
                                     <div style={{background:C.surface,padding:"10px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -1415,7 +1466,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                                       <div style={{fontSize:"0.65rem",color:C.muted,marginBottom:"6px",letterSpacing:"0.06em"}}>SHOT OF THE DAY</div>
                                       <input type="number" min="0" max="10" style={{...inputSt,marginBottom:"8px"}} value={gridEditSotd} onChange={e=>setGridEditSotd(e.target.value)}/>
                                       <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                                        <button onClick={()=>saveGridPos(p.pid,parseInt(selWk),p.gi,parseInt(gridEditPos),gridEditSotd)}
+                                        <button onClick={()=>p.isGuest?saveGuestGrid(p.gIndex,parseInt(selWk),parseInt(gridEditPos),gridEditSotd):saveGridPos(p.pid,parseInt(selWk),p.gi,parseInt(gridEditPos),gridEditSotd)}
                                           style={{...btnSt(C.green,true),padding:"5px 14px",fontSize:"0.78rem"}}>Save</button>
                                         <button onClick={()=>setGridEditKey(null)}
                                           style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",
