@@ -562,6 +562,9 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [standingsView, setStandingsView]   = useState("list");
   const [standingsSort, setStandingsSort]   = useState("pts");
   const [standingsMetric, setStandingsMetric] = useState("pts");
+  const [chartRange, setChartRange]         = useState("all");
+  const [chartCustomStart, setChartCustomStart] = useState(1);
+  const [chartCustomEnd, setChartCustomEnd]     = useState(1);
 
   const votes = appState.votes || {};
 
@@ -601,7 +604,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     return{...p,pts,wins,absences,sotdTotal,weeksAttended,mvp};
   }).sort((a,b)=>b.pts-a.pts),[players,weeklyGames]);
 
-  const chartData=useMemo(()=>buildChartData(players.filter(p=>chartPlayers.includes(p.id)),weeklyGames,maxWk),[players,weeklyGames,chartPlayers,maxWk]);
+  const chartData=useMemo(()=>buildChartData(players.filter(p=>chartPlayers.includes(p.id)&&!suspendedPlayers.includes(String(p.id))),weeklyGames,maxWk),[players,weeklyGames,chartPlayers,maxWk,suspendedPlayers]);
 
   const venueAvgRating = v => {
     const reviews=v.reviews||[];
@@ -1120,9 +1123,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           const btnSt2=(active)=>({padding:"6px 0",borderRadius:"6px",border:`1px solid ${active?C.accent:C.cream}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:C.cream,fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:"bold",flex:1,textAlign:"center"});
           const pillSt=(active)=>({padding:"4px 10px",borderRadius:"12px",border:`1px solid ${active?C.accent:C.cream}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:C.cream,fontSize:"0.62rem",fontFamily:"Georgia,serif",cursor:"pointer"});
           const minGamesForMvp=2;
+          const activeChartPlayers=players.filter(p=>!suspendedPlayers.includes(String(p.id)));
           const buildMetricData=(key)=>Array.from({length:maxWk},(_,w)=>{
             const entry={week:`Wk ${w+1}`};
-            players.filter(p=>chartPlayers.includes(p.id)).forEach(p=>{
+            activeChartPlayers.filter(p=>chartPlayers.includes(p.id)).forEach(p=>{
               let cum=0;
               for(let ww=1;ww<=w+1;ww++){
                 (weeklyGames[p.id]?.[ww]||[]).forEach(g=>{
@@ -1164,6 +1168,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
             );
           };
+          const fullChartData = standingsMetric==="pts"?chartData:buildMetricData(standingsMetric);
+          const rangeStart = chartRange==="last2"?Math.max(1,maxWk-1):chartRange==="last4"?Math.max(1,maxWk-3):chartRange==="custom"?Math.min(chartCustomStart,chartCustomEnd):1;
+          const rangeEnd = chartRange==="custom"?Math.max(chartCustomStart,chartCustomEnd):maxWk;
+          const displayedChartData = fullChartData.slice(Math.max(0,rangeStart-1), rangeEnd);
           return(
             <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 120px)"}}>
               <div style={{display:"flex",gap:"6px",marginBottom:"8px"}}>
@@ -1257,19 +1265,33 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                       setChartPlayers(ids);
                     }}>⭐ Top 5{players.find(p=>p.name===user.name)&&!standings.slice(0,5).some(p=>p.name===user.name)?" + Me":""}</button>
                   </div>
+                  <div style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap",justifyContent:"center",alignItems:"center"}}>
+                    {[["all","All weeks"],["last2","Last 2"],["last4","Last 4"],["custom","Custom"]].map(([k,label])=>(
+                      <button key={k} style={pillSt(chartRange===k)} onClick={()=>{setChartRange(k);if(k==="custom"){setChartCustomStart(Math.max(1,maxWk-3));setChartCustomEnd(maxWk);}}}>{label}</button>
+                    ))}
+                    {chartRange==="custom"&&(<>
+                      <select value={chartCustomStart} onChange={e=>setChartCustomStart(parseInt(e.target.value))} style={{...inputSt,padding:"3px 6px",fontSize:"0.62rem",width:"auto"}}>
+                        {Array.from({length:maxWk},(_,i)=>i+1).map(w=><option key={w} value={w}>Wk {w}</option>)}
+                      </select>
+                      <span style={{color:C.muted,fontSize:"0.62rem"}}>to</span>
+                      <select value={chartCustomEnd} onChange={e=>setChartCustomEnd(parseInt(e.target.value))} style={{...inputSt,padding:"3px 6px",fontSize:"0.62rem",width:"auto"}}>
+                        {Array.from({length:maxWk},(_,i)=>i+1).map(w=><option key={w} value={w}>Wk {w}</option>)}
+                      </select>
+                    </>)}
+                  </div>
                   <div style={{width:"100%",minHeight:0,height:"260px"}}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={standingsMetric==="pts"?chartData:buildMetricData(standingsMetric)} margin={{top:4,right:8,left:0,bottom:0}}>
+                      <LineChart data={displayedChartData} margin={{top:4,right:8,left:0,bottom:0}}>
                         <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
                         <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
                         <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
                         <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
-                        {players.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
+                        {activeChartPlayers.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                   <div style={{display:"flex",gap:"4px",flexWrap:"wrap",padding:"8px 0",justifyContent:"center"}}>
-                    {[...players].sort((a,b)=>a.name.localeCompare(b.name)).map((p)=>{const i=players.findIndex(x=>x.id===p.id),on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"2px 8px",borderRadius:"10px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.58rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name}</button>;})}
+                    {[...activeChartPlayers].sort((a,b)=>a.name.localeCompare(b.name)).map((p)=>{const i=players.findIndex(x=>x.id===p.id),on=chartPlayers.includes(p.id),col=LINE_COLORS[i%LINE_COLORS.length];return<button key={p.id} onClick={()=>toggleChart(p.id)} style={{padding:"2px 8px",borderRadius:"10px",border:`1px solid ${on?col:C.cream}`,background:on?col+"22":"transparent",color:on?col:C.cream,fontSize:"0.58rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name}</button>;})}
                   </div>
                 </div>
               )}
