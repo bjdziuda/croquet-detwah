@@ -35,6 +35,78 @@ const DEFAULT_ADMINS = [
   { username: "admin2",       password: "detwah2026",  role: "admin" },
 ];
 
+const RULEBOOK_SECTIONS = [
+  { title: "The Game", rules: [
+    { name: "Court & Layout", text: `Croquet De-Twah is played on a <strong>"custom"</strong> course that changes week to week. Every course begins at the starting pin with two wickets and finishes with two wickets and the pin. Wickets must be played in the <strong>exact order</strong> set on the course that week. Wickets are placed where the terrain demands — <strong>measured distances are not used.</strong>` },
+    { name: "Wicket Count & Pace of Play", block: `<strong>No halfway pin:</strong> 6 wickets between the start and finish wicket pairs.<br/><strong>With a halfway pin:</strong> 3 wickets from start to halfway, and 3 from halfway back to finish.<br/>This count may only be exceeded with <strong>Commissioner approval.</strong>` },
+    { name: "Venue Selection", text: `The previous week's winner selects the venue — a park, yard, or field within <strong>Detroit city limits.</strong> The Season Opener is always held at Belle Isle. The Championship is always held in Chelsea, MI. Locations outside Detroit require Commissioner approval.` },
+    { name: "Course Layout", text: `The first player to arrive each week sets up the course at the chosen venue. When multiple groups share a venue, <strong>at least one wicket must be shared</strong> between the groups' courses.` },
+    { name: "Objective", text: `Each player must complete the course — passing through every wicket in the correct order — and finish by <strong>striking the final pin.</strong> A game is complete once every player in the group has hit the final pin.` },
+    { name: "Scoring a Game", block: `In a group of <em>N</em> players: 1st place earns <em>N</em> points · 2nd earns <em>N–1</em> · and so on · <strong>Last place earns 0 points (no exceptions).</strong>` },
+    { name: "Tiebreakers", text: `If two or more players finish a day with the same cumulative score, a tiebreaker is required. The format is determined by the Commissioner or a designated representative.` },
+  ]},
+  { title: "Order of Play", rules: [
+    { name: "Group Formation", text: `Groups are randomly assigned ahead of each week by the Commissioner. If not pre-assigned — captains selected by the Commissioner take turns. The captain picks the first player; that player picks the next; and so on until all players are assigned.` },
+    { name: "Turn Order", block: `<em>Blue → Red → Black → Yellow → Green → Orange</em><br/>Where a group has more players than colors, balls share a color with a number suffix (Orange 1, Orange 2, etc.). Players sharing a color maintain their own order.` },
+    { name: "First Shot", text: `The first shot of the game is taken <strong>one mallet-head length</strong> away from the starting pin.` },
+    { name: "Extra Shots", text: `When a player earns an extra shot, that shot is taken <strong>immediately,</strong> before play passes to the next color in the rotation.` },
+  ]},
+  { title: "Basic Turn Mechanics", rules: [
+    { name: "Striking the Ball", text: `A player may strike the ball with any part of the mallet. Every shot must be a <strong>genuine hit</strong> — pushing or shoving the ball is not allowed. See Section 6 for the push penalty.` },
+    { name: "Roqueting an Opponent's Ball", text: `When a player's ball strikes an opponent's ball, the player earns an extra stroke and may choose: <strong>Play as it lies</strong> · <strong>Croquet shot</strong> (place your ball next to theirs, hit yours into theirs) · <strong>Shuttle shot</strong> (foot on your ball, launch theirs) · <strong>Mallet-head placement</strong> (one mallet-head away, any direction).` },
+    { name: "Deadness", text: `A player may only earn an extra stroke from roqueting the same opponent's ball once per wicket cycle. After roqueting, that ball is <strong>"dead"</strong> to the hitting player until it passes through its next wicket in the correct order and direction.` },
+    { name: "The Double Wicket", block: `<strong>Bottom opening (ground level):</strong> +1 extra stroke<br/><strong>Top opening (raised):</strong> +2 extra strokes<br/>Both openings follow the same completion rules as standard wickets.` },
+    { name: "Extra Strokes & Cap", block: `<em>+1 stroke</em> — standard wicket or post &nbsp;·&nbsp; <em>+1 stroke</em> — roqueting a live ball &nbsp;·&nbsp; <em>+2 strokes</em> — top of double wicket<br/><br/><strong>Extra strokes are capped at 3 per turn.</strong> Any bonus earned beyond the cap is forfeited.` },
+    { name: "Catch-Up Rule", text: `If a player falls 2 or more wickets behind every other player in the group, their stroke allotment increases to <strong>2 strokes per turn</strong> until they catch back up to within 1 wicket. Each pin/wicket setup counts as a single wicket. Catch-up strokes count toward the 3-stroke cap.` },
+  ]},
+  { title: "Wickets & Scoring the Course", rules: [
+    { name: "Completing a Wicket", text: `A wicket is completed when <strong>more than half of the ball</strong> passes through it in the correct order and direction. If the ball passes through and then rolls back, forward progression still counts as completion.` },
+    { name: "Out of Order or Wrong Direction", text: `A player may pass through a wicket out of order or in the wrong direction without penalty — it simply does not count. The wicket must still be completed correctly later in the game.` },
+    { name: "Knocked Through by Another Player", text: `If a player's ball is driven through a wicket by another player's shot, the wicket completion counts for the ball's owner. However, no bonus stroke is earned.` },
+    { name: "Knocking a Wicket Out of the Ground", block: `If a player's mallet completely knocks a wicket out of the ground: <strong>lose current turn + next turn (–2 strokes).</strong> The wicket is reset to its original position before play continues.` },
+  ]},
+  { title: "Out of Bounds & Hazards", rules: [
+    { name: "No Official Out of Bounds", text: `The entire venue is generally in play. The only exception is a genuinely dangerous area such as a busy road, which is treated as an unplayable lie. <strong>Players should always prioritize safety.</strong>` },
+    { name: "Unplayable Lies", text: `A player may declare an unplayable lie and drop the ball near where it entered the hazard, no closer to the next wicket. The player's call is final. Penalty: <strong>loss of current turn and next turn (–2 strokes).</strong>` },
+    { name: "The Microwave Rule", block: `Bigger than a microwave? You definitely can't move it. Smaller? You probably can't either.<br/><br/><em>Cannot be moved:</em> anything present before setup, plus any object designated by the course setter.<br/><em>Can be moved:</em> objects brought by the group and loose natural debris such as sticks.` },
+    { name: "Fences & Walls", text: `If a ball comes to rest against a fence, wall, or any object providing 180° or less of shot access, the player may move the ball one mallet-head length away to allow a playable shot.` },
+  ]},
+  { title: "Fouls & Penalties", rules: [
+    { name: "Playing Out of Turn", text: `The ball is reset to its original position and play resumes in the correct order. No additional stroke penalty — however, <strong>this player must be chastised by the group.</strong>` },
+    { name: "Pushing the Ball", text: `If a player is observed pushing the ball with their mallet, the ball returns to its original position and the player loses that turn.` },
+    { name: "Accidental Double-Hit", text: `No penalty. Only a deliberate or obvious push is penalized.` },
+    { name: "Accidentally Moving Your Own Ball", text: `Return the ball to its original position. No penalty.` },
+    { name: "Accidentally Moving an Opponent's Ball", text: `Return the opponent's ball to its original position. No penalty.` },
+    { name: "Ball Moving on Its Own", text: `The ball must be played from wherever it comes to rest. No penalty.` },
+  ]},
+  { title: "Acts of Nature, Creatures & Bystanders", rules: [
+    { name: "Bystanders & Spectators", text: `If a ball strikes a bystander or their belongings, the ball must remain where it lands. It is the shooter's responsibility to be aware of and clear the path before taking a shot.` },
+    { name: "Animals & Creatures", text: `If a ball is moved by an animal, it must remain where the animal left it, provided the position is playable. If unplayable, refer to Section 5.` },
+    { name: "Toddlers", block: `You may verbally encourage a toddler to return the ball or place it in a more — or less — desirable location. <strong>You may not, however, touch the child.</strong> Where the ball is ultimately dropped or placed by the toddler is where it must be played. No exceptions.` },
+    { name: "Weather & Acts of God", text: `Wind, rain, and other acts of God are part of the course. A ball that rolls due to wind is played where it comes to rest, unless the Commissioner suspends play and marks all balls.` },
+  ]},
+  { title: "Winning the Game & League Scoring", rules: [
+    { name: "Weekly Winner", text: `The weekly winner is the player with the most cumulative points across all groups on that day. The weekly winner earns the right to select the venue for the following week.` },
+    { name: "Season Standings", text: `Season standings are determined by cumulative points earned across all weeks. Every point earned in every weekly session counts toward the season total.` },
+    { name: "MVP", text: `The MVP award goes to the player with the highest percentage of possible points earned across the weeks they attended. A player must attend <strong>at least half</strong> of the season's scheduled weeks to qualify.` },
+    { name: "Shot of the Day (SOTD)", text: `One SOTD is awarded per group per week. A qualifying shot must (1) be agreed worthy by the group and (2) pass through a wicket in the correct direction. Tracked cumulatively across the season.` },
+    { name: "Season Championship", block: `Eligibility: <em>dues paid in full</em> + <em>at least 3 weeks</em> of regular season play.<br/>Open to all eligible members regardless of standings. Held annually in <em>Chelsea, MI.</em>` },
+    { name: "Additional Awards", text: `The league recognizes additional season-long awards beyond MVP and SOTD. These are determined and announced by the Commissioner at the end of the season.` },
+  ]},
+  { title: "Match-Day Policies", rules: [
+    { name: "Sign-Ups", text: `Sign-ups are managed through the Croquet De-Twah app each week. Players are encouraged to sign up in advance so groups can be organized before play begins.` },
+    { name: "Late Arrivals", text: `Players who arrive after play has begun will be added to the smallest group. Late arrivals must start from the beginning — no accommodation for lost progress. Normal rules (including catch-up) apply from their first turn.` },
+    { name: "Absences & Rain-Outs", text: `A player who does not attend a scheduled week receives <strong>1 point</strong> for that week. Rain-outs, called by the Commissioner or by group consensus — every member receives 1 point.` },
+    { name: "Dues & Suspension", text: `Dues are a sliding scale of <strong>$10–$20 per season,</strong> with each member contributing what they feel is appropriate. Unpaid members will have their account suspended from all league activity and may be reinstated at any time upon payment.` },
+  ]},
+  { title: "Code of Conduct & Disputes", rules: [
+    { name: "Spirit of the Game", text: `Croquet De-Twah is built on good company, friendly competition, and community. Players are expected to treat each other with respect and play honestly.` },
+    { name: "Fun Is Mandatory", block: `<strong>FUN IS MANDATORY.</strong>` },
+    { name: "Disputed Calls", text: `The honor system governs all disputes. Players are trusted to call their own shots fairly and resolve disagreements among themselves. The Commissioner has final say.` },
+    { name: "General Conduct", text: `No formal rules — just be a good human and a good sport. The Commissioner reserves the right to address any situation that falls outside the spirit of the league.` },
+  ]},
+];
+
 const calcPoints = (position, groupSize) => {
   if (groupSize <= 1) return 1;
   if (position === groupSize) return 0;
@@ -543,6 +615,14 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [expForm, setExpForm] = useState({desc:"",amount:""});
   const [paidCollapsed, setPaidCollapsed] = useState(false);
   const [suspendedCollapsed, setSuspendedCollapsed] = useState(false);
+  const [rbExpanded, setRbExpanded]     = useState({});
+  const [rbSigName, setRbSigName]       = useState("");
+  const [rbAmendText, setRbAmendText]   = useState("");
+  const [rbSigMsg, setRbSigMsg]         = useState(null);
+  const [rbAmendMsg, setRbAmendMsg]     = useState(null);
+  const [rbEditKey, setRbEditKey]       = useState(null);
+  const [rbEditVal, setRbEditVal]       = useState("");
+  const [rbEditBlock, setRbEditBlock]   = useState(false);
 
   const [addPlayerModal, setAddPlayerModal] = useState(null); // {week}
   const [addPlayerPid, setAddPlayerPid]     = useState("");
@@ -908,7 +988,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["courses","🏑 Courses"],["profile","👤 Profile"],
+  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["courses","🏑 Courses"],["profile","👤 Profile"],["rulebook","📜 Rules"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
@@ -2436,6 +2516,193 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   <div style={{color:C.cream,fontSize:"0.85rem",marginTop:"4px"}}>#{standings.findIndex(s=>s.id===myPlayer.id)+1} of {standings.length}</div>
                 </div>
               )}
+            </div>
+          );
+        })()}
+
+
+        {tab==="rulebook"&&(()=>{
+          const rawSections = appState.rulebookContent ? JSON.parse(appState.rulebookContent) : RULEBOOK_SECTIONS;
+          const isPublished = !!appState.rulebookPublished;
+          const isSuperAdmin = user?.role==="superadmin";
+          const amendments = appState.rulebookAmendments||[];
+          const signatures = appState.rulebookSignatures||[];
+          const togRb = i => setRbExpanded(prev=>({...prev,[i]:!prev[i]}));
+
+          const startEdit = (si,ri,rule) => {
+            setRbEditKey(`${si}_${ri}`);
+            setRbEditVal(rule.block||rule.text||"");
+            setRbEditBlock(!!rule.block);
+          };
+          const saveEdit = (si,ri) => {
+            const updated = rawSections.map((s,sIdx)=>sIdx!==si?s:{...s,rules:s.rules.map((r,rIdx)=>rIdx!==ri?r:(rbEditBlock?{name:r.name,block:rbEditVal}:{name:r.name,text:rbEditVal}))});
+            update({rulebookContent:JSON.stringify(updated)});
+            setRbEditKey(null);
+          };
+          const submitSig = () => {
+            if(!isPublished){setRbSigMsg({type:"er",text:"Rulebook is not yet published."});return;}
+            if(!rbSigName.trim()){setRbSigMsg({type:"er",text:"Enter your name to sign."});return;}
+            if(signatures.find(s=>s.name.toLowerCase()===rbSigName.trim().toLowerCase())){setRbSigMsg({type:"ok",text:"✓ Already signed."});return;}
+            update({rulebookSignatures:[...signatures,{name:rbSigName.trim(),date:new Date().toLocaleDateString()}]});
+            setRbSigName(""); setRbSigMsg({type:"ok",text:"✓ Signed. Thank you."});
+          };
+          const submitAmend = () => {
+            if(!rbAmendText.trim()){setRbAmendMsg({type:"er",text:"Please enter a proposal."});return;}
+            update({rulebookAmendments:[...amendments,{author:user.name,text:rbAmendText.trim(),date:new Date().toLocaleDateString()}]});
+            setRbAmendText(""); setRbAmendMsg({type:"ok",text:"✓ Suggestion submitted."});
+          };
+          return (
+            <div>
+              {/* Commissioner publish toggle */}
+              {isSuperAdmin&&(
+                <div style={{...cardSt,marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={lbSt}>PUBLISH STATUS</div>
+                    <div style={{color:isPublished?C.greenLight:C.accent,fontSize:"0.85rem",fontWeight:"bold"}}>
+                      {isPublished?"✓ Published — Accepting signatures":"🚧 Work in Progress — Signatures disabled"}
+                    </div>
+                  </div>
+                  <button onClick={()=>update({rulebookPublished:!isPublished})} style={btnSt(isPublished?C.red:C.green,true)}>
+                    {isPublished?"Unpublish":"Publish Rulebook"}
+                  </button>
+                </div>
+              )}
+              {/* WIP banner for non-commissioner */}
+              {!isPublished&&!isSuperAdmin&&(
+                <div style={{...cardSt,marginBottom:"14px",textAlign:"center",padding:"20px 16px",border:`1px solid ${C.accent}44`}}>
+                  <div style={{fontSize:"1.4rem",marginBottom:"8px"}}>🚧</div>
+                  <div style={{color:C.accent,fontWeight:"bold",fontSize:"0.88rem",marginBottom:"4px"}}>Work in Progress</div>
+                  <div style={{color:C.muted,fontSize:"0.75rem",lineHeight:1.6}}>The rulebook is being finalized by the Commissioner.<br/>Check back soon — signatures will open on publish.</div>
+                </div>
+              )}
+              {/* Header */}
+              <div style={{textAlign:"center",marginBottom:"20px",paddingBottom:"18px",borderBottom:`1px solid ${C.border}`}}>
+                <div style={{fontSize:"0.6rem",color:C.accent,letterSpacing:"0.2em",fontWeight:"bold",marginBottom:"8px"}}>CROQUET DE-TWAH · DETROIT, MICHIGAN</div>
+                <h1 style={{color:C.cream,fontSize:"1.4rem",fontWeight:"bold",letterSpacing:"0.04em",margin:"0 0 6px"}}>Official League Rulebook</h1>
+                <div style={{width:"44px",height:"2px",background:C.accent,margin:"12px auto",opacity:0.5}}/>
+                <div style={{fontSize:"0.73rem",color:C.muted,lineHeight:1.8}}>
+                  2026 Season &nbsp;·&nbsp; <span style={{color:C.accent}}>Commissioner Approved</span> &nbsp;·&nbsp; Subject to Revision<br/>
+                  Season Opener: <span style={{color:C.accent}}>Belle Isle</span> &nbsp;·&nbsp; Championship: <span style={{color:C.accent}}>Chelsea, MI</span>
+                </div>
+              </div>
+              {/* TOC */}
+              <div style={{...cardSt,marginBottom:"14px"}}>
+                <div style={{...lbSt,marginBottom:"12px"}}>TABLE OF CONTENTS</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"2px 16px"}}>
+                  {rawSections.map((s,i)=>(
+                    <div key={i} onClick={()=>togRb(i)} style={{fontSize:"0.77rem",color:C.muted,cursor:"pointer",padding:"3px 0",borderBottom:`1px dotted ${C.border}`,display:"flex",gap:"8px",alignItems:"baseline"}}>
+                      <span style={{color:C.accent,fontSize:"0.65rem",flexShrink:0}}>§{String(i+1).padStart(2,"0")}</span>
+                      <span>{s.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Sections */}
+              {rawSections.map((s,i)=>{
+                const open=!!rbExpanded[i];
+                return (
+                  <div key={i} style={{...cardSt,marginBottom:"8px",padding:0,overflow:"hidden"}}>
+                    <div onClick={()=>togRb(i)} style={{display:"flex",alignItems:"baseline",gap:"12px",padding:"12px 16px",cursor:"pointer",background:open?C.surface:"transparent"}}>
+                      <span style={{fontSize:"0.63rem",color:C.accent,letterSpacing:"0.12em",fontWeight:"bold",flexShrink:0}}>SECTION {String(i+1).padStart(2,"0")}</span>
+                      <span style={{color:C.cream,fontSize:"0.9rem",fontWeight:"bold",flex:1}}>{s.title}</span>
+                      <span style={{color:C.muted,fontSize:"0.7rem",display:"inline-block",transform:open?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▾</span>
+                    </div>
+                    {open&&(
+                      <div style={{borderTop:`1px solid ${C.border}`,padding:"14px 16px"}}>
+                        {s.rules.map((r,ri)=>{
+                          const ekey=`${i}_${ri}`;
+                          const isEditing=rbEditKey===ekey;
+                          return (
+                            <div key={ri}>
+                              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
+                                <div style={{fontSize:"0.62rem",color:C.accent,letterSpacing:"0.13em",fontWeight:"bold",flex:1}}>{r.name.toUpperCase()}</div>
+                                {isSuperAdmin&&!isEditing&&(
+                                  <button onClick={()=>startEdit(i,ri,r)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"1px 7px",cursor:"pointer",fontSize:"0.62rem",fontFamily:"Georgia,serif",flexShrink:0}}>✎ edit</button>
+                                )}
+                              </div>
+                              {isEditing?(
+                                <div>
+                                  <textarea value={rbEditVal} onChange={e=>setRbEditVal(e.target.value)} rows={4} style={{...textareaSt,marginBottom:"6px"}}/>
+                                  <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"8px"}}>
+                                    <label style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"0.72rem",color:C.muted,cursor:"pointer"}}>
+                                      <input type="checkbox" checked={rbEditBlock} onChange={e=>setRbEditBlock(e.target.checked)}/> Highlighted block style
+                                    </label>
+                                  </div>
+                                  <div style={{display:"flex",gap:"8px"}}>
+                                    <button onClick={()=>saveEdit(i,ri)} style={{...btnSt(),flex:1}}>Save</button>
+                                    <button onClick={()=>setRbEditKey(null)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 16px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem",flex:1}}>Cancel</button>
+                                  </div>
+                                </div>
+                              ):(
+                                r.block
+                                  ?<div style={{background:C.surface,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:"0 6px 6px 0",padding:"9px 13px",fontSize:"0.81rem",color:C.text,lineHeight:1.72}} dangerouslySetInnerHTML={{__html:r.block}}/>
+                                  :<div style={{fontSize:"0.81rem",color:C.text,lineHeight:1.72}} dangerouslySetInnerHTML={{__html:r.text}}/>
+                              )}
+                              {ri<s.rules.length-1&&<div style={{borderTop:`1px solid rgba(38,61,38,0.35)`,margin:"10px 0"}}/>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {/* Amendment suggestions — admin only */}
+              {isAdmin&&(
+                <div style={{...cardSt,marginBottom:"8px"}}>
+                  <div style={{marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>
+                    <div style={lbSt}>ADMIN SUGGESTIONS</div>
+                    <div style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>Proposed Edits &amp; Amendments</div>
+                  </div>
+                  <p style={{fontSize:"0.74rem",color:C.muted,marginBottom:"12px",lineHeight:1.6}}>Submit a suggested edit or amendment for Commissioner review. Visible to admins only.</p>
+                  {amendments.length>0&&(
+                    <div style={{marginBottom:"14px"}}>
+                      {amendments.map((a,i)=>(
+                        <div key={i} style={{borderBottom:`1px solid ${C.border}`,padding:"9px 0",display:"flex",gap:"8px",alignItems:"flex-start"}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:"0.63rem",color:C.accent,letterSpacing:"0.08em",fontWeight:"bold",marginBottom:"3px"}}>{a.author.toUpperCase()} · {a.date}</div>
+                            <div style={{fontSize:"0.8rem",color:C.text,lineHeight:1.6}}>{a.text}</div>
+                          </div>
+                          {isSuperAdmin&&<button onClick={()=>{const updated=amendments.filter((_,idx)=>idx!==i);update({rulebookAmendments:updated});}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 7px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif",flexShrink:0}}>✕</button>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!amendments.length&&<p style={{fontSize:"0.73rem",color:C.muted,marginBottom:"12px"}}>No suggestions on record.</p>}
+                  <textarea value={rbAmendText} onChange={e=>setRbAmendText(e.target.value)} placeholder="Describe your suggested edit or amendment..." rows={3} style={{...textareaSt,marginBottom:"8px"}}/>
+                  <button onClick={submitAmend} style={btnSt()}>Submit Suggestion</button>
+                  {rbAmendMsg&&<div style={{fontSize:"0.75rem",color:rbAmendMsg.type==="ok"?C.greenLight:C.red,marginTop:"6px"}}>{rbAmendMsg.text}</div>}
+                </div>
+              )}
+              {/* Signatures — only when published */}
+              <div style={{...cardSt,marginBottom:"8px"}}>
+                <div style={{marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>
+                  <div style={lbSt}>MEMBER RATIFICATION</div>
+                  <div style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>League Approval &amp; Signatures</div>
+                </div>
+                {!isPublished
+                  ?<p style={{fontSize:"0.75rem",color:C.muted,fontStyle:"italic"}}>Signatures will open once the Commissioner publishes the rulebook.</p>
+                  :<>
+                    <p style={{fontSize:"0.74rem",color:C.muted,marginBottom:"12px",lineHeight:1.6}}>By signing, members acknowledge they have read and agree to abide by the Croquet De-Twah Official Rulebook.</p>
+                    <div style={{display:"flex",gap:"8px",marginBottom:"8px"}}>
+                      <input value={rbSigName} onChange={e=>setRbSigName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSig()} placeholder="Your league name..." style={{...inputSt,flex:1,marginBottom:0}}/>
+                      <button onClick={submitSig} style={{...btnSt(C.green,true),flexShrink:0}}>Sign</button>
+                    </div>
+                    {rbSigMsg&&<div style={{fontSize:"0.75rem",color:rbSigMsg.type==="ok"?C.greenLight:C.red,marginBottom:"8px"}}>{rbSigMsg.text}</div>}
+                    {signatures.length>0
+                      ?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:"7px",marginTop:"10px"}}>
+                        {signatures.map((s,i)=>(
+                          <div key={i} style={{borderBottom:`1px solid ${C.border}`,paddingBottom:"5px"}}>
+                            <div style={{fontSize:"0.82rem",color:C.cream,fontStyle:"italic"}}>🏑 {s.name}</div>
+                            <div style={{fontSize:"0.62rem",color:C.muted,marginTop:"2px"}}>{s.date}</div>
+                          </div>
+                        ))}
+                      </div>
+                      :<p style={{fontSize:"0.73rem",color:C.muted,marginTop:"8px"}}>No signatures yet — be the first to sign.</p>
+                    }
+                  </>
+                }
+              </div>
             </div>
           );
         })()}
