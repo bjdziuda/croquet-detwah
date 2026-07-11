@@ -997,6 +997,205 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   return (
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"Georgia,serif",color:C.text}}>
 
+      {/* ═══ RETRO RULEBOOK OVERLAY ═══ */}
+      {tab==="rulebook"&&(()=>{
+        const rawSections = appState.rulebookContent ? JSON.parse(appState.rulebookContent) : RULEBOOK_SECTIONS;
+        const isPublished = !!appState.rulebookPublished;
+        const isSuperAdmin = user?.role==="superadmin";
+        const amendments = appState.rulebookAmendments||[];
+        const signatures = appState.rulebookSignatures||[];
+        const togRb = i => setRbExpanded(prev=>({...prev,[i]:!prev[i]}));
+        const startEdit = (si,ri,rule) => { setRbEditKey(`${si}_${ri}`); setRbEditVal(rule.block||rule.text||""); setRbEditBlock(!!rule.block); };
+        const saveEdit = (si,ri) => {
+          const updated = rawSections.map((s,sIdx)=>sIdx!==si?s:{...s,rules:s.rules.map((r,rIdx)=>rIdx!==ri?r:(rbEditBlock?{name:r.name,block:rbEditVal}:{name:r.name,text:rbEditVal}))});
+          update({rulebookContent:JSON.stringify(updated)}); setRbEditKey(null);
+        };
+        const submitSig = () => {
+          if(!isPublished){setRbSigMsg({type:"er",text:"Rulebook not yet published."});return;}
+          if(!rbSigName.trim()){setRbSigMsg({type:"er",text:"Enter your name to sign."});return;}
+          if(signatures.find(s=>s.name.toLowerCase()===rbSigName.trim().toLowerCase())){setRbSigMsg({type:"ok",text:"✓ Already signed."});return;}
+          update({rulebookSignatures:[...signatures,{name:rbSigName.trim(),date:new Date().toLocaleDateString()}]});
+          setRbSigName(""); setRbSigMsg({type:"ok",text:"✓ Signed. Thank you."});
+        };
+        const submitAmend = () => {
+          if(!rbAmendText.trim()){setRbAmendMsg({type:"er",text:"Please enter a proposal."});return;}
+          update({rulebookAmendments:[...amendments,{author:user.name,text:rbAmendText.trim(),date:new Date().toLocaleDateString()}]});
+          setRbAmendText(""); setRbAmendMsg({type:"ok",text:"✓ Suggestion submitted."});
+        };
+        const RC = {bg:"#080f08",card:"#0d2b0d",surf:"#121f12",brd:"#2d7a2d",gold:"#ffd700",gB:"#7dff7d",gM:"#4db84d",gD:"#a8d5a8"};
+        const rCard = {background:RC.card,border:`1px solid ${RC.brd}`,borderRadius:"8px",padding:"12px 14px",marginBottom:"8px"};
+        const rLbl = {fontFamily:"'VT323',monospace",fontSize:"14px",color:RC.gM,letterSpacing:"0.1em",display:"block",marginBottom:"4px"};
+        const rInput = {background:RC.bg,border:`1px solid ${RC.brd}`,color:RC.gB,fontFamily:"'Courier New',monospace",fontSize:"12px",padding:"5px 7px",width:"100%",marginBottom:"6px",outline:"none",resize:"vertical"};
+        const rBtn = (col=RC.gold) => ({background:RC.bg,border:`1px solid ${col}`,color:col,fontFamily:"'VT323',monospace",fontSize:"16px",padding:"4px 14px",cursor:"pointer",letterSpacing:"1px"});
+        return (
+          <div style={{position:"fixed",inset:0,zIndex:500,background:RC.bg,overflowY:"auto",fontFamily:"'Courier New',monospace",color:RC.gD}}>
+            <style>{`@keyframes rbmarq{from{transform:translateX(100%)}to{transform:translateX(-100%)}}`}</style>
+            {/* Retro sticky nav */}
+            <div style={{position:"sticky",top:0,zIndex:10,background:RC.card,borderBottom:"3px double "+RC.gold}}>
+              <div style={{display:"flex",overflowX:"auto",padding:"2px 8px",scrollbarWidth:"none",WebkitOverflowScrolling:"touch"}}>
+                {allTabs.map(([k,l])=>(
+                  <button key={k} onClick={()=>setTab(k)} style={{padding:"8px 12px",border:"none",cursor:"pointer",fontFamily:"'VT323',monospace",fontSize:"1rem",background:k==="rulebook"?RC.card:"transparent",color:k==="rulebook"?RC.gold:RC.gM,borderBottom:k==="rulebook"?`2px solid ${RC.gold}`:"2px solid transparent",flexShrink:0,whiteSpace:"nowrap",transition:"color 0.15s"}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Marquee */}
+            <div style={{background:"#1a3d1a",overflow:"hidden",padding:"4px 0",borderBottom:`2px solid ${RC.gold}`}}>
+              <span style={{display:"inline-block",whiteSpace:"nowrap",animation:"rbmarq 28s linear infinite",fontFamily:"'VT323',monospace",fontSize:"15px",color:RC.gold}}>
+                &nbsp;&nbsp;&#9827; CROQUET DE-TWAH OFFICIAL RULEBOOK &nbsp;&nbsp; DETROIT'S ONLY PREMIER EXTREME CROQUET LEAGUE &nbsp;&nbsp; &#9827; SEASON OPENER: BELLE ISLE &nbsp;&nbsp; CHAMPIONSHIP: CHELSEA, MI &nbsp;&nbsp; HONOR SYSTEM IN ALL CASES &#9827;&nbsp;&nbsp;
+              </span>
+            </div>
+            {/* Content */}
+            <div style={{maxWidth:"700px",margin:"0 auto",padding:"14px 12px 48px"}}>
+              {/* Commissioner publish toggle */}
+              {isSuperAdmin&&(
+                <div style={{...rCard,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <span style={rLbl}>PUBLISH STATUS</span>
+                    <span style={{fontFamily:"'VT323',monospace",fontSize:"16px",color:isPublished?RC.gB:RC.gold}}>{isPublished?"✓ Published — Accepting signatures":"🚧 Work in Progress — Signatures disabled"}</span>
+                  </div>
+                  <button onClick={()=>update({rulebookPublished:!isPublished})} style={rBtn(isPublished?"#c06060":RC.gB)}>{isPublished?"Unpublish":"Publish"}</button>
+                </div>
+              )}
+              {!isPublished&&!isSuperAdmin&&(
+                <div style={{...rCard,textAlign:"center",padding:"20px",border:`1px dashed ${RC.gold}`,marginBottom:"12px"}}>
+                  <div style={{fontFamily:"'VT323',monospace",fontSize:"22px",color:RC.gold,marginBottom:"4px"}}>🚧 WORK IN PROGRESS</div>
+                  <div style={{fontSize:"12px",color:RC.gM}}>The rulebook is being finalized. Check back soon.</div>
+                </div>
+              )}
+              {/* Retro header */}
+              <div style={{textAlign:"center",marginBottom:"16px",paddingBottom:"14px",borderBottom:`1px solid ${RC.brd}`}}>
+                <div style={{fontFamily:"'VT323',monospace",fontSize:"38px",color:RC.gold,letterSpacing:"3px",lineHeight:1,textShadow:`0 0 14px ${RC.gold}55`}}>&#9827; OFFICIAL RULEBOOK &#9827;</div>
+                <div style={{fontFamily:"'VT323',monospace",fontSize:"17px",color:RC.gB,margin:"4px 0 8px"}}>Croquet De-Twah &mdash; Detroit, MI</div>
+                <div style={{width:"44px",height:"2px",background:RC.gold,margin:"0 auto",opacity:0.5}}/>
+                <div style={{fontFamily:"'VT323',monospace",fontSize:"14px",color:RC.gM,marginTop:"8px",lineHeight:1.8}}>
+                  2026 Season &nbsp;·&nbsp; <span style={{color:RC.gold}}>Commissioner Approved</span> &nbsp;·&nbsp; Subject to Revision
+                </div>
+              </div>
+              {/* TOC */}
+              <div style={{...rCard,marginBottom:"14px",border:`1px dashed ${RC.gold}`}}>
+                <div style={{fontFamily:"'VT323',monospace",fontSize:"18px",color:RC.gold,marginBottom:"8px"}}>&#9658; TABLE OF CONTENTS</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"1px 10px"}}>
+                  {rawSections.map((s,i)=>(
+                    <div key={i} onClick={()=>togRb(i)} style={{fontFamily:"'VT323',monospace",fontSize:"14px",color:RC.gB,cursor:"pointer",padding:"2px 0",borderBottom:`1px dotted ${RC.brd}`,display:"flex",gap:"6px"}}>
+                      <span style={{color:RC.gold,fontSize:"12px",flexShrink:0}}>§{String(i+1).padStart(2,"0")}</span>
+                      <span>{s.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Sections */}
+              {rawSections.map((s,i)=>{
+                const open=!!rbExpanded[i];
+                return (
+                  <div key={i} style={{border:`1px solid ${RC.brd}`,marginBottom:"8px"}}>
+                    <div onClick={()=>togRb(i)} style={{fontFamily:"'VT323',monospace",fontSize:"17px",color:RC.gold,background:RC.card,borderLeft:`4px solid ${RC.gold}`,padding:"6px 10px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",userSelect:"none"}}>
+                      <span>SECTION {String(i+1).padStart(2,"0")} :: {s.title.toUpperCase()}</span>
+                      <span style={{fontFamily:"'VT323',monospace",fontSize:"15px",color:RC.gM}}>{open?"[-]":"[+]"}</span>
+                    </div>
+                    {open&&(
+                      <div style={{padding:"10px 12px",background:RC.bg}}>
+                        {s.rules.map((r,ri)=>{
+                          const ekey=`${i}_${ri}`;
+                          const isEditing=rbEditKey===ekey;
+                          return (
+                            <div key={ri}>
+                              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"3px"}}>
+                                <div style={{fontFamily:"'VT323',monospace",fontSize:"15px",color:RC.gB,flex:1}}>&#9658; {r.name}</div>
+                                {isSuperAdmin&&!isEditing&&(
+                                  <button onClick={()=>startEdit(i,ri,r)} style={{background:"none",border:`1px solid ${RC.brd}`,color:RC.gM,borderRadius:"4px",padding:"1px 6px",cursor:"pointer",fontSize:"11px",fontFamily:"'Courier New',monospace",flexShrink:0}}>✎ edit</button>
+                                )}
+                              </div>
+                              {isEditing?(
+                                <div>
+                                  <textarea value={rbEditVal} onChange={e=>setRbEditVal(e.target.value)} rows={4} style={rInput}/>
+                                  <label style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"11px",color:RC.gM,marginBottom:"6px",cursor:"pointer"}}>
+                                    <input type="checkbox" checked={rbEditBlock} onChange={e=>setRbEditBlock(e.target.checked)}/> Highlighted block style
+                                  </label>
+                                  <div style={{display:"flex",gap:"6px"}}>
+                                    <button onClick={()=>saveEdit(i,ri)} style={{...rBtn(RC.gold),flex:1}}>SAVE</button>
+                                    <button onClick={()=>setRbEditKey(null)} style={{...rBtn(RC.gM),flex:1}}>CANCEL</button>
+                                  </div>
+                                </div>
+                              ):(
+                                r.block
+                                  ?<div style={{background:"#1a1000",border:`1px dashed ${RC.gold}`,padding:"7px 10px",fontSize:"12px",color:RC.gold,lineHeight:1.8,marginBottom:"6px"}} dangerouslySetInnerHTML={{__html:r.block}}/>
+                                  :<div style={{fontSize:"12px",color:RC.gD,lineHeight:1.72,padding:"6px 9px",background:RC.card,borderLeft:`2px solid ${RC.brd}`,marginBottom:"6px"}} dangerouslySetInnerHTML={{__html:r.text}}/>
+                              )}
+                              {ri<s.rules.length-1&&<div style={{borderTop:`1px dashed ${RC.brd}`,margin:"6px 0"}}/>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {/* Admin amendment suggestions */}
+              {isAdmin&&(
+                <div style={{...rCard,border:`2px dashed ${RC.gold}`,marginTop:"12px"}}>
+                  <div style={{fontFamily:"'VT323',monospace",fontSize:"18px",color:RC.gold,marginBottom:"4px"}}>&#9888; ADMIN SUGGESTIONS</div>
+                  <div style={{fontSize:"11px",color:RC.gM,marginBottom:"10px"}}>Submit a suggested edit for Commissioner review. Visible to admins only.</div>
+                  {amendments.length>0&&(
+                    <div style={{marginBottom:"12px"}}>
+                      {amendments.map((a,i)=>(
+                        <div key={i} style={{borderBottom:`1px solid ${RC.brd}`,padding:"8px 0",display:"flex",gap:"8px"}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontFamily:"'VT323',monospace",fontSize:"13px",color:RC.gM,marginBottom:"2px"}}>{a.author} · {a.date}</div>
+                            <div style={{fontSize:"12px",color:RC.gD}}>{a.text}</div>
+                          </div>
+                          {isSuperAdmin&&<button onClick={()=>{const upd=amendments.filter((_,idx)=>idx!==i);update({rulebookAmendments:upd});}} style={{background:"none",border:`1px solid ${RC.brd}`,color:RC.gM,borderRadius:"4px",padding:"2px 6px",cursor:"pointer",fontSize:"11px",fontFamily:"'Courier New',monospace",flexShrink:0}}>✕</button>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!amendments.length&&<div style={{fontSize:"11px",color:RC.gM,marginBottom:"10px"}}>No suggestions on record.</div>}
+                  <textarea value={rbAmendText} onChange={e=>setRbAmendText(e.target.value)} placeholder="Describe your suggested edit..." rows={3} style={rInput}/>
+                  <button onClick={submitAmend} style={rBtn()}>SUBMIT SUGGESTION &#9827;</button>
+                  {rbAmendMsg&&<div style={{fontFamily:"'VT323',monospace",fontSize:"13px",color:rbAmendMsg.type==="ok"?RC.gB:"#ff6666",marginTop:"4px"}}>{rbAmendMsg.text}</div>}
+                </div>
+              )}
+              {/* Signatures */}
+              <div style={{...rCard,border:`2px dashed ${RC.gold}`,marginTop:"10px"}}>
+                <div style={{fontFamily:"'VT323',monospace",fontSize:"18px",color:RC.gold,marginBottom:"4px"}}>&#9733; LEAGUE SIGNATURES</div>
+                {!isPublished
+                  ?<div style={{fontSize:"12px",color:RC.gM,fontStyle:"italic"}}>Signatures will open once the Commissioner publishes the rulebook.</div>
+                  :<>
+                    <div style={{fontSize:"11px",color:RC.gM,marginBottom:"10px"}}>All active dues-paid members may sign their approval below.</div>
+                    <div style={{display:"flex",gap:"6px",marginBottom:"6px"}}>
+                      <input type="text" value={rbSigName} onChange={e=>setRbSigName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSig()} placeholder="Your league name..." style={{...rInput,marginBottom:0,flex:1}}/>
+                      <button onClick={submitSig} style={{...rBtn(RC.gB),flexShrink:0}}>SIGN &#9827;</button>
+                    </div>
+                    {rbSigMsg&&<div style={{fontFamily:"'VT323',monospace",fontSize:"13px",color:rbSigMsg.type==="ok"?RC.gB:"#ff6666",marginBottom:"8px"}}>{rbSigMsg.text}</div>}
+                    {signatures.length>0
+                      ?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:"5px",marginTop:"8px"}}>
+                        {signatures.map((s,i)=>(
+                          <div key={i} style={{background:RC.bg,border:`1px solid ${RC.brd}`,padding:"5px 7px"}}>
+                            <div style={{fontFamily:"'VT323',monospace",fontSize:"14px",color:RC.gB}}>&#9827; {s.name}</div>
+                            <div style={{fontSize:"10px",color:RC.gM}}>{s.date}</div>
+                          </div>
+                        ))}
+                      </div>
+                      :<div style={{fontSize:"11px",color:RC.gM,marginTop:"6px"}}>No signatures yet — be the first!</div>
+                    }
+                  </>
+                }
+              </div>
+              {/* Footer */}
+              <div style={{borderTop:`3px double ${RC.gold}`,marginTop:"16px",padding:"12px 0 4px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px"}}>
+                <div>
+                  <div style={{fontFamily:"'VT323',monospace",fontSize:"13px",color:RC.gM}}>&#9827; <span style={{color:RC.gold}}>Croquet De-Twah</span> &mdash; Detroit, Michigan</div>
+                  <div style={{fontFamily:"'VT323',monospace",fontSize:"13px",color:RC.gM}}>Commissioner Approved &bull; Subject to Revision &bull; <span style={{color:RC.gold}}>Honor System in All Cases</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ═══ END RETRO OVERLAY ═══ */}
+
       {editModal&&isAdmin&&(()=>{
         const{pid,week,gameIdx,game}=editModal;
         const pName=players.find(x=>x.id===pid)?.name||"";
@@ -2520,192 +2719,6 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           );
         })()}
 
-
-        {tab==="rulebook"&&(()=>{
-          const rawSections = appState.rulebookContent ? JSON.parse(appState.rulebookContent) : RULEBOOK_SECTIONS;
-          const isPublished = !!appState.rulebookPublished;
-          const isSuperAdmin = user?.role==="superadmin";
-          const amendments = appState.rulebookAmendments||[];
-          const signatures = appState.rulebookSignatures||[];
-          const togRb = i => setRbExpanded(prev=>({...prev,[i]:!prev[i]}));
-
-          const startEdit = (si,ri,rule) => {
-            setRbEditKey(`${si}_${ri}`);
-            setRbEditVal(rule.block||rule.text||"");
-            setRbEditBlock(!!rule.block);
-          };
-          const saveEdit = (si,ri) => {
-            const updated = rawSections.map((s,sIdx)=>sIdx!==si?s:{...s,rules:s.rules.map((r,rIdx)=>rIdx!==ri?r:(rbEditBlock?{name:r.name,block:rbEditVal}:{name:r.name,text:rbEditVal}))});
-            update({rulebookContent:JSON.stringify(updated)});
-            setRbEditKey(null);
-          };
-          const submitSig = () => {
-            if(!isPublished){setRbSigMsg({type:"er",text:"Rulebook is not yet published."});return;}
-            if(!rbSigName.trim()){setRbSigMsg({type:"er",text:"Enter your name to sign."});return;}
-            if(signatures.find(s=>s.name.toLowerCase()===rbSigName.trim().toLowerCase())){setRbSigMsg({type:"ok",text:"✓ Already signed."});return;}
-            update({rulebookSignatures:[...signatures,{name:rbSigName.trim(),date:new Date().toLocaleDateString()}]});
-            setRbSigName(""); setRbSigMsg({type:"ok",text:"✓ Signed. Thank you."});
-          };
-          const submitAmend = () => {
-            if(!rbAmendText.trim()){setRbAmendMsg({type:"er",text:"Please enter a proposal."});return;}
-            update({rulebookAmendments:[...amendments,{author:user.name,text:rbAmendText.trim(),date:new Date().toLocaleDateString()}]});
-            setRbAmendText(""); setRbAmendMsg({type:"ok",text:"✓ Suggestion submitted."});
-          };
-          return (
-            <div>
-              {/* Commissioner publish toggle */}
-              {isSuperAdmin&&(
-                <div style={{...cardSt,marginBottom:"14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div>
-                    <div style={lbSt}>PUBLISH STATUS</div>
-                    <div style={{color:isPublished?C.greenLight:C.accent,fontSize:"0.85rem",fontWeight:"bold"}}>
-                      {isPublished?"✓ Published — Accepting signatures":"🚧 Work in Progress — Signatures disabled"}
-                    </div>
-                  </div>
-                  <button onClick={()=>update({rulebookPublished:!isPublished})} style={btnSt(isPublished?C.red:C.green,true)}>
-                    {isPublished?"Unpublish":"Publish Rulebook"}
-                  </button>
-                </div>
-              )}
-              {/* WIP banner for non-commissioner */}
-              {!isPublished&&!isSuperAdmin&&(
-                <div style={{...cardSt,marginBottom:"14px",textAlign:"center",padding:"20px 16px",border:`1px solid ${C.accent}44`}}>
-                  <div style={{fontSize:"1.4rem",marginBottom:"8px"}}>🚧</div>
-                  <div style={{color:C.accent,fontWeight:"bold",fontSize:"0.88rem",marginBottom:"4px"}}>Work in Progress</div>
-                  <div style={{color:C.muted,fontSize:"0.75rem",lineHeight:1.6}}>The rulebook is being finalized by the Commissioner.<br/>Check back soon — signatures will open on publish.</div>
-                </div>
-              )}
-              {/* Header */}
-              <div style={{textAlign:"center",marginBottom:"20px",paddingBottom:"18px",borderBottom:`1px solid ${C.border}`}}>
-                <div style={{fontSize:"0.6rem",color:C.accent,letterSpacing:"0.2em",fontWeight:"bold",marginBottom:"8px"}}>CROQUET DE-TWAH · DETROIT, MICHIGAN</div>
-                <h1 style={{color:C.cream,fontSize:"1.4rem",fontWeight:"bold",letterSpacing:"0.04em",margin:"0 0 6px"}}>Official League Rulebook</h1>
-                <div style={{width:"44px",height:"2px",background:C.accent,margin:"12px auto",opacity:0.5}}/>
-                <div style={{fontSize:"0.73rem",color:C.muted,lineHeight:1.8}}>
-                  2026 Season &nbsp;·&nbsp; <span style={{color:C.accent}}>Commissioner Approved</span> &nbsp;·&nbsp; Subject to Revision<br/>
-                  Season Opener: <span style={{color:C.accent}}>Belle Isle</span> &nbsp;·&nbsp; Championship: <span style={{color:C.accent}}>Chelsea, MI</span>
-                </div>
-              </div>
-              {/* TOC */}
-              <div style={{...cardSt,marginBottom:"14px"}}>
-                <div style={{...lbSt,marginBottom:"12px"}}>TABLE OF CONTENTS</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"2px 16px"}}>
-                  {rawSections.map((s,i)=>(
-                    <div key={i} onClick={()=>togRb(i)} style={{fontSize:"0.77rem",color:C.muted,cursor:"pointer",padding:"3px 0",borderBottom:`1px dotted ${C.border}`,display:"flex",gap:"8px",alignItems:"baseline"}}>
-                      <span style={{color:C.accent,fontSize:"0.65rem",flexShrink:0}}>§{String(i+1).padStart(2,"0")}</span>
-                      <span>{s.title}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {/* Sections */}
-              {rawSections.map((s,i)=>{
-                const open=!!rbExpanded[i];
-                return (
-                  <div key={i} style={{...cardSt,marginBottom:"8px",padding:0,overflow:"hidden"}}>
-                    <div onClick={()=>togRb(i)} style={{display:"flex",alignItems:"baseline",gap:"12px",padding:"12px 16px",cursor:"pointer",background:open?C.surface:"transparent"}}>
-                      <span style={{fontSize:"0.63rem",color:C.accent,letterSpacing:"0.12em",fontWeight:"bold",flexShrink:0}}>SECTION {String(i+1).padStart(2,"0")}</span>
-                      <span style={{color:C.cream,fontSize:"0.9rem",fontWeight:"bold",flex:1}}>{s.title}</span>
-                      <span style={{color:C.muted,fontSize:"0.7rem",display:"inline-block",transform:open?"rotate(180deg)":"none",transition:"transform 0.2s"}}>▾</span>
-                    </div>
-                    {open&&(
-                      <div style={{borderTop:`1px solid ${C.border}`,padding:"14px 16px"}}>
-                        {s.rules.map((r,ri)=>{
-                          const ekey=`${i}_${ri}`;
-                          const isEditing=rbEditKey===ekey;
-                          return (
-                            <div key={ri}>
-                              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-                                <div style={{fontSize:"0.62rem",color:C.accent,letterSpacing:"0.13em",fontWeight:"bold",flex:1}}>{r.name.toUpperCase()}</div>
-                                {isSuperAdmin&&!isEditing&&(
-                                  <button onClick={()=>startEdit(i,ri,r)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"1px 7px",cursor:"pointer",fontSize:"0.62rem",fontFamily:"Georgia,serif",flexShrink:0}}>✎ edit</button>
-                                )}
-                              </div>
-                              {isEditing?(
-                                <div>
-                                  <textarea value={rbEditVal} onChange={e=>setRbEditVal(e.target.value)} rows={4} style={{...textareaSt,marginBottom:"6px"}}/>
-                                  <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"8px"}}>
-                                    <label style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"0.72rem",color:C.muted,cursor:"pointer"}}>
-                                      <input type="checkbox" checked={rbEditBlock} onChange={e=>setRbEditBlock(e.target.checked)}/> Highlighted block style
-                                    </label>
-                                  </div>
-                                  <div style={{display:"flex",gap:"8px"}}>
-                                    <button onClick={()=>saveEdit(i,ri)} style={{...btnSt(),flex:1}}>Save</button>
-                                    <button onClick={()=>setRbEditKey(null)} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"9px 16px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.84rem",flex:1}}>Cancel</button>
-                                  </div>
-                                </div>
-                              ):(
-                                r.block
-                                  ?<div style={{background:C.surface,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.accent}`,borderRadius:"0 6px 6px 0",padding:"9px 13px",fontSize:"0.81rem",color:C.text,lineHeight:1.72}} dangerouslySetInnerHTML={{__html:r.block}}/>
-                                  :<div style={{fontSize:"0.81rem",color:C.text,lineHeight:1.72}} dangerouslySetInnerHTML={{__html:r.text}}/>
-                              )}
-                              {ri<s.rules.length-1&&<div style={{borderTop:`1px solid rgba(38,61,38,0.35)`,margin:"10px 0"}}/>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {/* Amendment suggestions — admin only */}
-              {isAdmin&&(
-                <div style={{...cardSt,marginBottom:"8px"}}>
-                  <div style={{marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>
-                    <div style={lbSt}>ADMIN SUGGESTIONS</div>
-                    <div style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>Proposed Edits &amp; Amendments</div>
-                  </div>
-                  <p style={{fontSize:"0.74rem",color:C.muted,marginBottom:"12px",lineHeight:1.6}}>Submit a suggested edit or amendment for Commissioner review. Visible to admins only.</p>
-                  {amendments.length>0&&(
-                    <div style={{marginBottom:"14px"}}>
-                      {amendments.map((a,i)=>(
-                        <div key={i} style={{borderBottom:`1px solid ${C.border}`,padding:"9px 0",display:"flex",gap:"8px",alignItems:"flex-start"}}>
-                          <div style={{flex:1}}>
-                            <div style={{fontSize:"0.63rem",color:C.accent,letterSpacing:"0.08em",fontWeight:"bold",marginBottom:"3px"}}>{a.author.toUpperCase()} · {a.date}</div>
-                            <div style={{fontSize:"0.8rem",color:C.text,lineHeight:1.6}}>{a.text}</div>
-                          </div>
-                          {isSuperAdmin&&<button onClick={()=>{const updated=amendments.filter((_,idx)=>idx!==i);update({rulebookAmendments:updated});}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 7px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif",flexShrink:0}}>✕</button>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {!amendments.length&&<p style={{fontSize:"0.73rem",color:C.muted,marginBottom:"12px"}}>No suggestions on record.</p>}
-                  <textarea value={rbAmendText} onChange={e=>setRbAmendText(e.target.value)} placeholder="Describe your suggested edit or amendment..." rows={3} style={{...textareaSt,marginBottom:"8px"}}/>
-                  <button onClick={submitAmend} style={btnSt()}>Submit Suggestion</button>
-                  {rbAmendMsg&&<div style={{fontSize:"0.75rem",color:rbAmendMsg.type==="ok"?C.greenLight:C.red,marginTop:"6px"}}>{rbAmendMsg.text}</div>}
-                </div>
-              )}
-              {/* Signatures — only when published */}
-              <div style={{...cardSt,marginBottom:"8px"}}>
-                <div style={{marginBottom:"12px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>
-                  <div style={lbSt}>MEMBER RATIFICATION</div>
-                  <div style={{color:C.cream,fontSize:"0.88rem",fontWeight:"bold"}}>League Approval &amp; Signatures</div>
-                </div>
-                {!isPublished
-                  ?<p style={{fontSize:"0.75rem",color:C.muted,fontStyle:"italic"}}>Signatures will open once the Commissioner publishes the rulebook.</p>
-                  :<>
-                    <p style={{fontSize:"0.74rem",color:C.muted,marginBottom:"12px",lineHeight:1.6}}>By signing, members acknowledge they have read and agree to abide by the Croquet De-Twah Official Rulebook.</p>
-                    <div style={{display:"flex",gap:"8px",marginBottom:"8px"}}>
-                      <input value={rbSigName} onChange={e=>setRbSigName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submitSig()} placeholder="Your league name..." style={{...inputSt,flex:1,marginBottom:0}}/>
-                      <button onClick={submitSig} style={{...btnSt(C.green,true),flexShrink:0}}>Sign</button>
-                    </div>
-                    {rbSigMsg&&<div style={{fontSize:"0.75rem",color:rbSigMsg.type==="ok"?C.greenLight:C.red,marginBottom:"8px"}}>{rbSigMsg.text}</div>}
-                    {signatures.length>0
-                      ?<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:"7px",marginTop:"10px"}}>
-                        {signatures.map((s,i)=>(
-                          <div key={i} style={{borderBottom:`1px solid ${C.border}`,paddingBottom:"5px"}}>
-                            <div style={{fontSize:"0.82rem",color:C.cream,fontStyle:"italic"}}>🏑 {s.name}</div>
-                            <div style={{fontSize:"0.62rem",color:C.muted,marginTop:"2px"}}>{s.date}</div>
-                          </div>
-                        ))}
-                      </div>
-                      :<p style={{fontSize:"0.73rem",color:C.muted,marginTop:"8px"}}>No signatures yet — be the first to sign.</p>
-                    }
-                  </>
-                }
-              </div>
-            </div>
-          );
-        })()}
 
         {tab==="players"&&isAdmin&&(
           <div>
