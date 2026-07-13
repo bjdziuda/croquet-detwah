@@ -631,6 +631,9 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [addPlayerSotd, setAddPlayerSotd]   = useState(0);
   const [matchNote, setMatchNote]           = useState("");
   const [matchSending, setMatchSending]     = useState(false);
+  const [showSignupMvp, setShowSignupMvp]   = useState(true);
+  const [signupGuestFor, setSignupGuestFor] = useState(null);
+  const [signupGuestName, setSignupGuestName] = useState("");
   const [resultsNote, setResultsNote]       = useState("");
   const [resultsSending, setResultsSending] = useState(false);
   const [addIsGuest, setAddIsGuest]         = useState(false);
@@ -962,15 +965,25 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const curSignupWk=appState.nextMatchWeek||1;
   const curSignup=weekSignups[curSignupWk]||{open:false,signups:[],waitlist:[],groups:null,published:false};
 
+  const signupMvpOf=id=>{
+    const s=standings.find(x=>String(x.id)===String(id));
+    return s&&s.mvp!=="—"?parseFloat(s.mvp):0;
+  };
+
   const generateGroups=()=>{
-    const ids=[...(curSignup.signups||[])].map(String).sort(()=>Math.random()-0.5);
+    const ids=[...(curSignup.signups||[])].map(String).sort((a,b)=>signupMvpOf(b)-signupMvpOf(a));
     const numGroups=Math.max(1,Math.ceil(ids.length/8));
     const grps=Array.from({length:numGroups},()=>[]);
-    ids.forEach((id,i)=>grps[i%numGroups].push(id));
+    // Snake draft by MVP% so total skill is balanced across groups
+    ids.forEach((id,idx)=>{
+      const cycle=Math.floor(idx/numGroups);
+      const g=cycle%2===0?idx%numGroups:numGroups-1-(idx%numGroups);
+      grps[g].push(id);
+    });
     const newPG={week:curSignupWk,groups:grps,published:false};
     update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps,published:false}},publishedGroups:newPG});
     updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false,publishedGroups:newPG}).catch(e=>console.error("Generate groups save failed:",e));
-    notify("Groups randomised!");
+    notify("Groups balanced by MVP %!");
   };
 
   const publishGroups=()=>{
@@ -979,6 +992,50 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:true}},publishedGroups:newPG});
     updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:true,publishedGroups:newPG}).catch(e=>console.error("Publish save failed:",e));
     notify("Groups published!");
+  };
+
+  const persistSignupGroups=grps=>{
+    const pg=appState.publishedGroups;
+    const newPG=(pg&&pg.week===curSignupWk)?{...pg,groups:grps}:pg;
+    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps}},...(newPG!==pg?{publishedGroups:newPG}:{})});
+    const updates={[`weekSignups.${curSignupWk}.groups`]:grps};
+    if(newPG!==pg) updates.publishedGroups=newPG;
+    updateDoc(LEAGUE_DOC,updates).catch(e=>console.error("Group update failed:",e));
+  };
+
+  const moveSignupPlayer=(id,toIdx)=>{
+    const cur=curSignup.groups||[];
+    let grps=cur.map(g=>g.filter(x=>x!==id));
+    if(toIdx!=="pool"){
+      if(grps[toIdx].length>=8){notify("That group is already at 8 players.");return;}
+      grps[toIdx]=[...grps[toIdx],id];
+    }
+    persistSignupGroups(grps);
+  };
+
+  const addSignupGuest=groupIdx=>{
+    const name=signupGuestName.trim();
+    if(!name) return;
+    const cur=curSignup.groups||[];
+    if((cur[groupIdx]||[]).length>=8){notify("That group is already at 8 players.");return;}
+    const gid=`guest::${Date.now()}::${encodeURIComponent(name)}`;
+    const grps=cur.map((g,i)=>i===groupIdx?[...g,gid]:g);
+    persistSignupGroups(grps);
+    setSignupGuestFor(null); setSignupGuestName("");
+  };
+
+  const removeSignupGuest=id=>{
+    const grps=(curSignup.groups||[]).map(g=>g.filter(x=>x!==id));
+    persistSignupGroups(grps);
+  };
+
+  const signupEntryLabel=id=>{
+    if(String(id).startsWith("guest::")){
+      const parts=String(id).split("::");
+      return {name:decodeURIComponent(parts[2]||"Guest"),isGuest:true,mvp:null};
+    }
+    const p=players.find(x=>String(x.id)===String(id));
+    return p?{name:p.name,isGuest:false,mvp:signupMvpOf(id)}:null;
   };
 
   const inputSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.85rem",fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"};
@@ -2368,9 +2425,15 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   ?<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:true}}})} style={{...btnSt(C.green,true),padding:"6px 14px",fontSize:"0.78rem"}}>Open sign-ups</button>
                   :<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Close sign-ups</button>
                 }
-                {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⇄ Randomise groups</button>}
+                {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⚖ Auto-balance groups</button>}
                 {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
                 {curSignup.published&&<button onClick={()=>{update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:false}},publishedGroups:{week:curSignupWk,groups:curSignup.groups||[],published:false}});updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:false,"publishedGroups.published":false}).catch(e=>console.error(e));}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
+                {curSignup.groups&&(
+                  <label style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"0.72rem",color:C.muted,cursor:"pointer",marginLeft:"auto"}}>
+                    <input type="checkbox" checked={showSignupMvp} onChange={e=>setShowSignupMvp(e.target.checked)} style={{accentColor:C.green,width:"13px",height:"13px"}}/>
+                    Show MVP %
+                  </label>
+                )}
               </div>
               {(curSignup.signups||[]).length>0&&(
                 <>
@@ -2381,16 +2444,62 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   </div>
                 </>
               )}
-              {curSignup.groups&&(
-                <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                  {curSignup.groups.map((grp,gi)=>(
-                    <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",padding:"8px 10px",flex:1,minWidth:"100px"}}>
-                      <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold",marginBottom:"5px"}}>Group {gi+1}</div>
-                      {grp.map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<div key={pid} style={{color:C.cream,fontSize:"0.75rem",padding:"2px 0"}}>{p.name}</div>:null;})}
+              {curSignup.groups&&(()=>{
+                const assigned=new Set(curSignup.groups.flat().filter(id=>!String(id).startsWith("guest::")));
+                const pool=(curSignup.signups||[]).map(String).filter(id=>!assigned.has(id));
+                return (
+                  <>
+                    <div onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData("text/plain");if(id)moveSignupPlayer(id,"pool");}}
+                      style={{background:C.bg,border:`1px dashed ${C.border}`,borderRadius:"6px",padding:"8px 10px",marginBottom:"8px"}}>
+                      <div style={{color:C.muted,fontSize:"0.65rem",marginBottom:"5px"}}>Unassigned {pool.length>0&&`(${pool.length})`}</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:"5px",minHeight:"18px"}}>
+                        {pool.length===0&&<span style={{color:C.muted,fontSize:"0.7rem"}}>Drag a player here to pull them out of a group</span>}
+                        {pool.map(id=>{
+                          const info=signupEntryLabel(id); if(!info) return null;
+                          return (
+                            <div key={id} draggable onDragStart={e=>e.dataTransfer.setData("text/plain",id)}
+                              style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"5px",padding:"3px 8px",fontSize:"0.72rem",color:C.cream,cursor:"grab"}}>
+                              {info.name}{showSignupMvp&&<span style={{color:C.blue,marginLeft:"5px"}}>{info.mvp}%</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                      {curSignup.groups.map((grp,gi)=>(
+                        <div key={gi} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData("text/plain");if(id)moveSignupPlayer(id,gi);}}
+                          style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",padding:"8px 10px",flex:1,minWidth:"140px"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"5px",gap:"6px"}}>
+                            <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold"}}>Group {gi+1} ({grp.length}/8)</div>
+                            <button onClick={()=>{setSignupGuestFor(signupGuestFor===gi?null:gi);setSignupGuestName("");}} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",cursor:"pointer"}}>+ Guest</button>
+                          </div>
+                          {signupGuestFor===gi&&(
+                            <div style={{display:"flex",gap:"4px",marginBottom:"6px"}}>
+                              <input value={signupGuestName} onChange={e=>setSignupGuestName(e.target.value)}
+                                onKeyDown={e=>{if(e.key==="Enter")addSignupGuest(gi);if(e.key==="Escape"){setSignupGuestFor(null);setSignupGuestName("");}}}
+                                placeholder="Guest name" autoFocus style={{...inputSt,flex:1,padding:"3px 6px",fontSize:"0.72rem"}}/>
+                              <button onClick={()=>addSignupGuest(gi)} style={{...btnSt(C.green,true),padding:"3px 8px",fontSize:"0.68rem"}}>Add</button>
+                            </div>
+                          )}
+                          {grp.map(id=>{
+                            const info=signupEntryLabel(id); if(!info) return null;
+                            return (
+                              <div key={id} draggable onDragStart={e=>e.dataTransfer.setData("text/plain",id)}
+                                style={{display:"flex",justifyContent:"space-between",alignItems:"center",color:C.cream,fontSize:"0.75rem",padding:"2px 0",cursor:"grab"}}>
+                                <span>{info.name}{info.isGuest&&<span style={{color:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>GUEST</span>}</span>
+                                <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                                  {showSignupMvp&&!info.isGuest&&<span style={{color:C.blue,fontSize:"0.65rem"}}>{info.mvp}%</span>}
+                                  {info.isGuest&&<button onClick={()=>removeSignupGuest(id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.7rem"}}>×</button>}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Rain Out */}
