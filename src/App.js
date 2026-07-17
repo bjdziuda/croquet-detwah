@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { subscribeToPush } from "./serviceWorkerRegistration";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp, increment } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 
@@ -223,7 +223,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
 
   const tryAdmin = () => {
     const match = DEFAULT_ADMINS.find(a => a.username===username.trim() && a.password===password);
-    if (match) onLogin({name:match.username, role:match.role});
+    if (match) onLogin({name:match.username, role:match.role, id:match.username});
     else setErr("Invalid username or password.");
   };
 
@@ -382,12 +382,12 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               })()}
               <div style={{display:"flex",gap:"10px",marginBottom:"12px"}}>
                 {signup.open&&(
-                  <button onClick={()=>{onSignup(selected.id,true);onLogin({name:selected.name,role:"viewer"});setSelected(null);}}
+                  <button onClick={()=>{onSignup(selected.id,true);onLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
                     style={{flex:1,padding:"11px",background:`linear-gradient(135deg,${C.green},${C.green}bb)`,border:"none",borderRadius:"8px",color:C.text,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
                     Yes, I'm in! 🏑
                   </button>
                 )}
-                <button onClick={()=>{if(signup.open)onSignup(selected.id,false);onLogin({name:selected.name,role:"viewer"});setSelected(null);}}
+                <button onClick={()=>{if(signup.open)onSignup(selected.id,false);onLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
                   style={{flex:1,padding:"11px",background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.muted,fontFamily:"Georgia,serif",fontSize:"0.9rem",cursor:"pointer"}}>
                   {signup.open?"Can't make it":"Just browsing"}
                 </button>
@@ -506,7 +506,16 @@ export default function App() {
   } : null;
 
   if (!user) return <LoginScreen
-    onLogin={(u)=>{setUser(u);sessionStorage.setItem("croquetUser",JSON.stringify(u));}}
+    onLogin={(u)=>{
+      setUser(u);
+      sessionStorage.setItem("croquetUser",JSON.stringify(u));
+      const activityKey=String(u.id||u.name);
+      updateDoc(LEAGUE_DOC,{
+        [`playerActivity.${activityKey}.name`]: u.name,
+        [`playerActivity.${activityKey}.lastActive`]: Date.now(),
+        [`playerActivity.${activityKey}.loginCount`]: increment(1),
+      }).catch(e=>console.error("Activity log failed:",e));
+    }}
     onSignup={(playerId,coming)=>{
       const wk=appState.nextMatchWeek||1;
       const cur=appState.weekSignups?.[wk]||{open:false,signups:[],waitlist:[],groups:null,published:false};
@@ -570,7 +579,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -2416,6 +2425,37 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
         {tab==="admin"&&isAdmin&&(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>⚙ Admin Tools</h2>
+
+            {/* Activity */}
+            {(()=>{
+              const now=Date.now();
+              const DAY=86400000;
+              const activeEntries=Object.values(playerActivity||{});
+              const weekActive=activeEntries.filter(a=>a?.lastActive&&(now-a.lastActive)<=7*DAY).length;
+              const monthActive=activeEntries.filter(a=>a?.lastActive&&(now-a.lastActive)<=30*DAY).length;
+              const totalPlayers=(players||[]).length;
+              const pct=totalPlayers>0?Math.round((weekActive/totalPlayers)*100):0;
+              return (
+                <div style={{...cardSt,marginBottom:"14px"}}>
+                  <div style={{color:C.accentLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"10px"}}>📊 ACTIVITY</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"10px"}}>
+                    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                      <div style={{color:C.muted,fontSize:"0.7rem"}}>Unique logins this week</div>
+                      <div style={{color:C.cream,fontSize:"1.5rem",fontWeight:"bold"}}>{weekActive}</div>
+                    </div>
+                    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                      <div style={{color:C.muted,fontSize:"0.7rem"}}>Unique logins this month</div>
+                      <div style={{color:C.cream,fontSize:"1.5rem",fontWeight:"bold"}}>{monthActive}</div>
+                    </div>
+                  </div>
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                    <div style={{color:C.muted,fontSize:"0.7rem"}}>Total registered players</div>
+                    <div style={{color:C.cream,fontSize:"1.5rem",fontWeight:"bold"}}>{totalPlayers}</div>
+                    <div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>{weekActive} of {totalPlayers} active this week ({pct}%)</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Sign-ups */}
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.green+"44",background:"#0f1a0f"}}>
