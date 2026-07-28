@@ -129,6 +129,75 @@ const buildChartData = (players, wg, maxWeek) =>
     return entry;
   });
 
+const ELO_START = 1500, ELO_K = 32;
+// Computes Elo ratings retroactively from all historical scores using pairwise
+// comparisons within each week's groups (by gameId), processed week-by-week.
+const computeEloSystem = (players, wg, maxWk) => {
+  const elo={}, history={};
+  players.forEach(p=>{elo[p.id]=ELO_START;});
+  for(let w=1; w<=maxWk; w++){
+    const groups={};
+    players.forEach(p=>{
+      (wg[p.id]?.[w]||[]).forEach(g=>{
+        if(g.absent||!g.gameId||g.position==null) return;
+        (groups[g.gameId]=groups[g.gameId]||[]).push({pid:String(p.id),position:g.position});
+      });
+    });
+    const deltas={};
+    Object.values(groups).forEach(entries=>{
+      if(entries.length<2) return;
+      for(let i=0;i<entries.length;i++){
+        for(let j=i+1;j<entries.length;j++){
+          const a=entries[i], b=entries[j];
+          const ra=elo[a.pid]??ELO_START, rb=elo[b.pid]??ELO_START;
+          const ea=1/(1+Math.pow(10,(rb-ra)/400));
+          const sa=a.position<b.position?1:a.position>b.position?0:0.5;
+          deltas[a.pid]=(deltas[a.pid]||0)+ELO_K*(sa-ea);
+          deltas[b.pid]=(deltas[b.pid]||0)+ELO_K*((1-sa)-(1-ea));
+        }
+      }
+    });
+    Object.values(groups).forEach(entries=>{
+      const n=entries.length; if(n<2) return;
+      entries.forEach(e=>{ if(deltas[e.pid]!=null) elo[e.pid]=(elo[e.pid]??ELO_START)+deltas[e.pid]/(n-1); });
+    });
+    players.forEach(p=>{ (history[p.id]=history[p.id]||{})[w]=elo[p.id]; });
+  }
+  return{elo,history};
+};
+// Best average-points venue for a player (no minimum games threshold).
+const computeHomeTurf = (pid, wg) => {
+  const totals={};
+  Object.values(wg[pid]||{}).forEach(gs=>gs.forEach(g=>{
+    if(g.absent||!g.venue) return;
+    if(!totals[g.venue]) totals[g.venue]={sum:0,games:0};
+    totals[g.venue].sum+=(g.pts||0); totals[g.venue].games+=1;
+  }));
+  let best=null;
+  Object.entries(totals).forEach(([venue,t])=>{
+    const avg=t.sum/t.games;
+    if(!best||avg>best.avg) best={venue,avg};
+  });
+  return best;
+};
+// Weekly MVP% series for a player, one entry per week they attended (for consistency calc).
+const weeklyMvpSeries = (pid, wg) => {
+  const out=[];
+  Object.entries(wg[pid]||{}).forEach(([w,gs])=>{
+    if(!gs.some(g=>!g.absent)) return;
+    const pts=gs.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
+    const maxPts=gs.reduce((s,g)=>s+(g.absent?1:(g.groupSize||1)),0);
+    if(maxPts>0) out.push((pts/maxPts)*100);
+  });
+  return out;
+};
+const stdev = arr => {
+  if(arr.length<2) return null;
+  const mean=arr.reduce((a,b)=>a+b,0)/arr.length;
+  const variance=arr.reduce((a,b)=>a+(b-mean)**2,0)/arr.length;
+  return Math.sqrt(variance);
+};
+
 const StarRating = ({value, onChange, size=24}) => (
   <div style={{display:"flex",gap:"4px"}}>
     {[1,2,3,4,5].map(n => (
@@ -595,6 +664,8 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const [reviewForm, setReviewForm] = useState({rating:0,comment:""});
   const [collapsedReviews, setCollapsedReviews] = useState({});
   const [venueWeekPick, setVenueWeekPick] = useState("");
+  const [adminOpen, setAdminOpen] = useState({});
+  const jumpToAdminSection = key => { setAdminOpen(prev=>({...prev,[key]:true})); setTimeout(()=>{ document.getElementById(`admin-sec-${key}`)?.scrollIntoView({behavior:"smooth",block:"start"}); },50); };
   const [expandedVenues, setExpandedVenues] = useState({});
   const [showAddVenue, setShowAddVenue] = useState(false);
 
@@ -686,17 +757,34 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
     }
   };
 
-  const standings = useMemo(()=>[...players].filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
-    const pts=totalPts(p.id,weeklyGames);
-    const allG=Object.values(weeklyGames[p.id]||{}).flat();
-    const wins=allG.filter(g=>g.position===1&&!g.absent).length;
-    const absences=allG.filter(g=>g.absent).length;
-    const sotdTotal=allG.reduce((s,g)=>s+(g.sotd||0),0);
-    const weeksAttended=new Set(Object.entries(weeklyGames[p.id]||{}).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>w)).size;
-    const maxPts=maxPossible(p.id,weeklyGames);
-    const mvp=maxPts>0?((pts/maxPts)*100).toFixed(1):"—";
-    return{...p,pts,wins,absences,sotdTotal,weeksAttended,mvp};
-  }).sort((a,b)=>b.pts-a.pts),[players,weeklyGames]);
+  const eloSystem = useMemo(()=>computeEloSystem(players,weeklyGames,maxWk),[players,weeklyGames,maxWk]);
+  const MIN_WEEKS_FOR_AWARDS=8;
+  const standings = useMemo(()=>{
+    const rows=[...players].filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
+      const pts=totalPts(p.id,weeklyGames);
+      const allG=Object.values(weeklyGames[p.id]||{}).flat();
+      const wins=allG.filter(g=>g.position===1&&!g.absent).length;
+      const absences=allG.filter(g=>g.absent).length;
+      const sotdTotal=allG.reduce((s,g)=>s+(g.sotd||0),0);
+      const weeksAttended=new Set(Object.entries(weeklyGames[p.id]||{}).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>w)).size;
+      const maxPts=maxPossible(p.id,weeklyGames);
+      const mvp=maxPts>0?((pts/maxPts)*100).toFixed(1):"—";
+      const hist=eloSystem.history[p.id]||{};
+      const elo=Math.round(eloSystem.elo[p.id]??ELO_START);
+      const prevElo=Math.round(hist[maxWk-1]??ELO_START);
+      const eloChange=elo-prevElo;
+      const homeTurf=computeHomeTurf(p.id,weeklyGames);
+      const mvpSeries=weeklyMvpSeries(p.id,weeklyGames);
+      const consistency=weeksAttended>=MIN_WEEKS_FOR_AWARDS?stdev(mvpSeries):null;
+      const improvement=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-ELO_START:null;
+      return{...p,pts,wins,absences,sotdTotal,weeksAttended,mvp,elo,eloChange,homeTurf,consistency,improvement};
+    }).sort((a,b)=>b.pts-a.pts);
+    const consistCands=rows.filter(p=>p.consistency!=null);
+    const mostConsistentId=consistCands.length?consistCands.reduce((best,p)=>p.consistency<best.consistency?p:best).id:null;
+    const improveCands=rows.filter(p=>p.improvement!=null);
+    const mostImprovedId=improveCands.length?improveCands.reduce((best,p)=>p.improvement>best.improvement?p:best).id:null;
+    return rows.map(p=>({...p,isMostConsistent:p.id===mostConsistentId,isMostImproved:p.id===mostImprovedId}));
+  },[players,weeklyGames,eloSystem,maxWk]);
 
   const chartData=useMemo(()=>buildChartData(players.filter(p=>chartPlayers.includes(p.id)&&!suspendedPlayers.includes(String(p.id))),weeklyGames,maxWk),[players,weeklyGames,chartPlayers,maxWk,suspendedPlayers]);
 
@@ -1054,7 +1142,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["courses","🏑 Courses"],["profile","👤 Profile"],["rulebook","📜 Rules"],
+  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],["rulebook","📜 Rules"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
@@ -1458,6 +1546,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             if(standingsSort==="mvp"){const aElig=a.weeksAttended>=2,bElig=b.weeksAttended>=2;if(!aElig&&!bElig)return 0;if(!aElig)return 1;if(!bElig)return -1;return parseFloat(b.mvp)-parseFloat(a.mvp);}
             if(standingsSort==="wins") return b.wins-a.wins;
             if(standingsSort==="sotd") return b.sotdTotal-a.sotdTotal;
+            if(standingsSort==="elo") return b.elo-a.elo;
             return b.pts-a.pts;
           });
           const metricVal=(p)=>{
@@ -1465,6 +1554,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             if(standingsMetric==="mvp") return{val:p.mvp!=="—"?p.mvp+"%":"—",col:C.blue};
             if(standingsMetric==="sotd") return{val:p.sotdTotal,col:C.gold};
             if(standingsMetric==="abs") return{val:p.absences,col:C.muted};
+            if(standingsMetric==="elo") return{val:p.elo,col:C.blue};
             return{val:p.pts,col:C.accent};
           };
           const btnSt2=(active)=>({padding:"6px 0",borderRadius:"6px",border:`1px solid ${active?C.accent:C.cream}`,background:active?"#2a4a2a":"transparent",color:active?C.accentLight:C.cream,fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer",fontWeight:"bold",flex:1,textAlign:"center"});
@@ -1498,14 +1588,18 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   : <div style={{width:"28px",height:"28px",borderRadius:"50%",background:"#2a2a2a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.62rem",color:"#999",border:"1.5px solid #444",flexShrink:0}}>{p.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</div>
                 }
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"2px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"2px",flexWrap:"wrap"}}>
                     <span style={{fontSize:"0.76rem",color:"#e8dcc8",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
                     {p.sotdTotal>0&&<span style={{fontSize:"0.58rem",color:C.gold,flexShrink:0}}>⭐{p.sotdTotal}</span>}
+                    {p.isMostConsistent&&<span style={{fontSize:"0.56rem",color:C.greenLight,border:`1px solid ${C.greenLight}`,borderRadius:"8px",padding:"1px 6px",flexShrink:0}}>⚖ Most Consistent</span>}
+                    {p.isMostImproved&&<span style={{fontSize:"0.56rem",color:C.accentLight,border:`1px solid ${C.accentLight}`,borderRadius:"8px",padding:"1px 6px",flexShrink:0}}>📈 Most Improved</span>}
                   </div>
-                  <div style={{display:"flex",gap:"8px"}}>
+                  <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
                     {showMvp&&<span style={{fontSize:"0.6rem",color:C.blue}}>MVP {p.mvp}{p.mvp!=="—"?"%":""}</span>}
+                    <span style={{fontSize:"0.6rem",color:C.blue}}>Elo {p.elo}{p.eloChange?<span style={{color:p.eloChange>0?C.greenLight:C.red}}> {p.eloChange>0?"▲":"▼"}{Math.abs(p.eloChange)}</span>:null}</span>
                     <span style={{fontSize:"0.6rem",color:C.greenLight}}>W{p.wins}</span>
                     <span style={{fontSize:"0.6rem",color:C.muted}}>Abs {p.absences}</span>
+                    {p.homeTurf&&<span style={{fontSize:"0.6rem",color:C.gold}}>🏠 {p.homeTurf.venue}</span>}
                   </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"2px",flexShrink:0}}>
@@ -1587,7 +1681,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 <div style={{flex:1,overflowY:"auto",minHeight:0,scrollbarWidth:"none",msOverflowStyle:"none"}}>
                   <style>{`.no-scroll::-webkit-scrollbar{display:none}`}</style>
                   <div className="no-scroll" style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap"}}>
-                    {[["pts","Points"],["wins","Wins"],["mvp","MVP %"],["sotd","SOTD"],["abs","Absences"]].map(([k,label])=>(
+                    {[["pts","Points"],["wins","Wins"],["mvp","MVP %"],["elo","Elo"],["sotd","SOTD"],["abs","Absences"]].map(([k,label])=>(
                       <button key={k} style={pillSt(standingsSort===k)} onClick={()=>setStandingsSort(k)}>{label}</button>
                     ))}
                   </div>
@@ -1595,7 +1689,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     const showMvp=p.weeksAttended>=minGamesForMvp;
                     return <PlayerRow key={p.id} p={p} i={i} showSwatch={false} showMvp={showMvp}/>;
                   })}
-                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts (min 2 weeks played).</p>
+                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts (min 2 weeks played). Elo starts at 1500 and updates weekly from head-to-head finishes within each group. Home turf = venue with the highest average points. Most Consistent (lowest week-to-week MVP% swing) and Most Improved (biggest Elo gain) require 8+ weeks played.</p>
                 </div>
               )}
 
@@ -2422,11 +2516,63 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
           </div>
         )}
 
-        {tab==="admin"&&isAdmin&&(
+        {tab==="admin"&&isAdmin&&(()=>{
+          return(
           <div>
             <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"16px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>⚙ Admin Tools</h2>
 
-            {/* Activity */}
+            {/* This Week panel — always expanded, auto-detected checklist */}
+            {(()=>{
+              const venueDone=!!weekVenues[curSignupWk];
+              const signupsDone=!!curSignup.open;
+              const groupsDone=!!(curSignup.groups&&curSignup.groups.length>0);
+              const groupIds=(curSignup.groups||[]).flat().filter(id=>!String(id).startsWith("guest::"));
+              const scoresTotal=groupIds.length;
+              const scoresEntered=groupIds.filter(id=>{
+                const p=players.find(x=>String(x.id)===String(id));
+                if(!p) return false;
+                return (weeklyGames[p.id]?.[curSignupWk]||[]).some(g=>!g.absent&&g.position!=null);
+              }).length;
+              const scoresDone=scoresTotal>0&&scoresEntered>=scoresTotal;
+              const resultsDone=(loginPosts||[]).some(p=>p.type==="results"&&p.title&&p.title.includes(`Week ${curSignupWk} Results`));
+              const Check=({done})=>(
+                <span style={{width:"18px",height:"18px",borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                  background:done?C.green:"transparent",border:done?"none":`1px solid ${C.muted}`,color:C.bg,fontSize:"0.62rem"}}>{done?"✓":""}</span>
+              );
+              const Row=({done,label,actionLabel,onAction,last})=>(
+                <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"7px 0",borderBottom:last?"none":`1px solid ${C.border}`}}>
+                  <Check done={done}/>
+                  <span style={{flex:1,fontSize:"0.78rem",color:done?C.cream:C.muted}}>{label}</span>
+                  {!done&&actionLabel&&<button onClick={onAction} style={{fontSize:"0.65rem",color:C.accent,border:`1px solid ${C.accent}`,borderRadius:"4px",padding:"3px 8px",background:"none",cursor:"pointer",fontFamily:"Georgia,serif",flexShrink:0}}>{actionLabel}</button>}
+                </div>
+              );
+              return(
+                <div style={{...cardSt,marginBottom:"14px",borderColor:C.accent,background:"#141008"}}>
+                  <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"8px"}}>📋 THIS WEEK — Week {curSignupWk}</div>
+                  <Row done={venueDone} label={venueDone?`Venue selected — ${weekVenues[curSignupWk]}`:"Venue selected"} actionLabel="Set venue" onAction={()=>{setVenueWeekPick(String(curSignupWk));setTab("venues");}}/>
+                  <Row done={signupsDone} label="Sign-ups open" actionLabel="Open" onAction={()=>jumpToAdminSection("signups")}/>
+                  <Row done={groupsDone} label={groupsDone?`Groups split — ${curSignup.groups.length} group${curSignup.groups.length!==1?"s":""}`:`Groups split — ${(curSignup.signups||[]).length} signed up, not yet split`} actionLabel="Split now" onAction={()=>jumpToAdminSection("signups")}/>
+                  <Row done={scoresDone} label={scoresTotal>0?`Scores entered — ${scoresEntered} of ${scoresTotal} players`:"Scores entered"} actionLabel="Go to Scores" onAction={()=>setTab("grid")}/>
+                  <Row done={resultsDone} label="Results sent" actionLabel="Send" onAction={()=>jumpToAdminSection("pushnotif")} last/>
+                </div>
+              );
+            })()}
+
+            {(()=>{
+              const Section=({id,title,color,children})=>{
+                const open=!!adminOpen[id];
+                return(
+                  <div id={`admin-sec-${id}`} style={{...cardSt,marginBottom:"14px",padding:0,overflow:"hidden"}}>
+                    <button onClick={()=>setAdminOpen(prev=>({...prev,[id]:!prev[id]}))} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"none",border:"none",cursor:"pointer",padding:"14px 16px",color:color||C.accentLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",fontFamily:"Georgia,serif"}}>
+                      <span>{title}</span>
+                      <span style={{color:C.muted,fontSize:"0.7rem"}}>{open?"▾":"▸"}</span>
+                    </button>
+                    {open&&<div style={{padding:"0 16px 16px"}}>{children}</div>}
+                  </div>
+                );
+              };
+              return(<>
+                <Section id="activity" title="📊 PLAYER ACTIVITY">
             {(()=>{
               const now=Date.now();
               const DAY=86400000;
@@ -2457,7 +2603,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               );
             })()}
 
-            {/* Sign-ups */}
+
+                </Section>
+
+                <Section id="signups" title="🏑 SIGN-UPS & GROUPS" color={C.greenLight}>
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.green+"44",background:"#0f1a0f"}}>
               <div style={{color:C.greenLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"10px"}}>🏑 WEEK {curSignupWk} SIGN-UPS</div>
               <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px"}}>
@@ -2542,7 +2691,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               })()}
             </div>
 
-            {/* Rain Out */}
+
+                </Section>
+
+                <Section id="weekactions" title="⚙ WEEK ACTIONS" color={C.accent}>
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.blue+"44",background:"#0a0f1a"}}>
               <div style={{color:C.blue,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>☔ RAIN OUT WEEK</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
@@ -2565,7 +2717,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>Marks all eligible players as absent with 1 point. Overwrites any existing data for that week.</p>
             </div>
 
-            {/* Rebalance */}
+
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.accent+"44",background:"#1a140a"}}>
               <div style={{color:C.accent,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚖ REBALANCE WEEK SCORES</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
@@ -2601,7 +2753,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>Recalculates all scores for a week so every group uses the largest group's size as the max points.</p>
             </div>
 
-            {/* Delete Week */}
+
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.red+"44",background:"#1a0f0f"}}>
               <div style={{color:C.red,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚠ DELETE WEEK DATA</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
@@ -2625,7 +2777,10 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>This removes all recorded scores for that week. Players will need to be re-recorded.</p>
             </div>
 
-            {/* Announcement - superadmin only */}
+
+                </Section>
+
+                <Section id="pushnotif" title="📣 ANNOUNCEMENTS & NOTIFICATIONS" color={C.accentLight}>
             {user?.role==="superadmin"&&(
               <div style={{...cardSt,borderColor:C.accent+"44",background:"#1a1400"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"12px"}}>
@@ -2650,7 +2805,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
               </div>
             )}
 
-            {/* Push Notifications */}
+
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:"16px",marginTop:"8px"}}>
               <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"12px"}}>PUSH NOTIFICATIONS</div>
 
@@ -2753,8 +2908,13 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 })()}
               </div>
             </div>
+                </Section>
+              </>);
+            })()}
           </div>
-        )}
+          );
+        })()}
+
 
                 {tab==="profile"&&(()=>{
           const myPlayer = players.find(p=>p.name===user.name);
