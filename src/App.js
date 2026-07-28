@@ -644,11 +644,11 @@ export default function App() {
     weekTiebreakers={appState?.weekTiebreakers||{}}
     weekVenues={appState?.weekVenues||{}}
   />;
-  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
+  return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} setLocal={setAppState} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
-function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}} = appState;
+function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[]} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -764,6 +764,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       const pts=totalPts(p.id,weeklyGames);
       const allG=Object.values(weeklyGames[p.id]||{}).flat();
       const wins=allG.filter(g=>g.position===1&&!g.absent).length;
+      const secondPlaceCount=allG.filter(g=>g.position===2&&!g.absent).length;
       const absences=allG.filter(g=>g.absent).length;
       const sotdTotal=allG.reduce((s,g)=>s+(g.sotd||0),0);
       const weeksAttended=new Set(Object.entries(weeklyGames[p.id]||{}).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>w)).size;
@@ -777,7 +778,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       const mvpSeries=weeklyMvpSeries(p.id,weeklyGames);
       const consistency=weeksAttended>=MIN_WEEKS_FOR_AWARDS?stdev(mvpSeries):null;
       const improvement=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-ELO_START:null;
-      return{...p,pts,wins,absences,sotdTotal,weeksAttended,mvp,elo,eloChange,homeTurf,consistency,improvement};
+      return{...p,pts,wins,secondPlaceCount,absences,sotdTotal,weeksAttended,mvp,elo,eloChange,homeTurf,consistency,improvement};
     }).sort((a,b)=>b.pts-a.pts);
     const consistCands=rows.filter(p=>p.consistency!=null);
     const mostConsistentId=consistCands.length?consistCands.reduce((best,p)=>p.consistency<best.consistency?p:best).id:null;
@@ -1078,7 +1079,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
       grps[g].push(id);
     });
     const newPG={week:curSignupWk,groups:grps,published:false};
-    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps,published:false}},publishedGroups:newPG});
+    setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),groups:grps,published:false}},publishedGroups:newPG}));
     updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false,publishedGroups:newPG}).catch(e=>console.error("Generate groups save failed:",e));
     notify("Groups balanced by MVP %!");
   };
@@ -1086,7 +1087,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const publishGroups=()=>{
     const grps=curSignup.groups||[];
     const newPG={week:curSignupWk,groups:grps,published:true};
-    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:true}},publishedGroups:newPG});
+    setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),published:true}},publishedGroups:newPG}));
     updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:true,publishedGroups:newPG}).catch(e=>console.error("Publish save failed:",e));
     notify("Groups published!");
   };
@@ -1094,7 +1095,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
   const persistSignupGroups=grps=>{
     const pg=appState.publishedGroups;
     const newPG=(pg&&pg.week===curSignupWk)?{...pg,groups:grps}:pg;
-    update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,groups:grps}},...(newPG!==pg?{publishedGroups:newPG}:{})});
+    setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),groups:grps}},...(newPG!==pg?{publishedGroups:newPG}:{})}));
     const updates={[`weekSignups.${curSignupWk}.groups`]:grps};
     if(newPG!==pg) updates.publishedGroups=newPG;
     updateDoc(LEAGUE_DOC,updates).catch(e=>console.error("Group update failed:",e));
@@ -2607,23 +2608,50 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             {(()=>{
               const consistentP=standings.find(p=>p.isMostConsistent);
               const improvedP=standings.find(p=>p.isMostImproved);
-              return(
-                <div style={{...cardSt,marginBottom:"14px"}}>
-                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Requires 8+ weeks played to qualify.</p>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-                    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
-                      <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>⚖ MOST CONSISTENT</div>
-                      <div style={{color:consistentP?C.greenLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{consistentP?consistentP.name:"—"}</div>
-                      {consistentP&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>±{consistentP.consistency.toFixed(1)}% weekly MVP swing</div>}
-                    </div>
-                    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
-                      <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>📈 MOST IMPROVED</div>
-                      <div style={{color:improvedP?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{improvedP?improvedP.name:"—"}</div>
-                      {improvedP&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>+{Math.round(improvedP.improvement)} Elo this season</div>}
-                    </div>
-                  </div>
+              const bridesmaidCands=standings.filter(p=>p.wins===0&&p.secondPlaceCount>0);
+              const bridesmaidP=bridesmaidCands.length?bridesmaidCands.reduce((best,p)=>p.secondPlaceCount>best.secondPlaceCount?p:best):null;
+              const sotdCands=standings.filter(p=>p.sotdTotal>0);
+              const sotdP=sotdCands.length?sotdCands.reduce((best,p)=>p.sotdTotal>best.sotdTotal?p:best):null;
+              const rookieCands=standings.filter(p=>rookiePool.includes(String(p.id))&&p.weeksAttended>=2);
+              const rookieP=rookieCands.length?rookieCands.reduce((best,p)=>p.elo>best.elo?p:best):null;
+              const AwardCard=({icon,label,p,detail})=>(
+                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                  <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>{icon} {label}</div>
+                  <div style={{color:p?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{p?p.name:"—"}</div>
+                  {p&&detail&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>{detail}</div>}
                 </div>
               );
+              return(<>
+                <div style={{...cardSt,marginBottom:"14px"}}>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent and Most Improved require 8+ weeks played to qualify.</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                    <AwardCard icon="⚖" label="MOST CONSISTENT" p={consistentP} detail={consistentP&&`±${consistentP.consistency.toFixed(1)}% weekly MVP swing`}/>
+                    <AwardCard icon="📈" label="MOST IMPROVED" p={improvedP} detail={improvedP&&`+${Math.round(improvedP.improvement)} Elo this season`}/>
+                    <AwardCard icon="👰" label="BRIDESMAID" p={bridesmaidP} detail={bridesmaidP&&`${bridesmaidP.secondPlaceCount} runner-up finish${bridesmaidP.secondPlaceCount!==1?"es":""}, no wins`}/>
+                    <AwardCard icon="⭐" label="MOST SOTDS" p={sotdP} detail={sotdP&&`${sotdP.sotdTotal} Shot of the Day award${sotdP.sotdTotal!==1?"s":""}`}/>
+                  </div>
+                </div>
+                <div style={cardSt}>
+                  <div style={{color:C.accentLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"8px"}}>🌱 ROOKIE OF THE YEAR</div>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 10px"}}>Select this season's eligible rookies below — the winner is whoever has the highest Elo among them (min 2 weeks played).</p>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"12px"}}>
+                    {players.map(p=>{
+                      const on=rookiePool.includes(String(p.id));
+                      return(
+                        <button key={p.id} onClick={()=>{
+                          const pid=String(p.id);
+                          update({rookiePool:on?rookiePool.filter(id=>id!==pid):[...rookiePool,pid]});
+                        }} style={{padding:"4px 10px",borderRadius:"12px",border:`1px solid ${on?C.accent:C.border}`,background:on?"#2a4a2a":"transparent",color:on?C.accentLight:C.muted,fontSize:"0.68rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>{p.name}</button>
+                      );
+                    })}
+                  </div>
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                    <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>CURRENT LEADER</div>
+                    <div style={{color:rookieP?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{rookieP?rookieP.name:rookiePool.length?"— (needs 2+ weeks played)":"— (select rookies above)"}</div>
+                    {rookieP&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>Elo {rookieP.elo}</div>}
+                  </div>
+                </div>
+              </>);
             })()}
                 </Section>
 
@@ -2637,7 +2665,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 }
                 {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⚖ Auto-balance groups</button>}
                 {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
-                {curSignup.published&&<button onClick={()=>{update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,published:false}},publishedGroups:{week:curSignupWk,groups:curSignup.groups||[],published:false}});updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:false,"publishedGroups.published":false}).catch(e=>console.error(e));}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
+                {curSignup.published&&<button onClick={()=>{setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),published:false}},publishedGroups:{week:curSignupWk,groups:curSignup.groups||[],published:false}}));updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:false,"publishedGroups.published":false}).catch(e=>console.error(e));}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
                 {curSignup.groups&&(
                   <label style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"0.72rem",color:C.muted,cursor:"pointer",marginLeft:"auto"}}>
                     <input type="checkbox" checked={showSignupMvp} onChange={e=>setShowSignupMvp(e.target.checked)} style={{accentColor:C.green,width:"13px",height:"13px"}}/>
@@ -2835,7 +2863,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                 <div style={{color:C.greenLight,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>📅 MATCH DETAILS</div>
                 <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 10px",lineHeight:"1.5"}}>Sends next match date, time, and venue to all members. Add any extra notes below.</p>
                 {(()=>{
-                  const nextVenue=venues.find(v=>v.name===(appState.weekSignups?.[appState.nextMatchWeek||1]?.venue||venues[0]?.name))||venues[0];
+                  const nextVenue=venues.find(v=>v.name===(weekVenues[appState.nextMatchWeek||1]||venues[0]?.name))||venues[0];
                   const matchDate=appState.nextMatchDate||"TBD";
                   const matchTime=appState.nextMatchTime||"";
                   const matchWeek=appState.nextMatchWeek||1;
