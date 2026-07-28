@@ -1591,15 +1591,12 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                   <div style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"2px",flexWrap:"wrap"}}>
                     <span style={{fontSize:"0.76rem",color:"#e8dcc8",fontWeight:"bold",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
                     {p.sotdTotal>0&&<span style={{fontSize:"0.58rem",color:C.gold,flexShrink:0}}>⭐{p.sotdTotal}</span>}
-                    {p.isMostConsistent&&<span style={{fontSize:"0.56rem",color:C.greenLight,border:`1px solid ${C.greenLight}`,borderRadius:"8px",padding:"1px 6px",flexShrink:0}}>⚖ Most Consistent</span>}
-                    {p.isMostImproved&&<span style={{fontSize:"0.56rem",color:C.accentLight,border:`1px solid ${C.accentLight}`,borderRadius:"8px",padding:"1px 6px",flexShrink:0}}>📈 Most Improved</span>}
                   </div>
                   <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
                     {showMvp&&<span style={{fontSize:"0.6rem",color:C.blue}}>MVP {p.mvp}{p.mvp!=="—"?"%":""}</span>}
                     <span style={{fontSize:"0.6rem",color:C.blue}}>Elo {p.elo}{p.eloChange?<span style={{color:p.eloChange>0?C.greenLight:C.red}}> {p.eloChange>0?"▲":"▼"}{Math.abs(p.eloChange)}</span>:null}</span>
                     <span style={{fontSize:"0.6rem",color:C.greenLight}}>W{p.wins}</span>
                     <span style={{fontSize:"0.6rem",color:C.muted}}>Abs {p.absences}</span>
-                    {p.homeTurf&&<span style={{fontSize:"0.6rem",color:C.gold}}>🏠 {p.homeTurf.venue}</span>}
                   </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"2px",flexShrink:0}}>
@@ -1689,7 +1686,7 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
                     const showMvp=p.weeksAttended>=minGamesForMvp;
                     return <PlayerRow key={p.id} p={p} i={i} showSwatch={false} showMvp={showMvp}/>;
                   })}
-                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts (min 2 weeks played). Elo starts at 1500 and updates weekly from head-to-head finishes within each group. Home turf = venue with the highest average points. Most Consistent (lowest week-to-week MVP% swing) and Most Improved (biggest Elo gain) require 8+ weeks played.</p>
+                  <p style={{color:C.muted,fontSize:"0.68rem",marginTop:"10px"}}>MVP % = total pts ÷ max possible pts (min 2 weeks played). Elo starts at 1500 and updates weekly from head-to-head finishes within each group.</p>
                 </div>
               )}
 
@@ -2604,6 +2601,30 @@ function LeagueApp({user, isAdmin, appState, persist, saving, onLogout, uploadIm
             })()}
 
 
+                </Section>
+
+                <Section id="awards" title="🏅 SEASON AWARDS" color={C.gold}>
+            {(()=>{
+              const consistentP=standings.find(p=>p.isMostConsistent);
+              const improvedP=standings.find(p=>p.isMostImproved);
+              return(
+                <div style={{...cardSt,marginBottom:"14px"}}>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Requires 8+ weeks played to qualify.</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                      <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>⚖ MOST CONSISTENT</div>
+                      <div style={{color:consistentP?C.greenLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{consistentP?consistentP.name:"—"}</div>
+                      {consistentP&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>±{consistentP.consistency.toFixed(1)}% weekly MVP swing</div>}
+                    </div>
+                    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                      <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>📈 MOST IMPROVED</div>
+                      <div style={{color:improvedP?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{improvedP?improvedP.name:"—"}</div>
+                      {improvedP&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>+{Math.round(improvedP.improvement)} Elo this season</div>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
                 </Section>
 
                 <Section id="signups" title="🏑 SIGN-UPS & GROUPS" color={C.greenLight}>
