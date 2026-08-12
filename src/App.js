@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { subscribeToPush } from "./serviceWorkerRegistration";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp, increment } from "firebase/firestore";
+import { getFirestore, collection, doc, onSnapshot, setDoc, updateDoc, addDoc, deleteDoc, serverTimestamp, increment, deleteField } from "firebase/firestore";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 
@@ -133,7 +133,7 @@ const ELO_START = 1500, ELO_K = 32;
 // Computes Elo ratings retroactively from all historical scores using pairwise
 // comparisons within each week's groups (by gameId), processed week-by-week.
 const computeEloSystem = (players, wg, maxWk) => {
-  const elo={}, history={};
+  const elo={}, history={}, weeklyGroups={};
   players.forEach(p=>{elo[p.id]=ELO_START;});
   for(let w=1; w<=maxWk; w++){
     const groups={};
@@ -143,6 +143,7 @@ const computeEloSystem = (players, wg, maxWk) => {
         (groups[g.gameId]=groups[g.gameId]||[]).push({pid:String(p.id),position:g.position});
       });
     });
+    weeklyGroups[w]=Object.values(groups);
     const deltas={};
     Object.values(groups).forEach(entries=>{
       if(entries.length<2) return;
@@ -163,7 +164,37 @@ const computeEloSystem = (players, wg, maxWk) => {
     });
     players.forEach(p=>{ (history[p.id]=history[p.id]||{})[w]=elo[p.id]; });
   }
-  return{elo,history};
+  return{elo,history,weeklyGroups};
+};
+// Recent-form rating: rebuilds a player's Elo path using only their last N played games,
+// starting fresh at 1500 each time and referencing opponents' actual season-Elo at the time.
+// With fewer than N games total, this naturally reduces to their season Elo (same starting
+// point, same games), so it doubles as the "blend until N games exist" behavior for free.
+const computeRecentForm = (players, eloSystem, N=5) => {
+  const preWeekElo = (pid, w) => w<=1 ? ELO_START : (eloSystem.history[pid]?.[w-1] ?? ELO_START);
+  const weeks = Object.keys(eloSystem.weeklyGroups||{}).map(Number).sort((a,b)=>a-b);
+  const result = {};
+  players.forEach(p=>{
+    const pid=String(p.id);
+    const playedWeeks = weeks.filter(w => (eloSystem.weeklyGroups[w]||[]).some(entries=>entries.some(e=>e.pid===pid)&&entries.length>=2));
+    const lastWeeks = playedWeeks.slice(-N);
+    let elo=ELO_START;
+    lastWeeks.forEach(w=>{
+      const entries = (eloSystem.weeklyGroups[w]||[]).find(es=>es.some(e=>e.pid===pid));
+      const me = entries.find(e=>e.pid===pid);
+      let delta=0;
+      entries.forEach(opp=>{
+        if(opp.pid===pid) return;
+        const ra=elo, rb=preWeekElo(opp.pid,w);
+        const ea=1/(1+Math.pow(10,(rb-ra)/400));
+        const sa=me.position<opp.position?1:me.position>opp.position?0:0.5;
+        delta+=ELO_K*(sa-ea);
+      });
+      elo+=delta/(entries.length-1);
+    });
+    result[pid]={rating:Math.round(elo),gamesUsed:lastWeeks.length};
+  });
+  return result;
 };
 // Best average-points venue for a player (no minimum games threshold).
 const computeHomeTurf = (pid, wg) => {
@@ -648,7 +679,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[]} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -665,6 +696,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const [collapsedReviews, setCollapsedReviews] = useState({});
   const [venueWeekPick, setVenueWeekPick] = useState("");
   const [adminOpen, setAdminOpen] = useState({});
+  const [groupMode, setGroupMode] = useState("balanced");
   const jumpToAdminSection = key => { setAdminOpen(prev=>({...prev,[key]:true})); setTimeout(()=>{ document.getElementById(`admin-sec-${key}`)?.scrollIntoView({behavior:"smooth",block:"start"}); },50); };
   const [expandedVenues, setExpandedVenues] = useState({});
   const [showAddVenue, setShowAddVenue] = useState(false);
@@ -758,6 +790,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   };
 
   const eloSystem = useMemo(()=>computeEloSystem(players,weeklyGames,maxWk),[players,weeklyGames,maxWk]);
+  const recentForm = useMemo(()=>computeRecentForm(players,eloSystem,5),[players,eloSystem]);
   const MIN_WEEKS_FOR_AWARDS=8;
   const standings = useMemo(()=>{
     const rows=[...players].filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
@@ -1079,9 +1112,29 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       grps[g].push(id);
     });
     const newPG={week:curSignupWk,groups:grps,published:false};
-    setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),groups:grps,published:false}},publishedGroups:newPG}));
-    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false,publishedGroups:newPG}).catch(e=>console.error("Generate groups save failed:",e));
+    // Clear any handicap-tier record for this week since these aren't handicap groups
+    const newHandicapTiers={...handicapTiers}; delete newHandicapTiers[curSignupWk];
+    setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),groups:grps,published:false}},publishedGroups:newPG,handicapTiers:newHandicapTiers}));
+    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false,publishedGroups:newPG,[`handicapTiers.${curSignupWk}`]:deleteField()}).catch(e=>console.error("Generate groups save failed:",e));
     notify("Groups balanced by MVP %!");
+  };
+
+  const generateHandicapGroups=()=>{
+    const ids=[...(curSignup.signups||[])].map(String).sort((a,b)=>(recentForm[b]?.rating??ELO_START)-(recentForm[a]?.rating??ELO_START));
+    const numGroups=Math.max(1,Math.ceil(ids.length/8));
+    const base=Math.floor(ids.length/numGroups), extra=ids.length%numGroups;
+    const grps=[]; let idx=0;
+    for(let g=0; g<numGroups; g++){
+      const size=base+(g<extra?1:0);
+      grps.push(ids.slice(idx,idx+size));
+      idx+=size;
+    }
+    const tierMap={}; grps.forEach((grp,gi)=>grp.forEach(id=>{tierMap[id]=gi;}));
+    const newPG={week:curSignupWk,groups:grps,published:false};
+    const newHandicapTiers={...handicapTiers,[curSignupWk]:tierMap};
+    setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),groups:grps,published:false}},publishedGroups:newPG,handicapTiers:newHandicapTiers}));
+    updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.groups`]:grps,[`weekSignups.${curSignupWk}.published`]:false,publishedGroups:newPG,[`handicapTiers.${curSignupWk}`]:tierMap}).catch(e=>console.error("Generate handicap groups save failed:",e));
+    notify("Handicap tiers set — Group 1 is the top tier!");
   };
 
   const publishGroups=()=>{
@@ -2658,12 +2711,18 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 <Section id="signups" title="🏑 SIGN-UPS & GROUPS" color={C.greenLight}>
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.green+"44",background:"#0f1a0f"}}>
               <div style={{color:C.greenLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"10px"}}>🏑 WEEK {curSignupWk} SIGN-UPS</div>
-              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px"}}>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px",alignItems:"center"}}>
                 {!curSignup.open
-                  ?<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:true}}})} style={{...btnSt(C.green,true),padding:"6px 14px",fontSize:"0.78rem"}}>Open sign-ups</button>
-                  :<button onClick={()=>update({weekSignups:{...weekSignups,[curSignupWk]:{...curSignup,open:false}}})} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Close sign-ups</button>
+                  ?<button onClick={()=>{setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),open:true}}}));updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.open`]:true}).catch(e=>console.error("Open sign-ups failed:",e));}} style={{...btnSt(C.green,true),padding:"6px 14px",fontSize:"0.78rem"}}>Open sign-ups</button>
+                  :<button onClick={()=>{setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),open:false}}}));updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.open`]:false}).catch(e=>console.error("Close sign-ups failed:",e));}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Close sign-ups</button>
                 }
-                {(curSignup.signups||[]).length>=2&&<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⚖ Auto-balance groups</button>}
+                <div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:"6px",overflow:"hidden"}}>
+                  <button onClick={()=>setGroupMode("balanced")} style={{padding:"6px 10px",fontSize:"0.7rem",border:"none",cursor:"pointer",fontFamily:"Georgia,serif",background:groupMode==="balanced"?C.blue:"transparent",color:groupMode==="balanced"?"#fff":C.muted}}>⚖ Balanced</button>
+                  <button onClick={()=>setGroupMode("handicap")} style={{padding:"6px 10px",fontSize:"0.7rem",border:"none",cursor:"pointer",fontFamily:"Georgia,serif",background:groupMode==="handicap"?C.blue:"transparent",color:groupMode==="handicap"?"#fff":C.muted}}>🏆 Handicap</button>
+                </div>
+                {(curSignup.signups||[]).length>=2&&(groupMode==="handicap"
+                  ?<button onClick={generateHandicapGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>🏆 Split into tiers</button>
+                  :<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⚖ Auto-balance groups</button>)}
                 {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
                 {curSignup.published&&<button onClick={()=>{setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),published:false}},publishedGroups:{week:curSignupWk,groups:curSignup.groups||[],published:false}}));updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:false,"publishedGroups.published":false}).catch(e=>console.error(e));}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
                 {curSignup.groups&&(
@@ -2704,11 +2763,15 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       </div>
                     </div>
                     <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                      {curSignup.groups.map((grp,gi)=>(
+                      {(()=>{
+                        const isHandicapWeek=!!handicapTiers[curSignupWk];
+                        const prevTierWeekNum=Object.keys(handicapTiers).map(Number).filter(w=>w<curSignupWk).sort((a,b)=>b-a)[0];
+                        const prevTierMap=prevTierWeekNum!=null?handicapTiers[prevTierWeekNum]:null;
+                        return curSignup.groups.map((grp,gi)=>(
                         <div key={gi} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData("text/plain");if(id)moveSignupPlayer(id,gi);}}
                           style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",padding:"8px 10px",flex:1,minWidth:"140px"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"5px",gap:"6px"}}>
-                            <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold"}}>Group {gi+1} ({grp.length}/8)</div>
+                            <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold"}}>{isHandicapWeek?`Tier ${gi+1}`:`Group ${gi+1}`} ({grp.length}/8)</div>
                             <button onClick={()=>{setSignupGuestFor(signupGuestFor===gi?null:gi);setSignupGuestName("");}} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",cursor:"pointer"}}>+ Guest</button>
                           </div>
                           {signupGuestFor===gi&&(
@@ -2721,11 +2784,13 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                           )}
                           {grp.map(id=>{
                             const info=signupEntryLabel(id); if(!info) return null;
+                            const prevTier=prevTierMap&&!info.isGuest?prevTierMap[id]:null;
                             return (
                               <div key={id} draggable onDragStart={e=>e.dataTransfer.setData("text/plain",id)}
                                 style={{display:"flex",justifyContent:"space-between",alignItems:"center",color:C.cream,fontSize:"0.75rem",padding:"2px 0",cursor:"grab"}}>
                                 <span>{info.name}{info.isGuest&&<span style={{color:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>GUEST</span>}</span>
                                 <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                                  {isHandicapWeek&&prevTier!=null&&(gi<prevTier?<span title="Promoted" style={{color:C.green,fontSize:"0.65rem"}}>▲</span>:gi>prevTier?<span title="Demoted" style={{color:"#e2827a",fontSize:"0.65rem"}}>▼</span>:<span title="Same tier" style={{color:C.muted,fontSize:"0.65rem"}}>–</span>)}
                                   {showSignupMvp&&!info.isGuest&&<span style={{color:C.blue,fontSize:"0.65rem"}}>{info.mvp}%</span>}
                                   {info.isGuest&&<button onClick={()=>removeSignupGuest(id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.7rem"}}>×</button>}
                                 </span>
@@ -2733,7 +2798,8 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                             );
                           })}
                         </div>
-                      ))}
+                      ));
+                      })()}
                     </div>
                   </>
                 );
