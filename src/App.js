@@ -521,7 +521,15 @@ export default function App() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const saveTimer               = useRef(null);
+  const appStateRef             = useRef(null);
   const isAdmin = user?.role==="admin"||user?.role==="superadmin";
+
+  // Keep a ref mirror of appState so the debounced full-document save always
+  // writes the freshest state, even if it was scheduled before a later
+  // setLocal-driven change (e.g. publishing groups) landed. Without this, a
+  // stale snapshot captured at schedule-time can overwrite a fresher targeted
+  // updateDoc write once its 800ms timer fires.
+  useEffect(() => { appStateRef.current = appState; }, [appState]);
 
   useEffect(() => {
     const unsub = onSnapshot(LEAGUE_DOC, (snap) => {
@@ -572,10 +580,11 @@ export default function App() {
 
   const persist = (newState) => {
     setAppState(newState);
+    appStateRef.current = newState;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaving(true);
     saveTimer.current = setTimeout(async () => {
-      try { await setDoc(LEAGUE_DOC, newState); }
+      try { await setDoc(LEAGUE_DOC, appStateRef.current); }
       catch(e) { console.error("Save failed", e); }
       setSaving(false);
     }, 800);
@@ -1158,7 +1167,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
     const cur=curSignup.groups||[];
     let grps=cur.map(g=>g.filter(x=>x!==id));
     if(toIdx!=="pool"){
-      if(grps[toIdx].length>=8){notify("That group is already at 8 players.");return;}
+      if(grps[toIdx].length>=8){notify("That group is already at 8 players — add another group to fit more.");return;}
       grps[toIdx]=[...grps[toIdx],id];
     }
     persistSignupGroups(grps);
@@ -1168,7 +1177,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
     const name=signupGuestName.trim();
     if(!name) return;
     const cur=curSignup.groups||[];
-    if((cur[groupIdx]||[]).length>=8){notify("That group is already at 8 players.");return;}
+    if((cur[groupIdx]||[]).length>=8){notify("That group is already at 8 players — add another group to fit more.");return;}
     const gid=`guest::${Date.now()}::${encodeURIComponent(name)}`;
     const grps=cur.map((g,i)=>i===groupIdx?[...g,gid]:g);
     persistSignupGroups(grps);
@@ -1178,6 +1187,49 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const removeSignupGuest=id=>{
     const grps=(curSignup.groups||[]).map(g=>g.filter(x=>x!==id));
     persistSignupGroups(grps);
+  };
+
+  // Add a fresh empty group so there's somewhere to put extra guests/players
+  // once every existing group is full (e.g. a tiered split that landed at 8/8/8).
+  const addSignupGroup=()=>{
+    const grps=[...(curSignup.groups||[]),[]];
+    persistSignupGroups(grps);
+    notify(`Added Group ${grps.length} — drag players in or add a guest.`);
+  };
+
+  // Only removable while empty, so nobody's assignment silently disappears.
+  const removeSignupGroup=gi=>{
+    const cur=curSignup.groups||[];
+    if((cur[gi]||[]).length>0){notify("Move everyone out of a group before removing it.");return;}
+    if(cur.length<=1) return;
+    persistSignupGroups(cur.filter((_,i)=>i!==gi));
+  };
+
+  // Redistribute everyone currently placed in groups — players AND guests —
+  // across however many groups exist right now. Lets the commissioner add
+  // empty groups first, then rebalance into them instead of hand-dragging.
+  const rebalanceSignupGroups=()=>{
+    const cur=curSignup.groups||[];
+    const numGroups=cur.length;
+    if(numGroups<1) return;
+    const allIds=cur.flat();
+    const guestIds=allIds.filter(id=>String(id).startsWith("guest::"));
+    const playerIds=allIds.filter(id=>!String(id).startsWith("guest::")).sort((a,b)=>signupMvpOf(b)-signupMvpOf(a));
+    const grps=Array.from({length:numGroups},()=>[]);
+    // Snake draft the real players by MVP% so skill stays balanced.
+    playerIds.forEach((id,idx)=>{
+      const cycle=Math.floor(idx/numGroups);
+      const g=cycle%2===0?idx%numGroups:numGroups-1-(idx%numGroups);
+      grps[g].push(id);
+    });
+    // Drop guests into whichever group is currently smallest so nobody's group tops 8 unnecessarily.
+    guestIds.forEach(id=>{
+      let target=0;
+      for(let i=1;i<numGroups;i++){ if(grps[i].length<grps[target].length) target=i; }
+      grps[target].push(id);
+    });
+    persistSignupGroups(grps);
+    notify("Groups rebalanced!");
   };
 
   const signupEntryLabel=id=>{
@@ -2723,6 +2775,8 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 {(curSignup.signups||[]).length>=2&&(groupMode==="handicap"
                   ?<button onClick={generateHandicapGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>🏆 Split into tiers</button>
                   :<button onClick={generateGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⚖ Auto-balance groups</button>)}
+                {curSignup.groups&&<button onClick={addSignupGroup} style={{...btnSt(C.green,true),padding:"6px 14px",fontSize:"0.78rem"}}>+ Add group</button>}
+                {curSignup.groups&&curSignup.groups.length>1&&<button onClick={rebalanceSignupGroups} style={{...btnSt(C.blue,true),padding:"6px 14px",fontSize:"0.78rem"}}>⚖ Rebalance</button>}
                 {curSignup.groups&&!curSignup.published&&<button onClick={publishGroups} style={{...btnSt(C.accent),padding:"6px 14px",fontSize:"0.78rem"}}>✓ Publish groups</button>}
                 {curSignup.published&&<button onClick={()=>{setLocal(prev=>({...prev,weekSignups:{...prev.weekSignups,[curSignupWk]:{...(prev.weekSignups?.[curSignupWk]||curSignup),published:false}},publishedGroups:{week:curSignupWk,groups:curSignup.groups||[],published:false}}));updateDoc(LEAGUE_DOC,{[`weekSignups.${curSignupWk}.published`]:false,"publishedGroups.published":false}).catch(e=>console.error(e));}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"5px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.78rem"}}>Unpublish</button>}
                 {curSignup.groups&&(
@@ -2772,7 +2826,10 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                           style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",padding:"8px 10px",flex:1,minWidth:"140px"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"5px",gap:"6px"}}>
                             <div style={{color:C.accentLight,fontSize:"0.68rem",fontWeight:"bold"}}>{isHandicapWeek?`Tier ${gi+1}`:`Group ${gi+1}`} ({grp.length}/8)</div>
-                            <button onClick={()=>{setSignupGuestFor(signupGuestFor===gi?null:gi);setSignupGuestName("");}} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",cursor:"pointer"}}>+ Guest</button>
+                            <div style={{display:"flex",gap:"4px"}}>
+                              <button onClick={()=>{setSignupGuestFor(signupGuestFor===gi?null:gi);setSignupGuestName("");}} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",cursor:"pointer"}}>+ Guest</button>
+                              {grp.length===0&&curSignup.groups.length>1&&<button onClick={()=>removeSignupGroup(gi)} title="Remove empty group" style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"1px 6px",fontSize:"0.62rem",cursor:"pointer"}}>×</button>}
+                            </div>
                           </div>
                           {signupGuestFor===gi&&(
                             <div style={{display:"flex",gap:"4px",marginBottom:"6px"}}>
@@ -2782,6 +2839,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                               <button onClick={()=>addSignupGuest(gi)} style={{...btnSt(C.green,true),padding:"3px 8px",fontSize:"0.68rem"}}>Add</button>
                             </div>
                           )}
+                          {grp.length===0&&<div style={{color:C.muted,fontSize:"0.68rem",fontStyle:"italic",padding:"4px 0"}}>Drag a player here, or add a guest</div>}
                           {grp.map(id=>{
                             const info=signupEntryLabel(id); if(!info) return null;
                             const prevTier=prevTierMap&&!info.isGuest?prevTierMap[id]:null;
