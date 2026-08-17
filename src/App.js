@@ -1208,37 +1208,62 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   // Redistribute everyone currently placed in groups — players AND guests —
   // across however many groups exist right now. Lets the commissioner add
   // empty groups first, then rebalance into them instead of hand-dragging.
+  // Respects whichever mode is active: balanced (MVP% snake draft) keeps
+  // skill spread evenly across groups; handicap (Elo) keeps groups as
+  // contiguous ranked tiers (Group 1 = strongest) and updates the tier map
+  // that drives the promotion/demotion arrows.
   const rebalanceSignupGroups=()=>{
     const cur=curSignup.groups||[];
     const numGroups=cur.length;
     if(numGroups<1) return;
     const allIds=cur.flat();
     const guestIds=allIds.filter(id=>String(id).startsWith("guest::"));
-    const playerIds=allIds.filter(id=>!String(id).startsWith("guest::")).sort((a,b)=>signupMvpOf(b)-signupMvpOf(a));
-    const grps=Array.from({length:numGroups},()=>[]);
-    // Snake draft the real players by MVP% so skill stays balanced.
-    playerIds.forEach((id,idx)=>{
-      const cycle=Math.floor(idx/numGroups);
-      const g=cycle%2===0?idx%numGroups:numGroups-1-(idx%numGroups);
-      grps[g].push(id);
-    });
-    // Drop guests into whichever group is currently smallest so nobody's group tops 8 unnecessarily.
+    const playerIds=allIds.filter(id=>!String(id).startsWith("guest::"));
+    const isHandicap=groupMode==="handicap";
+    let grps;
+    if(isHandicap){
+      const sorted=[...playerIds].sort((a,b)=>(recentForm[b]?.rating??ELO_START)-(recentForm[a]?.rating??ELO_START));
+      const base=Math.floor(sorted.length/numGroups), extra=sorted.length%numGroups;
+      grps=[]; let idx=0;
+      for(let g=0; g<numGroups; g++){
+        const size=base+(g<extra?1:0);
+        grps.push(sorted.slice(idx,idx+size));
+        idx+=size;
+      }
+    } else {
+      const sorted=[...playerIds].sort((a,b)=>signupMvpOf(b)-signupMvpOf(a));
+      grps=Array.from({length:numGroups},()=>[]);
+      // Snake draft the real players by MVP% so skill stays balanced.
+      sorted.forEach((id,idx)=>{
+        const cycle=Math.floor(idx/numGroups);
+        const g=cycle%2===0?idx%numGroups:numGroups-1-(idx%numGroups);
+        grps[g].push(id);
+      });
+    }
+    // Drop guests (no rating to sort by) into whichever group is currently
+    // smallest so nobody's group tops 8 unnecessarily, in either mode.
     guestIds.forEach(id=>{
       let target=0;
       for(let i=1;i<numGroups;i++){ if(grps[i].length<grps[target].length) target=i; }
       grps[target].push(id);
     });
     persistSignupGroups(grps);
-    notify("Groups rebalanced!");
+    if(isHandicap){
+      const tierMap={}; grps.forEach((grp,gi)=>grp.forEach(id=>{ if(!String(id).startsWith("guest::")) tierMap[id]=gi; }));
+      const newHandicapTiers={...handicapTiers,[curSignupWk]:tierMap};
+      setLocal(prev=>({...prev,handicapTiers:newHandicapTiers}));
+      updateDoc(LEAGUE_DOC,{[`handicapTiers.${curSignupWk}`]:tierMap}).catch(e=>console.error("Rebalance tier save failed:",e));
+    }
+    notify(isHandicap?"Tiers rebalanced!":"Groups rebalanced!");
   };
 
   const signupEntryLabel=id=>{
     if(String(id).startsWith("guest::")){
       const parts=String(id).split("::");
-      return {name:decodeURIComponent(parts[2]||"Guest"),isGuest:true,mvp:null};
+      return {name:decodeURIComponent(parts[2]||"Guest"),isGuest:true,mvp:null,elo:null};
     }
     const p=players.find(x=>String(x.id)===String(id));
-    return p?{name:p.name,isGuest:false,mvp:signupMvpOf(id)}:null;
+    return p?{name:p.name,isGuest:false,mvp:signupMvpOf(id),elo:recentForm[id]?.rating??ELO_START}:null;
   };
 
   const inputSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.85rem",fontFamily:"Georgia,serif",outline:"none",width:"100%",boxSizing:"border-box"};
@@ -2782,7 +2807,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 {curSignup.groups&&(
                   <label style={{display:"flex",alignItems:"center",gap:"5px",fontSize:"0.72rem",color:C.muted,cursor:"pointer",marginLeft:"auto"}}>
                     <input type="checkbox" checked={showSignupMvp} onChange={e=>setShowSignupMvp(e.target.checked)} style={{accentColor:C.green,width:"13px",height:"13px"}}/>
-                    Show MVP %
+                    {groupMode==="handicap"?"Show Elo":"Show MVP %"}
                   </label>
                 )}
               </div>
@@ -2810,7 +2835,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                           return (
                             <div key={id} draggable onDragStart={e=>e.dataTransfer.setData("text/plain",id)}
                               style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"5px",padding:"3px 8px",fontSize:"0.72rem",color:C.cream,cursor:"grab"}}>
-                              {info.name}{showSignupMvp&&<span style={{color:C.blue,marginLeft:"5px"}}>{info.mvp}%</span>}
+                              {info.name}{showSignupMvp&&<span style={{color:C.blue,marginLeft:"5px"}}>{groupMode==="handicap"?info.elo:`${info.mvp}%`}</span>}
                             </div>
                           );
                         })}
@@ -2849,7 +2874,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                                 <span>{info.name}{info.isGuest&&<span style={{color:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>GUEST</span>}</span>
                                 <span style={{display:"flex",alignItems:"center",gap:"5px"}}>
                                   {isHandicapWeek&&prevTier!=null&&(gi<prevTier?<span title="Promoted" style={{color:C.green,fontSize:"0.65rem"}}>▲</span>:gi>prevTier?<span title="Demoted" style={{color:"#e2827a",fontSize:"0.65rem"}}>▼</span>:<span title="Same tier" style={{color:C.muted,fontSize:"0.65rem"}}>–</span>)}
-                                  {showSignupMvp&&!info.isGuest&&<span style={{color:C.blue,fontSize:"0.65rem"}}>{info.mvp}%</span>}
+                                  {showSignupMvp&&!info.isGuest&&<span style={{color:C.blue,fontSize:"0.65rem"}}>{groupMode==="handicap"?info.elo:`${info.mvp}%`}</span>}
                                   {info.isGuest&&<button onClick={()=>removeSignupGuest(id)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.7rem"}}>×</button>}
                                 </span>
                               </div>
