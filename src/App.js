@@ -1004,20 +1004,33 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
         if(g.gameId===gameId&&!g.absent) remaining.push({pid:String(p.id),idx:i,pos:g.position});
       });
     });
-    const newSize=remaining.length;
-    // Recalculate all remaining game-ids across the week to get max group size
+    const guestsInGroup=(weeklyGuests[week]||[]).filter(g=>g.gameId===gameId);
+    const newSize=remaining.length+guestsInGroup.length;
+    // Recalculate all remaining game-ids across the week to get max group size — guests occupy a
+    // slot too, so they must count toward the group's size even though they don't score.
     const gameIdCounts={};
     players.forEach(p=>{(nwg[p.id]?.[week]||[]).forEach(g=>{if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});});
+    (weeklyGuests[week]||[]).forEach(g=>{if(g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});
     const maxGs=Math.max(1,...Object.values(gameIdCounts));
     remaining.forEach(({pid:rpid,idx,pos})=>{
       const newPos=pos>removedPos?pos-1:pos;
       const newPts=newPos===newSize?0:calcPoints(newPos,maxGs);
       nwg[rpid]={...nwg[rpid],[week]:(nwg[rpid][week]||[]).map((g,i)=>
-        i===idx?{...g,position:newPos,groupSize:maxGs,pts:newPts}:
+        i===idx?{...g,position:newPos,groupSize:maxGs,actualGroupSize:newSize,pts:newPts}:
         (!g.absent&&g.gameId&&g.gameId!==gameId)?{...g,groupSize:maxGs,pts:calcPoints(g.position,maxGs)}:g
       )};
     });
-    update({weeklyGames:nwg}); setEditModal(null); notify("Player removed and scores recalculated.");
+    // Guests in the same group shift position and get their point value recomputed too,
+    // even though those points are never attributed to a standings total.
+    const updatedGuests=(weeklyGuests[week]||[]).map(g=>{
+      if(g.gameId===gameId){
+        const newPos=g.position>removedPos?g.position-1:g.position;
+        return {...g,position:newPos,groupSize:maxGs,actualGroupSize:newSize,pts:newPos===newSize?0:calcPoints(newPos,maxGs)};
+      }
+      if(g.gameId) return {...g,groupSize:maxGs,pts:calcPoints(g.position,maxGs)};
+      return g;
+    });
+    update({weeklyGames:nwg,weeklyGuests:{...weeklyGuests,[week]:updatedGuests}}); setEditModal(null); notify("Player removed and scores recalculated.");
   };
 
   const swapPositions=(wk,gameId,pid,direction)=>{
@@ -1038,28 +1051,40 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
     const wk=parseInt(addPlayerModal.week), insertPos=parseInt(addPlayerPos);
     const groupEntries=[];
     players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(g.gameId===addPlayerGroupId&&!g.absent) groupEntries.push({pid:String(p.id),g});});});
-    const newGroupSize=groupEntries.length+1;
+    const guestsInGroup=(weeklyGuests[wk]||[]).filter(g=>g.gameId===addPlayerGroupId);
+    const newGroupSize=groupEntries.length+guestsInGroup.length+1;
+    // Guests occupy a slot too, so they must count toward the group's size even though they don't score.
     const gameIdCounts={};
     players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});});
+    (weeklyGuests[wk]||[]).forEach(g=>{if(g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});
     gameIdCounts[addPlayerGroupId]=newGroupSize;
     const maxGs=Math.max(1,...Object.values(gameIdCounts));
     const nwg={...weeklyGames};
     groupEntries.forEach(({pid,g})=>{
       const newPos=g.position>=insertPos?g.position+1:g.position;
       nwg[pid]={...(nwg[pid]||{}),[wk]:(nwg[pid]?.[wk]||[]).map(gg=>{
-        if(gg.gameId===addPlayerGroupId) return {...gg,position:newPos,groupSize:maxGs,pts:calcPoints(newPos,maxGs)};
+        if(gg.gameId===addPlayerGroupId) return {...gg,position:newPos,groupSize:maxGs,actualGroupSize:newGroupSize,pts:calcPoints(newPos,maxGs)};
         if(!gg.absent&&gg.gameId) return {...gg,groupSize:maxGs,pts:calcPoints(gg.position,maxGs)};
         return gg;
       })};
     });
-    const ref=groupEntries[0]?.g||{};
+    const ref=groupEntries[0]?.g||guestsInGroup[0]||{};
     const pidStr=String(addPlayerPid);
     nwg[pidStr]={...(nwg[pidStr]||{})};
     nwg[pidStr][wk]=[...(nwg[pidStr][wk]||[]).filter(g=>!g.absent),
       {gameId:addPlayerGroupId,position:insertPos,groupSize:maxGs,actualGroupSize:newGroupSize,
        pts:calcPoints(insertPos,maxGs),sotd:parseInt(addPlayerSotd)||0,absent:false,label:ref.label||"Gp 1",venue:ref.venue||"",date:ref.date||"",gameRound:ref.gameRound||1}
     ];
-    update({weeklyGames:nwg});
+    // Guests in the same group shift position and get their point value recomputed too.
+    const updatedGuests=(weeklyGuests[wk]||[]).map(g=>{
+      if(g.gameId===addPlayerGroupId){
+        const newPos=g.position>=insertPos?g.position+1:g.position;
+        return {...g,position:newPos,groupSize:maxGs,actualGroupSize:newGroupSize,pts:calcPoints(newPos,maxGs)};
+      }
+      if(g.gameId) return {...g,groupSize:maxGs,pts:calcPoints(g.position,maxGs)};
+      return g;
+    });
+    update({weeklyGames:nwg,weeklyGuests:{...weeklyGuests,[wk]:updatedGuests}});
     setAddPlayerModal(null); setAddPlayerPid(""); setAddPlayerGroupId(""); setAddPlayerPos(""); setAddPlayerSotd(0);
     notify("Player added and scores updated!");
   };
@@ -2926,15 +2951,19 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 <button onClick={()=>{
                   const sel=document.getElementById("rebalanceWeekSel");
                   const wk=sel?.value; if(!wk){notify("Select a week first.");return;}
+                  // Guests occupy a slot in their group but never score, so they must still count
+                  // toward group size (and the "last place" cutoff) or real players get shorted points.
                   const gameIdCounts={};
                   players.forEach(p=>{
                     (weeklyGames[p.id]?.[wk]||[]).forEach(g=>{
                       if(!g.absent&&g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;
                     });
                   });
+                  (weeklyGuests[wk]||[]).forEach(g=>{if(g.gameId) gameIdCounts[g.gameId]=(gameIdCounts[g.gameId]||0)+1;});
                   const maxGs=Math.max(1,...Object.values(gameIdCounts));
                   const gameIdMaxPos={};
                   players.forEach(p=>{(weeklyGames[p.id]?.[wk]||[]).forEach(g=>{if(!g.absent&&g.gameId&&g.position) gameIdMaxPos[g.gameId]=Math.max(gameIdMaxPos[g.gameId]||0,g.position);});});
+                  (weeklyGuests[wk]||[]).forEach(g=>{if(g.gameId&&g.position) gameIdMaxPos[g.gameId]=Math.max(gameIdMaxPos[g.gameId]||0,g.position);});
                   const nwg={...weeklyGames};
                   players.forEach(p=>{
                     if(!(nwg[p.id]?.[wk])) return;
@@ -2943,7 +2972,11 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       return {...g,groupSize:maxGs,pts:g.position===gameIdMaxPos[g.gameId]?0:calcPoints(g.position,maxGs)};
                     })};
                   });
-                  update({weeklyGames:nwg});
+                  const updatedGuests=(weeklyGuests[wk]||[]).map(g=>{
+                    if(!g.gameId||!g.position) return g;
+                    return {...g,groupSize:maxGs,pts:g.position===gameIdMaxPos[g.gameId]?0:calcPoints(g.position,maxGs)};
+                  });
+                  update({weeklyGames:nwg,weeklyGuests:{...weeklyGuests,[wk]:updatedGuests}});
                   sel.value="";
                   notify(`Week ${wk} rebalanced to group size ${maxGs}!`);
                 }} style={{...btnSt(C.accent),padding:"8px 14px",fontSize:"0.8rem"}}>Rebalance</button>
