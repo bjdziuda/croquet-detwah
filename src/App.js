@@ -808,6 +808,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const wins=allG.filter(g=>g.position===1&&!g.absent).length;
       const secondPlaceCount=allG.filter(g=>g.position===2&&!g.absent).length;
       const absences=allG.filter(g=>g.absent).length;
+      const gamesPlayed=allG.filter(g=>!g.absent).length;
       const sotdTotal=allG.reduce((s,g)=>s+(g.sotd||0),0);
       const weeksAttended=new Set(Object.entries(weeklyGames[p.id]||{}).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>w)).size;
       const maxPts=maxPossible(p.id,weeklyGames);
@@ -816,11 +817,28 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const elo=Math.round(eloSystem.elo[p.id]??ELO_START);
       const prevElo=Math.round(hist[maxWk-1]??ELO_START);
       const eloChange=elo-prevElo;
+      const peakElo=Math.round(Math.max(ELO_START,...Object.values(hist)));
       const homeTurf=computeHomeTurf(p.id,weeklyGames);
       const mvpSeries=weeklyMvpSeries(p.id,weeklyGames);
       const consistency=weeksAttended>=MIN_WEEKS_FOR_AWARDS?stdev(mvpSeries):null;
       const improvement=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-ELO_START:null;
-      return{...p,pts,wins,secondPlaceCount,absences,sotdTotal,weeksAttended,mvp,elo,eloChange,homeTurf,consistency,improvement};
+      // Anomaly: biggest single-week swing away from a player's own season-average MVP%.
+      const mvpByWeek=[];
+      Object.entries(weeklyGames[p.id]||{}).forEach(([w,gs])=>{
+        if(!gs.some(g=>!g.absent)) return;
+        const wpts=gs.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
+        const wmax=gs.reduce((s,g)=>s+(g.absent?1:(g.groupSize||1)),0);
+        if(wmax>0) mvpByWeek.push({week:parseInt(w),mvp:(wpts/wmax)*100});
+      });
+      const avgMvp=mvpByWeek.length?mvpByWeek.reduce((s,x)=>s+x.mvp,0)/mvpByWeek.length:null;
+      let anomalyGap=null,anomalyWeek=null,anomalyDirection=null;
+      if(mvpByWeek.length>=MIN_WEEKS_FOR_AWARDS){
+        mvpByWeek.forEach(x=>{
+          const gap=Math.abs(x.mvp-avgMvp);
+          if(anomalyGap===null||gap>anomalyGap){anomalyGap=gap;anomalyWeek=x.week;anomalyDirection=x.mvp>avgMvp?"up":"down";}
+        });
+      }
+      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,consistency,improvement,anomalyGap,anomalyWeek,anomalyDirection};
     }).sort((a,b)=>b.pts-a.pts);
     const consistCands=rows.filter(p=>p.consistency!=null);
     const mostConsistentId=consistCands.length?consistCands.reduce((best,p)=>p.consistency<best.consistency?p:best).id:null;
@@ -828,6 +846,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
     const mostImprovedId=improveCands.length?improveCands.reduce((best,p)=>p.improvement>best.improvement?p:best).id:null;
     return rows.map(p=>({...p,isMostConsistent:p.id===mostConsistentId,isMostImproved:p.id===mostImprovedId}));
   },[players,weeklyGames,eloSystem,maxWk]);
+
 
   const chartData=useMemo(()=>buildChartData(players.filter(p=>chartPlayers.includes(p.id)&&!suspendedPlayers.includes(String(p.id))),weeklyGames,maxWk),[players,weeklyGames,chartPlayers,maxWk,suspendedPlayers]);
 
@@ -2761,29 +2780,44 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
 
                 <Section id="awards" title="🏅 SEASON AWARDS" color={C.gold}>
             {(()=>{
-              const consistentP=standings.find(p=>p.isMostConsistent);
-              const improvedP=standings.find(p=>p.isMostImproved);
-              const bridesmaidCands=standings.filter(p=>p.wins===0&&p.secondPlaceCount>0);
-              const bridesmaidP=bridesmaidCands.length?bridesmaidCands.reduce((best,p)=>p.secondPlaceCount>best.secondPlaceCount?p:best):null;
-              const sotdCands=standings.filter(p=>p.sotdTotal>0);
-              const sotdP=sotdCands.length?sotdCands.reduce((best,p)=>p.sotdTotal>best.sotdTotal?p:best):null;
-              const rookieCands=standings.filter(p=>rookiePool.includes(String(p.id))&&p.weeksAttended>=2);
-              const rookieP=rookieCands.length?rookieCands.reduce((best,p)=>p.elo>best.elo?p:best):null;
-              const AwardCard=({icon,label,p,detail})=>(
+              const consistCands=[...standings.filter(p=>p.consistency!=null)].sort((a,b)=>a.consistency-b.consistency);
+              const consistentP=consistCands[0]||null, consistentRunnerUp=consistCands[1]||null;
+              const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement);
+              const improvedP=improveCands[0]||null, improvedRunnerUp=improveCands[1]||null;
+              const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount);
+              const bridesmaidP=bridesmaidCands[0]||null, bridesmaidRunnerUp=bridesmaidCands[1]||null;
+              const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal);
+              const sotdP=sotdCands[0]||null, sotdRunnerUp=sotdCands[1]||null;
+              const rookieCands=[...standings.filter(p=>rookiePool.includes(String(p.id))&&p.weeksAttended>=2)].sort((a,b)=>b.elo-a.elo);
+              const rookieP=rookieCands[0]||null, rookieRunnerUp=rookieCands[1]||null;
+              const grinderCands=[...standings.filter(p=>p.gamesPlayed>0)].sort((a,b)=>b.gamesPlayed-a.gamesPlayed);
+              const grinderP=grinderCands[0]||null, grinderRunnerUp=grinderCands[1]||null;
+              const attendanceCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.weeksAttended-a.weeksAttended||a.absences-b.absences);
+              const attendanceP=attendanceCands[0]||null, attendanceRunnerUp=attendanceCands[1]||null;
+              const peakEloCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.peakElo-a.peakElo);
+              const peakEloP=peakEloCands[0]||null, peakEloRunnerUp=peakEloCands[1]||null;
+              const anomalyCands=[...standings.filter(p=>p.anomalyGap!=null)].sort((a,b)=>b.anomalyGap-a.anomalyGap);
+              const anomalyP=anomalyCands[0]||null, anomalyRunnerUp=anomalyCands[1]||null;
+              const AwardCard=({icon,label,p,detail,runnerUp,runnerUpDetail})=>(
                 <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
                   <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>{icon} {label}</div>
                   <div style={{color:p?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{p?p.name:"—"}</div>
                   {p&&detail&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>{detail}</div>}
+                  {runnerUp&&<div style={{color:C.muted,fontSize:"0.66rem",marginTop:"8px",paddingTop:"8px",borderTop:`1px solid ${C.border}`}}>🥈 Runner-up: <span style={{color:C.cream}}>{runnerUp.name}</span>{runnerUpDetail&&` · ${runnerUpDetail}`}</div>}
                 </div>
               );
               return(<>
                 <div style={{...cardSt,marginBottom:"14px"}}>
-                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent and Most Improved require 8+ weeks played to qualify.</p>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent, Most Improved, and Anomaly require 8+ weeks played to qualify.</p>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-                    <AwardCard icon="⚖" label="MOST CONSISTENT" p={consistentP} detail={consistentP&&`±${consistentP.consistency.toFixed(1)}% weekly MVP swing`}/>
-                    <AwardCard icon="📈" label="MOST IMPROVED" p={improvedP} detail={improvedP&&`+${Math.round(improvedP.improvement)} Elo this season`}/>
-                    <AwardCard icon="👰" label="BRIDESMAID" p={bridesmaidP} detail={bridesmaidP&&`${bridesmaidP.secondPlaceCount} runner-up finish${bridesmaidP.secondPlaceCount!==1?"es":""}, no wins`}/>
-                    <AwardCard icon="⭐" label="MOST SOTDS" p={sotdP} detail={sotdP&&`${sotdP.sotdTotal} Shot of the Day award${sotdP.sotdTotal!==1?"s":""}`}/>
+                    <AwardCard icon="⚖" label="MOST CONSISTENT" p={consistentP} detail={consistentP&&`±${consistentP.consistency.toFixed(1)}% weekly MVP swing`} runnerUp={consistentRunnerUp} runnerUpDetail={consistentRunnerUp&&`±${consistentRunnerUp.consistency.toFixed(1)}%`}/>
+                    <AwardCard icon="📈" label="MOST IMPROVED" p={improvedP} detail={improvedP&&`+${Math.round(improvedP.improvement)} Elo this season`} runnerUp={improvedRunnerUp} runnerUpDetail={improvedRunnerUp&&`+${Math.round(improvedRunnerUp.improvement)} Elo`}/>
+                    <AwardCard icon="👰" label="BRIDESMAID" p={bridesmaidP} detail={bridesmaidP&&`${bridesmaidP.secondPlaceCount} 2nd-place finish${bridesmaidP.secondPlaceCount!==1?"es":""}`} runnerUp={bridesmaidRunnerUp} runnerUpDetail={bridesmaidRunnerUp&&`${bridesmaidRunnerUp.secondPlaceCount} 2nd-place finishes`}/>
+                    <AwardCard icon="⭐" label="MOST SOTDS" p={sotdP} detail={sotdP&&`${sotdP.sotdTotal} Shot of the Day award${sotdP.sotdTotal!==1?"s":""}`} runnerUp={sotdRunnerUp} runnerUpDetail={sotdRunnerUp&&`${sotdRunnerUp.sotdTotal} SOTDs`}/>
+                    <AwardCard icon="💪" label="THE GRINDER" p={grinderP} detail={grinderP&&`${grinderP.gamesPlayed} games played this season`} runnerUp={grinderRunnerUp} runnerUpDetail={grinderRunnerUp&&`${grinderRunnerUp.gamesPlayed} games`}/>
+                    <AwardCard icon="🦾" label="BEST ATTENDANCE" p={attendanceP} detail={attendanceP&&`${attendanceP.weeksAttended} weeks played${attendanceP.absences>0?`, ${attendanceP.absences} absence${attendanceP.absences!==1?"s":""}`:", zero absences"}`} runnerUp={attendanceRunnerUp} runnerUpDetail={attendanceRunnerUp&&`${attendanceRunnerUp.weeksAttended} weeks`}/>
+                    <AwardCard icon="📊" label="HIGHEST PEAK ELO" p={peakEloP} detail={peakEloP&&`Reached ${peakEloP.peakElo} Elo`} runnerUp={peakEloRunnerUp} runnerUpDetail={peakEloRunnerUp&&`${peakEloRunnerUp.peakElo} Elo`}/>
+                    <AwardCard icon="🌀" label="ANOMALY" p={anomalyP} detail={anomalyP&&`Week ${anomalyP.anomalyWeek} was ${Math.round(anomalyP.anomalyGap)}pt ${anomalyP.anomalyDirection==="up"?"above":"below"} their average`} runnerUp={anomalyRunnerUp} runnerUpDetail={anomalyRunnerUp&&`${Math.round(anomalyRunnerUp.anomalyGap)}pt swing`}/>
                   </div>
                 </div>
                 <div style={cardSt}>
@@ -2804,6 +2838,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                     <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>CURRENT LEADER</div>
                     <div style={{color:rookieP?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{rookieP?rookieP.name:rookiePool.length?"— (needs 2+ weeks played)":"— (select rookies above)"}</div>
                     {rookieP&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>Elo {rookieP.elo}</div>}
+                    {rookieRunnerUp&&<div style={{color:C.muted,fontSize:"0.66rem",marginTop:"8px",paddingTop:"8px",borderTop:`1px solid ${C.border}`}}>🥈 Runner-up: <span style={{color:C.cream}}>{rookieRunnerUp.name}</span> · Elo {rookieRunnerUp.elo}</div>}
                   </div>
                 </div>
               </>);
