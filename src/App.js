@@ -838,7 +838,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
           if(anomalyGap===null||gap>anomalyGap){anomalyGap=gap;anomalyWeek=x.week;anomalyDirection=x.mvp>avgMvp?"up":"down";}
         });
       }
-      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,consistency,improvement,anomalyGap,anomalyWeek,anomalyDirection};
+      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,consistency,improvement,avgMvp,anomalyGap,anomalyWeek,anomalyDirection};
     }).sort((a,b)=>b.pts-a.pts);
     const consistCands=rows.filter(p=>p.consistency!=null);
     const mostConsistentId=consistCands.length?consistCands.reduce((best,p)=>p.consistency<best.consistency?p:best).id:null;
@@ -2780,44 +2780,68 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
 
                 <Section id="awards" title="🏅 SEASON AWARDS" color={C.gold}>
             {(()=>{
+              // Builds a winner + up to 3 runners-up list from a pre-sorted candidate array,
+              // tagging consecutive ties (equal value to the entry above) so ties are visible
+              // rather than looking like an arbitrary ranking.
+              const buildAwardList=(cands,valueFn,detailFn)=>cands.slice(0,4).map((c,i)=>({
+                name:c.name+(i>0&&valueFn(c)===valueFn(cands[i-1])?" (tie)":""),
+                detail:detailFn(c)
+              }));
               const consistCands=[...standings.filter(p=>p.consistency!=null)].sort((a,b)=>a.consistency-b.consistency);
-              const consistentP=consistCands[0]||null, consistentRunnerUp=consistCands[1]||null;
+              const consistentList=buildAwardList(consistCands,p=>p.consistency.toFixed(2),p=>`±${p.consistency.toFixed(1)}%`);
               const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement);
-              const improvedP=improveCands[0]||null, improvedRunnerUp=improveCands[1]||null;
+              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement),p=>`+${Math.round(p.improvement)} Elo`);
               const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount);
-              const bridesmaidP=bridesmaidCands[0]||null, bridesmaidRunnerUp=bridesmaidCands[1]||null;
+              const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`);
               const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal);
-              const sotdP=sotdCands[0]||null, sotdRunnerUp=sotdCands[1]||null;
+              const sotdList=buildAwardList(sotdCands,p=>p.sotdTotal,p=>`${p.sotdTotal} SOTD${p.sotdTotal!==1?"s":""}`);
               const rookieCands=[...standings.filter(p=>rookiePool.includes(String(p.id))&&p.weeksAttended>=2)].sort((a,b)=>b.elo-a.elo);
-              const rookieP=rookieCands[0]||null, rookieRunnerUp=rookieCands[1]||null;
+              const rookieList=buildAwardList(rookieCands,p=>p.elo,p=>`Elo ${p.elo}`);
               const grinderCands=[...standings.filter(p=>p.gamesPlayed>0)].sort((a,b)=>b.gamesPlayed-a.gamesPlayed);
-              const grinderP=grinderCands[0]||null, grinderRunnerUp=grinderCands[1]||null;
+              const grinderList=buildAwardList(grinderCands,p=>p.gamesPlayed,p=>`${p.gamesPlayed} games`);
               const attendanceCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.weeksAttended-a.weeksAttended||a.absences-b.absences);
-              const attendanceP=attendanceCands[0]||null, attendanceRunnerUp=attendanceCands[1]||null;
+              const attendanceList=buildAwardList(attendanceCands,p=>`${p.weeksAttended}-${p.absences}`,p=>`${p.weeksAttended} weeks${p.absences>0?`, ${p.absences} absence${p.absences!==1?"s":""}`:", zero absences"}`);
               const peakEloCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.peakElo-a.peakElo);
-              const peakEloP=peakEloCands[0]||null, peakEloRunnerUp=peakEloCands[1]||null;
+              const peakEloList=buildAwardList(peakEloCands,p=>p.peakElo,p=>`${p.peakElo} Elo`);
               const anomalyCands=[...standings.filter(p=>p.anomalyGap!=null)].sort((a,b)=>b.anomalyGap-a.anomalyGap);
-              const anomalyP=anomalyCands[0]||null, anomalyRunnerUp=anomalyCands[1]||null;
-              const AwardCard=({icon,label,p,detail,runnerUp,runnerUpDetail})=>(
-                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
-                  <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>{icon} {label}</div>
-                  <div style={{color:p?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{p?p.name:"—"}</div>
-                  {p&&detail&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>{detail}</div>}
-                  {runnerUp&&<div style={{color:C.muted,fontSize:"0.66rem",marginTop:"8px",paddingTop:"8px",borderTop:`1px solid ${C.border}`}}>🥈 Runner-up: <span style={{color:C.cream}}>{runnerUp.name}</span>{runnerUpDetail&&` · ${runnerUpDetail}`}</div>}
-                </div>
-              );
+              const anomalyList=buildAwardList(anomalyCands,p=>Math.round(p.anomalyGap),p=>`Week ${p.anomalyWeek}, ${Math.round(p.anomalyGap)}pt ${p.anomalyDirection==="up"?"above":"below"} avg`);
+              // Most Committed: rewards showing up a lot despite not performing well — a combined
+              // score of attendance (normalized against the field) and low average MVP% (inverted),
+              // rather than pure attendance or pure low performance alone.
+              const committedPool=standings.filter(p=>p.weeksAttended>=MIN_WEEKS_FOR_AWARDS&&p.avgMvp!=null);
+              const maxAttended=committedPool.length?Math.max(...committedPool.map(p=>p.weeksAttended)):1;
+              const committedCands=committedPool.map(p=>({...p,committedScore:(p.weeksAttended/maxAttended)+((100-p.avgMvp)/100)})).sort((a,b)=>b.committedScore-a.committedScore);
+              const committedList=buildAwardList(committedCands,p=>p.committedScore.toFixed(3),p=>`${p.weeksAttended} weeks, ${p.avgMvp.toFixed(1)}% avg MVP`);
+              const AwardCard=({icon,label,list})=>{
+                const [winner,...runners]=list.length?list:[null];
+                return(
+                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
+                    <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>{icon} {label}</div>
+                    <div style={{color:winner?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{winner?winner.name:"—"}</div>
+                    {winner&&winner.detail&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>{winner.detail}</div>}
+                    {runners.length>0&&(
+                      <div style={{marginTop:"8px",paddingTop:"8px",borderTop:`1px solid ${C.border}`}}>
+                        {runners.map((r,i)=>(
+                          <div key={i} style={{color:C.muted,fontSize:"0.66rem",marginTop:i>0?"3px":0}}>{["🥈","🥉","4th"][i]} <span style={{color:C.cream}}>{r.name}</span>{r.detail&&` · ${r.detail}`}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
               return(<>
                 <div style={{...cardSt,marginBottom:"14px"}}>
-                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent, Most Improved, and Anomaly require 8+ weeks played to qualify.</p>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent, Most Improved, Anomaly, and Most Committed require 8+ weeks played to qualify.</p>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-                    <AwardCard icon="⚖" label="MOST CONSISTENT" p={consistentP} detail={consistentP&&`±${consistentP.consistency.toFixed(1)}% weekly MVP swing`} runnerUp={consistentRunnerUp} runnerUpDetail={consistentRunnerUp&&`±${consistentRunnerUp.consistency.toFixed(1)}%`}/>
-                    <AwardCard icon="📈" label="MOST IMPROVED" p={improvedP} detail={improvedP&&`+${Math.round(improvedP.improvement)} Elo this season`} runnerUp={improvedRunnerUp} runnerUpDetail={improvedRunnerUp&&`+${Math.round(improvedRunnerUp.improvement)} Elo`}/>
-                    <AwardCard icon="👰" label="BRIDESMAID" p={bridesmaidP} detail={bridesmaidP&&`${bridesmaidP.secondPlaceCount} 2nd-place finish${bridesmaidP.secondPlaceCount!==1?"es":""}`} runnerUp={bridesmaidRunnerUp} runnerUpDetail={bridesmaidRunnerUp&&`${bridesmaidRunnerUp.secondPlaceCount} 2nd-place finishes`}/>
-                    <AwardCard icon="⭐" label="MOST SOTDS" p={sotdP} detail={sotdP&&`${sotdP.sotdTotal} Shot of the Day award${sotdP.sotdTotal!==1?"s":""}`} runnerUp={sotdRunnerUp} runnerUpDetail={sotdRunnerUp&&`${sotdRunnerUp.sotdTotal} SOTDs`}/>
-                    <AwardCard icon="💪" label="THE GRINDER" p={grinderP} detail={grinderP&&`${grinderP.gamesPlayed} games played this season`} runnerUp={grinderRunnerUp} runnerUpDetail={grinderRunnerUp&&`${grinderRunnerUp.gamesPlayed} games`}/>
-                    <AwardCard icon="🦾" label="BEST ATTENDANCE" p={attendanceP} detail={attendanceP&&`${attendanceP.weeksAttended} weeks played${attendanceP.absences>0?`, ${attendanceP.absences} absence${attendanceP.absences!==1?"s":""}`:", zero absences"}`} runnerUp={attendanceRunnerUp} runnerUpDetail={attendanceRunnerUp&&`${attendanceRunnerUp.weeksAttended} weeks`}/>
-                    <AwardCard icon="📊" label="HIGHEST PEAK ELO" p={peakEloP} detail={peakEloP&&`Reached ${peakEloP.peakElo} Elo`} runnerUp={peakEloRunnerUp} runnerUpDetail={peakEloRunnerUp&&`${peakEloRunnerUp.peakElo} Elo`}/>
-                    <AwardCard icon="🌀" label="ANOMALY" p={anomalyP} detail={anomalyP&&`Week ${anomalyP.anomalyWeek} was ${Math.round(anomalyP.anomalyGap)}pt ${anomalyP.anomalyDirection==="up"?"above":"below"} their average`} runnerUp={anomalyRunnerUp} runnerUpDetail={anomalyRunnerUp&&`${Math.round(anomalyRunnerUp.anomalyGap)}pt swing`}/>
+                    <AwardCard icon="⚖" label="MOST CONSISTENT" list={consistentList}/>
+                    <AwardCard icon="📈" label="MOST IMPROVED" list={improvedList}/>
+                    <AwardCard icon="👰" label="BRIDESMAID" list={bridesmaidList}/>
+                    <AwardCard icon="⭐" label="MOST SOTDS" list={sotdList}/>
+                    <AwardCard icon="💪" label="THE GRINDER" list={grinderList}/>
+                    <AwardCard icon="🦾" label="BEST ATTENDANCE" list={attendanceList}/>
+                    <AwardCard icon="📊" label="HIGHEST PEAK ELO" list={peakEloList}/>
+                    <AwardCard icon="🌀" label="ANOMALY" list={anomalyList}/>
+                    <AwardCard icon="❤️" label="MOST COMMITTED" list={committedList}/>
                   </div>
                 </div>
                 <div style={cardSt}>
@@ -2834,12 +2858,10 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       );
                     })}
                   </div>
-                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
-                    <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>CURRENT LEADER</div>
-                    <div style={{color:rookieP?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{rookieP?rookieP.name:rookiePool.length?"— (needs 2+ weeks played)":"— (select rookies above)"}</div>
-                    {rookieP&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>Elo {rookieP.elo}</div>}
-                    {rookieRunnerUp&&<div style={{color:C.muted,fontSize:"0.66rem",marginTop:"8px",paddingTop:"8px",borderTop:`1px solid ${C.border}`}}>🥈 Runner-up: <span style={{color:C.cream}}>{rookieRunnerUp.name}</span> · Elo {rookieRunnerUp.elo}</div>}
-                  </div>
+                  <AwardCard icon="🌱" label="CURRENT LEADER" list={rookieList}/>
+                  {!rookieList.length&&(
+                    <div style={{color:C.muted,fontSize:"0.68rem",marginTop:"6px"}}>{!rookiePool.length?"Select rookies above to see a leader.":"Needs 2+ weeks played to qualify."}</div>
+                  )}
                 </div>
               </>);
             })()}
