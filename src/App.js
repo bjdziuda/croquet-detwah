@@ -1739,6 +1739,10 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
           const buildMetricData=(key)=>Array.from({length:maxWk},(_,w)=>{
             const entry={week:`Wk ${w+1}`};
             activeChartPlayers.filter(p=>chartPlayers.includes(p.id)).forEach(p=>{
+              if(key==="elo"){
+                entry[p.name]=Math.round(eloSystem.history[p.id]?.[w+1]??ELO_START);
+                return;
+              }
               let cum=0;
               for(let ww=1;ww<=w+1;ww++){
                 (weeklyGames[p.id]?.[ww]||[]).forEach(g=>{
@@ -1868,7 +1872,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               {standingsView==="chart"&&(
                 <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}>
                   <div style={{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap",justifyContent:"center",alignItems:"center"}}>
-                    {[["pts","Cumulative pts"],["wins","Wins"],["sotd","SOTD"]].map(([k,label])=>(
+                    {[["pts","Cumulative pts"],["wins","Wins"],["sotd","SOTD"],["elo","Elo"]].map(([k,label])=>(
                       <button key={k} style={pillSt(standingsMetric===k)} onClick={()=>setStandingsMetric(k)}>{label}</button>
                     ))}
                     <button style={{...pillSt(false),borderColor:C.gold,color:C.gold,marginLeft:"6px"}} onClick={()=>{
@@ -1897,7 +1901,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       <LineChart data={displayedChartData} margin={{top:4,right:8,left:0,bottom:0}}>
                         <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
                         <XAxis dataKey="week" tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={{stroke:C.border}} tickLine={false}/>
-                        <YAxis tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
+                        <YAxis domain={standingsMetric==="elo"?["dataMin-20","dataMax+20"]:[0,"dataMax"]} tick={{fill:"#666",fontSize:8,fontFamily:"Georgia,serif"}} axisLine={false} tickLine={false}/>
                         <Tooltip contentStyle={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"8px",fontFamily:"Georgia,serif",fontSize:"0.7rem"}} labelStyle={{color:C.cream,fontWeight:"bold"}}/>
                         {activeChartPlayers.filter(p=>chartPlayers.includes(p.id)).map(p=><Line key={p.id} type="monotone" dataKey={p.name} stroke={LINE_COLORS[players.findIndex(x=>x.id===p.id)%LINE_COLORS.length]} strokeWidth={1.5} dot={{r:0}} activeDot={{r:4}}/>)}
                       </LineChart>
