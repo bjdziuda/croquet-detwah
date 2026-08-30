@@ -129,6 +129,21 @@ const buildChartData = (players, wg, maxWeek) =>
     return entry;
   });
 
+const getWeeksAttended = (weeklyGames, pid) =>
+  new Set(Object.entries(weeklyGames?.[pid]||{}).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>w)).size;
+
+const hasPaidDues = (membershipDues, pid) =>
+  typeof membershipDues?.[String(pid)]==="number" && membershipDues[String(pid)]>0;
+
+// Finals eligibility: dues are a hard gate (can't sign up to play at all).
+// Games-played is a soft gate (can play heats 1 & 2, cut before heat 3) - callers
+// that need the bracket-progression rule check weeksAttended separately.
+const finalsPlayEligibility = (weeklyGames, membershipDues, pid) => {
+  const weeksAttended = getWeeksAttended(weeklyGames, pid);
+  const duesPaid = hasPaidDues(membershipDues, pid);
+  return { weeksAttended, duesPaid, canSignUpToPlay: duesPaid, meetsGameMinimum: weeksAttended>=2 };
+};
+
 const ELO_START = 1500, ELO_K = 32;
 // Computes Elo ratings retroactively from all historical scores using pairwise
 // comparisons within each week's groups (by gameId), processed week-by-week.
@@ -289,6 +304,12 @@ const EMPTY_STATE = {
   nextVenueId: null,
   weekSignups: {},
   pastSeasons: {},
+  finalsMode: false,
+  finalsConfig: { date: "", location: "", autoQualifyCount: 6, heat3Cap: 10, finalsSize: 8 },
+  finalsSignups: {},
+  finalsSides: [
+    "potato salad","coleslaw","baked beans","mac and cheese","corn on the cob","veggie tray","deviled eggs","fruit salad","dessert"
+  ],
   leagueHonours: {
     seasons: {
       "2026":{ logoWinner:"", motto:"", mottoWinner:"", logoUrl:"" },
@@ -306,7 +327,20 @@ const EMPTY_STATE = {
   },
 };
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}}) {
+function Switch({checked, onChange, label, disabled=false}) {
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${C.border}`,opacity:disabled?0.55:1}}>
+      <span style={{color:C.text,fontSize:"0.85rem"}}>{label}</span>
+      <div onClick={()=>{if(!disabled)onChange(!checked);}}
+        style={{width:"42px",height:"24px",borderRadius:"12px",background:checked?C.green:C.border,position:"relative",cursor:disabled?"default":"pointer",transition:"background 0.15s",flexShrink:0}}>
+        <div style={{width:"18px",height:"18px",borderRadius:"50%",background:C.cream,position:"absolute",top:"3px",left:checked?"21px":"3px",transition:"left 0.15s"}}/>
+      </div>
+    </div>
+  );
+}
+
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsSides=[], onFinalsSignup=()=>{}}) {
+  const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestNote:"", sides:[], otherOn:false, otherSide:""});
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -464,7 +498,106 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
         )}
 
         {/* CONFIRM OVERLAY */}
-        {selected&&(
+        {selected&&finalsMode&&!finalsSignups[String(selected.id)]&&(()=>{
+          const elig=finalsPlayEligibility(weeklyGames,membershipDues,selected.id);
+          const claimedBy=(sideName)=>{
+            const pid=String(selected.id);
+            for(const [otherId,entry] of Object.entries(finalsSignups||{})){
+              if(String(otherId)===pid) continue;
+              if((entry.sides||[]).includes(sideName)){
+                const p=(players||[]).find(x=>String(x.id)===String(otherId));
+                return p?p.name:"someone";
+              }
+            }
+            return null;
+          };
+          const toggleSide=(name)=>{
+            setFinalsForm(f=>{
+              const has=f.sides.includes(name);
+              return {...f,sides:has?f.sides.filter(s=>s!==name):[...f.sides,name]};
+            });
+          };
+          const save=()=>{
+            const payload={
+              coming:finalsForm.coming,
+              playing:finalsForm.coming&&elig.canSignUpToPlay&&finalsForm.playing,
+              guests:finalsForm.guests,
+              guestNote:finalsForm.guests?finalsForm.guestNote.trim():"",
+              sides:finalsForm.sides,
+              otherSide:finalsForm.otherOn?finalsForm.otherSide.trim():"",
+              meetsGameMinimum:elig.meetsGameMinimum,
+              submittedAt:Date.now(),
+            };
+            onFinalsSignup(selected.id,payload);
+            onLogin({name:selected.name,role:"viewer",id:selected.id});
+            setSelected(null);
+          };
+          return (
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",zIndex:100,overflowY:"auto"}}>
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"24px",maxWidth:"360px",width:"100%",margin:"20px 0"}}>
+                <div style={{color:C.accentLight,fontSize:"1rem",fontWeight:"bold",marginBottom:"4px",textAlign:"center"}}>Hey {selected.name}!</div>
+                <div style={{color:C.muted,fontSize:"0.82rem",marginBottom:"16px",textAlign:"center"}}>Let's get you set for the championship finals</div>
+
+                <Switch label="Coming to the finals?" checked={finalsForm.coming} onChange={v=>setFinalsForm(f=>({...f,coming:v}))}/>
+
+                {finalsForm.coming&&(
+                  <>
+                    {elig.canSignUpToPlay?(
+                      <>
+                        <Switch label="Playing in the tournament?" checked={finalsForm.playing} onChange={v=>setFinalsForm(f=>({...f,playing:v}))}/>
+                        {finalsForm.playing&&!elig.meetsGameMinimum&&(
+                          <div style={{background:C.accent+"22",border:`1px solid ${C.accent}44`,borderRadius:"8px",padding:"8px 10px",fontSize:"0.72rem",color:C.accentLight,margin:"8px 0"}}>
+                            You've played {elig.weeksAttended} of 2 required rounds this season — you can play heats 1 &amp; 2, but you'll be cut before heat 3.
+                          </div>
+                        )}
+                      </>
+                    ):(
+                      <div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"8px",padding:"8px 10px",fontSize:"0.72rem",color:C.red,margin:"10px 0"}}>
+                        League dues aren't paid yet, so signing up to play isn't open. You're welcome to come for the food and festivities!
+                      </div>
+                    )}
+                    <Switch label="Bringing guests?" checked={finalsForm.guests} onChange={v=>setFinalsForm(f=>({...f,guests:v}))}/>
+                    {finalsForm.guests&&(
+                      <input value={finalsForm.guestNote} onChange={e=>setFinalsForm(f=>({...f,guestNote:e.target.value}))}
+                        placeholder="who is coming with you? e.g. partner, 2 kids"
+                        style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px",marginBottom:"6px"}}/>
+                    )}
+
+                    <div style={{color:C.text,fontSize:"0.85rem",margin:"12px 0 6px"}}>Bringing a side? (pick any)</div>
+                    {finalsSides.map(sideName=>{
+                      const lockedBy=claimedBy(sideName);
+                      if(lockedBy) return (
+                        <div key={sideName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.muted}}>
+                          🔒 {sideName} — taken by {lockedBy}
+                        </div>
+                      );
+                      return (
+                        <label key={sideName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.text,cursor:"pointer"}}>
+                          <input type="checkbox" checked={finalsForm.sides.includes(sideName)} onChange={()=>toggleSide(sideName)}/> {sideName}
+                        </label>
+                      );
+                    })}
+                    <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.text,cursor:"pointer"}}>
+                      <input type="checkbox" checked={finalsForm.otherOn} onChange={e=>setFinalsForm(f=>({...f,otherOn:e.target.checked}))}/> something else
+                    </label>
+                    {finalsForm.otherOn&&(
+                      <input value={finalsForm.otherSide} onChange={e=>setFinalsForm(f=>({...f,otherSide:e.target.value}))}
+                        placeholder="what are you bringing?"
+                        style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px"}}/>
+                    )}
+                  </>
+                )}
+
+                <button onClick={save} style={{width:"100%",marginTop:"18px",padding:"11px",background:`linear-gradient(135deg,${C.accent},${C.accent}bb)`,border:"none",borderRadius:"8px",color:C.bg,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
+                  Save and enter
+                </button>
+                <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline",display:"block",width:"100%",textAlign:"center",marginTop:"10px"}}>Back</button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {selected&&!(finalsMode&&!finalsSignups[String(selected.id)])&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",zIndex:100}}>
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"28px",maxWidth:"320px",width:"100%",textAlign:"center"}}>
               <div style={{fontSize:"1.8rem",marginBottom:"8px"}}>👋</div>
@@ -683,12 +816,22 @@ export default function App() {
     publishedGroups={appState?.publishedGroups||null}
     weekTiebreakers={appState?.weekTiebreakers||{}}
     weekVenues={appState?.weekVenues||{}}
+    finalsMode={!!appState?.finalsMode}
+    finalsSignups={appState?.finalsSignups||{}}
+    finalsSides={appState?.finalsSides||[]}
+    onFinalsSignup={(pid,payload)=>{
+      const key=String(pid);
+      const newFinalsSignups={...(appState?.finalsSignups||{}),[key]:payload};
+      setAppState({...appState,finalsSignups:newFinalsSignups});
+      // Targeted updateDoc only - never trigger the debounced full-document save here
+      updateDoc(LEAGUE_DOC,{[`finalsSignups.${key}`]:payload}).catch(e=>console.error("Finals RSVP save failed:",e));
+    }}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} setLocal={setAppState} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[]} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -810,7 +953,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const absences=allG.filter(g=>g.absent).length;
       const gamesPlayed=allG.filter(g=>!g.absent).length;
       const sotdTotal=allG.reduce((s,g)=>s+(g.sotd||0),0);
-      const weeksAttended=new Set(Object.entries(weeklyGames[p.id]||{}).filter(([,gs])=>gs.some(g=>!g.absent)).map(([w])=>w)).size;
+      const weeksAttended=getWeeksAttended(weeklyGames,p.id);
       const maxPts=maxPossible(p.id,weeklyGames);
       const mvp=maxPts>0?((pts/maxPts)*100).toFixed(1):"—";
       const hist=eloSystem.history[p.id]||{};
@@ -1317,7 +1460,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],["rulebook","📜 Rules"],
+  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["finals","🏁 Finals"],["profile","👤 Profile"],["rulebook","📜 Rules"],
     ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
@@ -2295,6 +2438,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsSides={finalsSides} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} update={update}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -4134,6 +4278,126 @@ function CourseDesigner({initialItems=[], initialPaths=[[],[],[]], initialName='
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], players=[], membershipDues={}, weeklyGames={}, update}) {
+  const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,...finalsConfig});
+  useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
+
+  const saveCfg=(patch)=>{
+    const next={...cfg,...patch};
+    setCfg(next);
+    update({finalsConfig:next});
+  };
+
+  const rows=players.map(p=>{
+    const entry=finalsSignups[String(p.id)];
+    const elig=finalsPlayEligibility(weeklyGames,membershipDues,p.id);
+    return {player:p,entry,elig};
+  });
+  const responded=rows.filter(r=>r.entry);
+  const comingCount=responded.filter(r=>r.entry.coming).length;
+  const playingCount=responded.filter(r=>r.entry.playing).length;
+
+  const iSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",outline:"none"};
+  const lbSt={color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",display:"block",marginBottom:"4px"};
+
+  return (
+    <div>
+      {/* FLYER */}
+      <div style={{background:C.cream,borderRadius:"12px",padding:"20px",color:"#2a2a26",marginBottom:"20px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px"}}>
+          {leagueLogo?<img src={leagueLogo} alt="logo" style={{width:"52px",height:"52px",borderRadius:"10px",objectFit:"cover",flexShrink:0}}/>
+            :<div style={{width:"52px",height:"52px",borderRadius:"10px",border:"3px solid #2a2a26",flexShrink:0}}/>}
+          <div style={{fontSize:"1.3rem",fontWeight:"bold",lineHeight:1.15}}>CROQUET DE TWAH<br/>CHAMPIONSHIP</div>
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"12px",flexWrap:"wrap",marginBottom:"16px",paddingBottom:"16px",borderBottom:"1px solid #d8cfb5"}}>
+          <div style={{fontSize:"0.78rem",lineHeight:1.9,fontWeight:"bold"}}>
+            DATE • {cfg.date||"TBD"}<br/>
+            LOCATION • {cfg.location||"TBD"}
+          </div>
+          <div style={{background:"#7c8c6b",color:"#f0ead6",borderRadius:"30px",padding:"8px 14px",fontSize:"0.7rem",fontWeight:"bold",maxWidth:"150px",textAlign:"center"}}>
+            RSVP RIGHT HERE — LOG IN TO SIGN UP
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1.15fr 1fr",gap:"16px"}}>
+          <div>
+            <div style={{fontSize:"0.85rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"6px"}}>ITINERARY</div>
+            <div style={{fontSize:"0.72rem",lineHeight:1.9}}>
+              11AM–12PM &nbsp;Arrive, general set up<br/>
+              12 PM &nbsp;Championship kickoff<br/>
+              12:15 PM &nbsp;Heat 1 &amp; 2 games<br/>
+              3:00 PM &nbsp;Heat 3 decider<br/>
+              4:30 PM &nbsp;Finals!!<br/>
+              6:00 PM &nbsp;Dinner / award ceremony<br/>
+              7:00 PM on &nbsp;Afters
+            </div>
+            <div style={{background:"#2b4a6b",color:"#e8eef4",borderRadius:"10px",padding:"12px",marginTop:"12px"}}>
+              <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"4px"}}>RULES</div>
+              <div style={{fontSize:"0.72rem",lineHeight:1.7,fontStyle:"italic"}}>
+                • Standard commish handbook<br/>
+                • If an object impedes your shot or stroke, it may be moved provided it is both smaller and larger than a microwave<br/>
+                • Razzing required
+              </div>
+            </div>
+          </div>
+          <div style={{background:"#caa06a",borderRadius:"10px",padding:"12px",color:"#3d2b12"}}>
+            <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"4px"}}>FOOD — ON THE LEAGUE</div>
+            <div style={{fontSize:"0.72rem",lineHeight:1.6,marginBottom:"8px"}}>
+              Brisket, plus a veggie main for non-meat eaters<br/>Keg of something light
+            </div>
+            <div style={{fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>SIDES</div>
+            <div style={{fontSize:"0.72rem",lineHeight:1.6}}>Sign up below when you log in</div>
+          </div>
+        </div>
+        <div style={{background:"#c1533f",color:"#fbe9e0",borderRadius:"8px",padding:"10px 14px",fontSize:"0.72rem",fontStyle:"italic",textAlign:"center",marginTop:"14px"}}>
+          ! If you have not played 2 regular season rounds and paid league dues, you are not eligible to play in the finals but you are welcome to join in the festivities !
+        </div>
+      </div>
+
+      {/* RSVP SUMMARY - everyone can see who's in */}
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
+        <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"10px"}}>Who's in — {comingCount} coming, {playingCount} playing</div>
+        {responded.length===0&&<div style={{color:C.muted,fontSize:"0.8rem"}}>No RSVPs yet.</div>}
+        {responded.map(({player,entry})=>(
+          <div key={player.id} style={{padding:"6px 0",borderBottom:`1px solid ${C.border}55`,fontSize:"0.78rem",color:C.text}}>
+            <strong>{player.name}</strong> — {entry.coming?"coming":"not coming"}{entry.coming&&(entry.playing?", playing":", not playing")}
+            {entry.guests&&entry.guestNote&&<span style={{color:C.muted}}> · guests: {entry.guestNote}</span>}
+            {(entry.sides||[]).length>0&&<span style={{color:C.muted}}> · bringing: {entry.sides.join(", ")}</span>}
+            {entry.otherSide&&<span style={{color:C.muted}}> · bringing: {entry.otherSide}</span>}
+          </div>
+        ))}
+      </div>
+
+      {/* ADMIN CONTROLS */}
+      {isAdmin&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"}}>
+          <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"10px"}}>Admin — finals settings</div>
+          <Switch label="Finals mode (gates login with RSVP)" checked={!!finalsMode} onChange={v=>update({finalsMode:v})}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginTop:"12px"}}>
+            <div><label style={lbSt}>DATE</label><input style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.date} onChange={e=>saveCfg({date:e.target.value})} placeholder="Saturday, October 3, 2026"/></div>
+            <div><label style={lbSt}>LOCATION</label><input style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.location} onChange={e=>saveCfg({location:e.target.value})} placeholder="991 N Fletcher Rd, Dexter, MI"/></div>
+            <div><label style={lbSt}>AUTO-QUALIFY COUNT</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.autoQualifyCount} onChange={e=>saveCfg({autoQualifyCount:Math.max(0,parseInt(e.target.value)||0)})}/></div>
+            <div><label style={lbSt}>HEAT 3 CAP</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat3Cap} onChange={e=>saveCfg({heat3Cap:Math.max(0,parseInt(e.target.value)||0)})}/></div>
+            <div><label style={lbSt}>FINALS SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.finalsSize} onChange={e=>saveCfg({finalsSize:Math.max(0,parseInt(e.target.value)||0)})}/></div>
+          </div>
+
+          <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Eligibility check</div>
+          <div style={{maxHeight:"260px",overflowY:"auto"}}>
+            {rows.map(({player,elig})=>(
+              <div key={player.id} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${C.border}55`,fontSize:"0.76rem"}}>
+                <span style={{color:C.text}}>{player.name}</span>
+                <span style={{color:elig.canSignUpToPlay?(elig.meetsGameMinimum?C.greenLight:C.accentLight):C.red}}>
+                  {elig.weeksAttended} rounds · {elig.duesPaid?"dues paid":"dues unpaid"}
+                  {!elig.canSignUpToPlay?" · can't play":!elig.meetsGameMinimum?" · cut after heat 2":""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
