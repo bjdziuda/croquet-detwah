@@ -310,6 +310,10 @@ const EMPTY_STATE = {
   finalsSides: [
     "potato salad","coleslaw","baked beans","mac and cheese","corn on the cob","veggie tray","deviled eggs","fruit salad","dessert"
   ],
+  finalsMenu: {
+    mains: ["Brisket, plus a veggie main for non-meat eaters"],
+    drinks: ["Keg of something light"],
+  },
   leagueHonours: {
     seasons: {
       "2026":{ logoWinner:"", motto:"", mottoWinner:"", logoUrl:"" },
@@ -831,7 +835,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[]} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}} = appState;
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -2438,7 +2442,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsSides={finalsSides} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} update={update}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsSides={finalsSides} finalsMenu={finalsMenu} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} recentForm={recentForm} update={update}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -4282,7 +4286,28 @@ function CourseDesigner({initialItems=[], initialPaths=[[],[],[]], initialName='
   );
 }
 
-function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], players=[], membershipDues={}, weeklyGames={}, update}) {
+function EditableStringList({label, items=[], onChange}) {
+  const [draft,setDraft]=useState("");
+  const iSt={flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"6px 8px",fontSize:"0.78rem",fontFamily:"Georgia,serif",outline:"none"};
+  const addItem=()=>{ if(draft.trim()){ onChange([...items,draft.trim()]); setDraft(""); } };
+  return (
+    <div style={{marginBottom:"14px"}}>
+      <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"6px"}}>{label}</div>
+      {items.map((item,i)=>(
+        <div key={i} style={{display:"flex",gap:"6px",marginBottom:"4px"}}>
+          <input style={iSt} value={item} onChange={e=>{const next=[...items];next[i]=e.target.value;onChange(next);}}/>
+          <button onClick={()=>onChange(items.filter((_,idx)=>idx!==i))} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"0 10px",cursor:"pointer"}}>×</button>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:"6px"}}>
+        <input style={iSt} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Add item…" onKeyDown={e=>e.key==="Enter"&&addItem()}/>
+        <button onClick={addItem} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"6px",padding:"0 10px",cursor:"pointer"}}>+</button>
+      </div>
+    </div>
+  );
+}
+
+function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, players=[], membershipDues={}, weeklyGames={}, recentForm={}, update}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
@@ -4300,6 +4325,16 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
   const responded=rows.filter(r=>r.entry);
   const comingCount=responded.filter(r=>r.entry.coming).length;
   const playingCount=responded.filter(r=>r.entry.playing).length;
+
+  const playingRows=rows.filter(r=>r.entry?.coming&&r.entry?.playing);
+  const tierSorted=[...playingRows].sort((a,b)=>(recentForm[b.player.id]?.rating??ELO_START)-(recentForm[a.player.id]?.rating??ELO_START));
+  const tierMid=Math.ceil(tierSorted.length/2);
+  const tierA=tierSorted.slice(0,tierMid);
+  const tierB=tierSorted.slice(tierMid);
+  const heat3FieldSize=Math.max(0,tierSorted.length-cfg.autoQualifyCount);
+  const stageBoxSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px",textAlign:"center"};
+  const stageTitleSt={color:C.text,fontSize:"0.74rem",fontWeight:"bold",marginBottom:"4px"};
+  const stageSubSt={color:C.muted,fontSize:"0.66rem"};
 
   const iSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",outline:"none"};
   const lbSt={color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",display:"block",marginBottom:"4px"};
@@ -4346,10 +4381,12 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
           <div style={{background:"#caa06a",borderRadius:"10px",padding:"12px",color:"#3d2b12"}}>
             <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"4px"}}>FOOD — ON THE LEAGUE</div>
             <div style={{fontSize:"0.72rem",lineHeight:1.6,marginBottom:"8px"}}>
-              Brisket, plus a veggie main for non-meat eaters<br/>Keg of something light
+              {(finalsMenu.mains||[]).map((m,i)=><div key={"m"+i}>{m}</div>)}
+              {(finalsMenu.drinks||[]).map((d,i)=><div key={"d"+i}>{d}</div>)}
             </div>
             <div style={{fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>SIDES</div>
             <div style={{fontSize:"0.72rem",lineHeight:1.6}}>Sign up below when you log in</div>
+            {finalsSides.length>0&&<div style={{fontSize:"0.68rem",color:"#5c4a2a",marginTop:"4px"}}>{finalsSides.join(", ")}</div>}
           </div>
         </div>
         <div style={{background:"#c1533f",color:"#fbe9e0",borderRadius:"8px",padding:"10px 14px",fontSize:"0.72rem",fontStyle:"italic",textAlign:"center",marginTop:"14px"}}>
@@ -4371,6 +4408,51 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
         ))}
       </div>
 
+      {/* BRACKET PROGRESSION - live */}
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
+        <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Bracket progression</div>
+        <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"12px"}}>Live preview — updates automatically as people sign up to play and elo shifts week to week.</div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px",marginBottom:"14px"}}>
+          <div style={stageBoxSt}><div style={stageTitleSt}>Heat 1 &amp; 2</div><div style={stageSubSt}>{tierSorted.length} signed up to play</div></div>
+          <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Heat 1 + heat 2 points</div></div>
+          <div style={stageBoxSt}><div style={stageTitleSt}>Auto-qualify</div><div style={stageSubSt}>Top {cfg.autoQualifyCount}</div></div>
+          <div style={stageBoxSt}><div style={stageTitleSt}>Heat 3 decider</div><div style={{...stageSubSt,color:heat3FieldSize>cfg.heat3Cap?C.red:stageSubSt.color}}>{heat3FieldSize} would play</div></div>
+        </div>
+        {heat3FieldSize>cfg.heat3Cap&&(
+          <div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"8px",padding:"8px 10px",fontSize:"0.72rem",color:C.red,marginBottom:"14px"}}>
+            Heat 3 field ({heat3FieldSize}) is over the {cfg.heat3Cap} cap right now — tighten auto-qualify or double check headcount before finals day.
+          </div>
+        )}
+
+        <div style={{color:C.text,fontSize:"0.8rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 tiers, right now</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+          <div>
+            <div style={{color:C.greenLight,fontSize:"0.68rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER A — TOP HALF BY ELO</div>
+            {tierA.length===0&&<div style={{color:C.muted,fontSize:"0.76rem"}}>No one signed up to play yet.</div>}
+            {tierA.map(r=>(
+              <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.76rem",color:C.text,padding:"3px 0",borderBottom:`1px solid ${C.border}55`}}>
+                <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
+                <span style={{color:C.muted}}>{Math.round(recentForm[r.player.id]?.rating??ELO_START)}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{color:C.blue,fontSize:"0.68rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER B — BOTTOM HALF BY ELO</div>
+            {tierB.length===0&&<div style={{color:C.muted,fontSize:"0.76rem"}}>—</div>}
+            {tierB.map(r=>(
+              <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.76rem",color:C.text,padding:"3px 0",borderBottom:`1px solid ${C.border}55`}}>
+                <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
+                <span style={{color:C.muted}}>{Math.round(recentForm[r.player.id]?.rating??ELO_START)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        {tierSorted.some(r=>!r.elig.meetsGameMinimum)&&(
+          <div style={{color:C.muted,fontSize:"0.66rem",marginTop:"8px"}}>* under 2 rounds played this season — can play heats 1 &amp; 2, cut before heat 3</div>
+        )}
+      </div>
+
       {/* ADMIN CONTROLS */}
       {isAdmin&&(
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"}}>
@@ -4383,6 +4465,11 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             <div><label style={lbSt}>HEAT 3 CAP</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat3Cap} onChange={e=>saveCfg({heat3Cap:Math.max(0,parseInt(e.target.value)||0)})}/></div>
             <div><label style={lbSt}>FINALS SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.finalsSize} onChange={e=>saveCfg({finalsSize:Math.max(0,parseInt(e.target.value)||0)})}/></div>
           </div>
+
+          <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Menu</div>
+          <EditableStringList label="MAINS" items={finalsMenu.mains||[]} onChange={next=>update({finalsMenu:{...finalsMenu,mains:next}})}/>
+          <EditableStringList label="DRINKS" items={finalsMenu.drinks||[]} onChange={next=>update({finalsMenu:{...finalsMenu,drinks:next}})}/>
+          <EditableStringList label="SIDES (also shown as sign-up choices at login)" items={finalsSides} onChange={next=>update({finalsSides:next})}/>
 
           <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Eligibility check</div>
           <div style={{maxHeight:"260px",overflowY:"auto"}}>
