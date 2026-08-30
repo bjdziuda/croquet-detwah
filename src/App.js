@@ -352,9 +352,10 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
   const [err, setErr]         = useState("");
 
   const wk = nextMatchWeek || 1;
-  const signup = weekSignups?.[wk] || {open:false,signups:[],waitlist:[],groups:null,published:false};
+  const signup = weekSignups?.[wk] || {open:false,signups:[],waitlist:[],declined:[],groups:null,published:false};
   const signupIds = new Set((signup.signups||[]).map(String));
   const waitlistIds = new Set((signup.waitlist||[]).map(String));
+  const declinedIds = new Set((signup.declined||[]).map(String));
   // Use flat publishedGroups field for reliable display (avoids nested Firestore issues)
   const groupsForDisplay = publishedGroups && publishedGroups.week===wk && publishedGroups.published ? publishedGroups.groups : null;
   console.log("[CroquetLogin] wk=",wk,"publishedGroups=",JSON.stringify(publishedGroups),"signup.published=",signup.published,"signup.groups=",signup.groups);
@@ -456,21 +457,22 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               <div style={{color:C.accentLight,fontSize:"0.82rem",fontWeight:"bold",marginBottom:"4px"}}>
                 {signup.open?"🏑 Week "+wk+" sign-ups are open!":"Tap your name to enter"}
               </div>
-              {signup.open&&<div style={{color:C.muted,fontSize:"0.75rem",marginBottom:"14px"}}>{signupIds.size}/24 signed up{waitlistIds.size>0&&` · ${waitlistIds.size} waitlist`}</div>}
+              {signup.open&&<div style={{color:C.muted,fontSize:"0.75rem",marginBottom:"14px"}}>{signupIds.size}/24 signed up{waitlistIds.size>0&&` · ${waitlistIds.size} waitlist`}{declinedIds.size>0&&` · ${declinedIds.size} can't attend`}</div>}
               {!signup.open&&<div style={{color:C.muted,fontSize:"0.75rem",marginBottom:"14px"}}>Select your name below</div>}
               <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
                 {(players||[]).filter(p=>p.joinedWeek<=wk&&!suspendedPlayers.includes(String(p.id))).map(p=>{
                   const pid=String(p.id);
                   const isIn=signupIds.has(pid);
                   const isWait=waitlistIds.has(pid);
+                  const isDeclined=declinedIds.has(pid);
                   return(
                     <button key={p.id} onClick={()=>setSelected(p)}
                       style={{padding:"8px 16px",borderRadius:"20px",
-                        border:`1px solid ${isIn?C.green:isWait?C.accent:C.border}`,
-                        background:isIn?C.green+"33":isWait?C.accent+"22":"transparent",
-                        color:isIn?C.greenLight:isWait?C.accentLight:C.cream,
+                        border:`1px solid ${isIn?C.green:isWait?C.accent:isDeclined?C.red:C.border}`,
+                        background:isIn?C.green+"33":isWait?C.accent+"22":isDeclined?C.red+"22":"transparent",
+                        color:isIn?C.greenLight:isWait?C.accentLight:isDeclined?C.red:C.cream,
                         fontFamily:"Georgia,serif",fontSize:"0.85rem",cursor:"pointer"}}>
-                      {isIn?"✓ ":isWait?"⏳ ":""}{p.name}{(typeof membershipDues[String(p.id)]==="number"&&membershipDues[String(p.id)]>0)&&" 🏑"}
+                      {isIn?"✓ ":isWait?"⏳ ":isDeclined?"✗ ":""}{p.name}{(typeof membershipDues[String(p.id)]==="number"&&membershipDues[String(p.id)]>0)&&" 🏑"}
                     </button>
                   );
                 })}
@@ -764,10 +766,11 @@ export default function App() {
     }}
     onSignup={(playerId,coming)=>{
       const wk=appState.nextMatchWeek||1;
-      const cur=appState.weekSignups?.[wk]||{open:false,signups:[],waitlist:[],groups:null,published:false};
+      const cur=appState.weekSignups?.[wk]||{open:false,signups:[],waitlist:[],declined:[],groups:null,published:false};
       const pid=String(playerId);
-      let signups=(cur.signups||[]).map(String), waitlist=(cur.waitlist||[]).map(String);
+      let signups=(cur.signups||[]).map(String), waitlist=(cur.waitlist||[]).map(String), declined=(cur.declined||[]).map(String);
       if(coming){
+        declined=declined.filter(x=>x!==pid);
         if(!signups.includes(pid)&&!waitlist.includes(pid)){
           if(signups.length<24) signups=[...signups,pid];
           else waitlist=[...waitlist,pid];
@@ -775,6 +778,7 @@ export default function App() {
       } else {
         signups=signups.filter(x=>x!==pid);
         waitlist=waitlist.filter(x=>x!==pid);
+        if(!declined.includes(pid)) declined=[...declined,pid];
       }
       // Auto-adjust publishedGroups if published
       const pg=appState.publishedGroups;
@@ -796,12 +800,12 @@ export default function App() {
         }
         if(changed) newPG={...pg,groups:grps};
       }
-      const newWkData={...cur,signups,waitlist};
+      const newWkData={...cur,signups,waitlist,declined};
       // Update local state immediately
       const newAppState={...appState,weekSignups:{...appState.weekSignups,[wk]:newWkData},...(newPG!==pg?{publishedGroups:newPG}:{})};
       setAppState(newAppState);
       // Use targeted updateDoc so this NEVER overwrites admin-written group/publish data
-      const updates={[`weekSignups.${wk}.signups`]:signups,[`weekSignups.${wk}.waitlist`]:waitlist};
+      const updates={[`weekSignups.${wk}.signups`]:signups,[`weekSignups.${wk}.waitlist`]:waitlist,[`weekSignups.${wk}.declined`]:declined};
       if(newPG!==pg) updates.publishedGroups=newPG;
       updateDoc(LEAGUE_DOC,updates).catch(e=>console.error("Signup save failed:",e));
     }}
@@ -1294,7 +1298,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const toggleChart=id=>setChartPlayers(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
 
   const curSignupWk=appState.nextMatchWeek||1;
-  const curSignup=weekSignups[curSignupWk]||{open:false,signups:[],waitlist:[],groups:null,published:false};
+  const curSignup=weekSignups[curSignupWk]||{open:false,signups:[],waitlist:[],declined:[],groups:null,published:false};
 
   const signupMvpOf=id=>{
     const s=standings.find(x=>String(x.id)===String(id));
@@ -3045,12 +3049,13 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   </label>
                 )}
               </div>
-              {(curSignup.signups||[]).length>0&&(
+              {((curSignup.signups||[]).length>0||(curSignup.declined||[]).length>0)&&(
                 <>
-                  <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"8px"}}>{(curSignup.signups||[]).length}/24 signed up{(curSignup.waitlist||[]).length>0&&` · ${curSignup.waitlist.length} waitlist`}</div>
+                  <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"8px"}}>{(curSignup.signups||[]).length}/24 signed up{(curSignup.waitlist||[]).length>0&&` · ${curSignup.waitlist.length} waitlist`}{(curSignup.declined||[]).length>0&&` · ${curSignup.declined.length} can't attend`}</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:curSignup.groups?"10px":"0"}}>
                     {(curSignup.signups||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.green+"22",border:`1px solid ${C.green}44`,color:C.greenLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>✓ {p.name}</span>:null;})}
                     {(curSignup.waitlist||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.accent+"22",border:`1px solid ${C.accent}44`,color:C.accentLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>⏳ {p.name}</span>:null;})}
+                    {(curSignup.declined||[]).map(pid=>{const p=players.find(x=>String(x.id)===String(pid));return p?<span key={pid} style={{background:C.red+"22",border:`1px solid ${C.red}44`,color:C.red,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>✗ {p.name}</span>:null;})}
                   </div>
                 </>
               )}
