@@ -358,14 +358,48 @@ function Switch({checked, onChange, label, disabled=false}) {
   );
 }
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, onFinalsSignup=()=>{}}) {
-  const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", appetizers:[], mains:[], sides:[], desserts:[], drinks:[], otherOn:false, otherSide:"", sideNote:""});
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, onFinalsSignup=()=>{}}) {
+  const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", appetizers:[], mains:[], sides:[], desserts:[], drinks:[], leagueItems:[], otherOn:false, otherSide:"", sideNote:""});
   const [editingRsvp, setEditingRsvp] = useState(false);
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr]         = useState("");
+
+  const hydrateFinalsFormFromEntry=(entry)=>{
+    setFinalsForm({
+      coming:!!entry.coming,
+      playing:!!entry.playing,
+      guests:!!entry.guests,
+      guestCount:entry.guestCount||1,
+      guestNote:entry.guestNote||"",
+      appetizers:entry.appetizers||[],
+      mains:entry.mains||[],
+      sides:entry.sides||[],
+      desserts:entry.desserts||[],
+      drinks:entry.drinks||[],
+      leagueItems:entry.leagueItems||[],
+      otherOn:!!entry.otherSide,
+      otherSide:entry.otherSide||"",
+      sideNote:entry.sideNote||"",
+    });
+  };
+
+  // Resume editing an RSVP after being logged out via the finals flyer's "Edit RSVP" link
+  useEffect(()=>{
+    let resumeId=null;
+    try{ resumeId=sessionStorage.getItem("croquetResumeRsvpFor"); }catch(e){}
+    if(!resumeId) return;
+    try{ sessionStorage.removeItem("croquetResumeRsvpFor"); }catch(e){}
+    const p=(players||[]).find(x=>String(x.id)===String(resumeId));
+    if(!p) return;
+    const entry=finalsSignups[String(p.id)];
+    if(entry) hydrateFinalsFormFromEntry(entry);
+    setEditingRsvp(true);
+    setSelected(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
 
   const wk = nextMatchWeek || 1;
   const signup = weekSignups?.[wk] || {open:false,signups:[],waitlist:[],declined:[],groups:null,published:false};
@@ -552,6 +586,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               sides:finalsForm.sides,
               desserts:finalsForm.desserts,
               drinks:finalsForm.drinks,
+              leagueItems:finalsForm.leagueItems,
               otherSide:finalsForm.otherOn?finalsForm.otherSide.trim():"",
               sideNote:finalsForm.sideNote.trim(),
               meetsGameMinimum:elig.meetsGameMinimum,
@@ -601,7 +636,36 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                       </>
                     )}
 
+                    {(()=>{
+                      const leagueItemNames=[...(finalsMenu.mains||[]),...(finalsMenu.drinks||[])];
+                      if(leagueItemNames.length===0) return null;
+                      return (
+                        <div style={{marginTop:"12px"}}>
+                          <div style={{color:C.text,fontSize:"0.85rem",marginBottom:"2px"}}>League's providing these — sign up to pick one up</div>
+                          {leagueItemNames.map(itemName=>{
+                            const lockedBy=claimedBy("leagueItems",itemName);
+                            if(lockedBy) return (
+                              <div key={itemName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.muted}}>
+                                🔒 {itemName} — taken by {lockedBy}
+                              </div>
+                            );
+                            return (
+                              <label key={itemName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.text,cursor:"pointer"}}>
+                                <input type="checkbox" checked={(finalsForm.leagueItems||[]).includes(itemName)} onChange={()=>toggleItem("leagueItems",itemName)}/> {itemName}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
                     <div style={{color:C.text,fontSize:"0.85rem",margin:"12px 0 2px"}}>Bringing something? (pick any)</div>
+                    <div style={{background:C.accent+"15",border:`1px solid ${C.accent}44`,borderRadius:"8px",padding:"10px",margin:"8px 0 10px"}}>
+                      <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",marginBottom:"6px"}}>📝 Note about your dish (optional)</div>
+                      <input value={finalsForm.sideNote} onChange={e=>setFinalsForm(f=>({...f,sideNote:e.target.value}))}
+                        placeholder="e.g. vegan, serves 12, nut allergy"
+                        style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"9px 10px",fontSize:"0.85rem",fontFamily:"Georgia,serif"}}/>
+                    </div>
                     {FINALS_DISH_CATEGORIES.filter(([key])=>(finalsFoodCategories[key]||[]).length>0).map(([key,label])=>(
                       <div key={key} style={{marginBottom:"6px"}}>
                         <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.06em",margin:"8px 0 2px"}}>{label.toUpperCase()}</div>
@@ -628,9 +692,6 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                         placeholder="what are you bringing?"
                         style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px"}}/>
                     )}
-                    <input value={finalsForm.sideNote} onChange={e=>setFinalsForm(f=>({...f,sideNote:e.target.value}))}
-                      placeholder="note about your dish (optional) — e.g. vegan, serves 12, nut allergy"
-                      style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px"}}/>
                   </>
                 )}
 
@@ -673,22 +734,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               </div>
               {finalsMode&&finalsSignups[String(selected.id)]&&(
                 <button onClick={()=>{
-                    const entry=finalsSignups[String(selected.id)];
-                    setFinalsForm({
-                      coming:!!entry.coming,
-                      playing:!!entry.playing,
-                      guests:!!entry.guests,
-                      guestCount:entry.guestCount||1,
-                      guestNote:entry.guestNote||"",
-                      appetizers:entry.appetizers||[],
-                      mains:entry.mains||[],
-                      sides:entry.sides||[],
-                      desserts:entry.desserts||[],
-                      drinks:entry.drinks||[],
-                      otherOn:!!entry.otherSide,
-                      otherSide:entry.otherSide||"",
-                      sideNote:entry.sideNote||"",
-                    });
+                    hydrateFinalsFormFromEntry(finalsSignups[String(selected.id)]);
                     setEditingRsvp(true);
                   }}
                   style={{width:"100%",padding:"9px",background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.accentLight,fontFamily:"Georgia,serif",fontSize:"0.82rem",cursor:"pointer",marginBottom:"12px"}}>
@@ -891,6 +937,7 @@ export default function App() {
     finalsMode={!!appState?.finalsMode}
     finalsSignups={appState?.finalsSignups||{}}
     finalsFoodCategories={appState?.finalsFoodCategories||{appetizers:[],mains:[],sides:appState?.finalsSides||[],desserts:[],drinks:[]}}
+    finalsMenu={appState?.finalsMenu||{}}
     onFinalsSignup={(pid,payload)=>{
       const key=String(pid);
       const newFinalsSignups={...(appState?.finalsSignups||{}),[key]:payload};
@@ -2511,7 +2558,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} recentForm={recentForm} update={update}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} recentForm={recentForm} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -4377,7 +4424,7 @@ function EditableStringList({label, items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, players=[], membershipDues={}, weeklyGames={}, recentForm={}, update}) {
+function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, players=[], membershipDues={}, weeklyGames={}, recentForm={}, update, setTab, onEditRsvp}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
@@ -4395,6 +4442,26 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
   const responded=rows.filter(r=>r.entry);
   const comingCount=responded.filter(r=>r.entry.coming).length;
   const playingCount=responded.filter(r=>r.entry.playing).length;
+
+  const leagueItemClaimant=item=>{
+    const claimant=responded.find(r=>(r.entry.leagueItems||[]).includes(item));
+    return claimant?claimant.player.name:null;
+  };
+  const menuRows=[
+    ...(finalsMenu.mains||[]).map(item=>{
+      const claimant=leagueItemClaimant(item);
+      return {item,category:"Main",bringing:claimant?`${claimant} (league-funded)`:"needs a volunteer",open:!claimant};
+    }),
+    ...(finalsMenu.drinks||[]).map(item=>{
+      const claimant=leagueItemClaimant(item);
+      return {item,category:"Drink",bringing:claimant?`${claimant} (league-funded)`:"needs a volunteer",open:!claimant};
+    }),
+    ...FINALS_DISH_CATEGORIES.flatMap(([key,label])=>(finalsFoodCategories[key]||[]).map(item=>{
+      const claimant=responded.find(r=>(r.entry[key]||[]).includes(item));
+      return {item,category:label.replace(/s$/,""),bringing:claimant?claimant.player.name:"open",open:!claimant};
+    })),
+    ...responded.filter(r=>r.entry.otherSide).map(r=>({item:r.entry.otherSide,category:"Other",bringing:r.player.name,open:false})),
+  ];
   const guestCount=responded.filter(r=>r.entry.coming&&r.entry.guests).reduce((sum,r)=>sum+(r.entry.guestCount||0),0);
   const totalHeadcount=comingCount+guestCount;
 
@@ -4425,9 +4492,9 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             DATE • {cfg.date||"TBD"}<br/>
             LOCATION • {cfg.location||"TBD"}
           </div>
-          <div style={{background:"#7c8c6b",color:"#f0ead6",borderRadius:"30px",padding:"8px 14px",fontSize:"0.7rem",fontWeight:"bold",maxWidth:"150px",textAlign:"center"}}>
-            RSVP RIGHT HERE — LOG IN TO SIGN UP
-          </div>
+          <button onClick={onEditRsvp} style={{background:"#7c8c6b",color:"#f0ead6",border:"none",borderRadius:"30px",padding:"8px 14px",fontSize:"0.7rem",fontWeight:"bold",maxWidth:"150px",textAlign:"center",cursor:"pointer",fontFamily:"Georgia,serif"}}>
+            ✏️ EDIT RSVP
+          </button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1.15fr 1fr",gap:"16px"}}>
           <div>
@@ -4444,23 +4511,34 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             <div style={{background:"#2b4a6b",color:"#e8eef4",borderRadius:"10px",padding:"12px",marginTop:"12px"}}>
               <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"4px"}}>RULES</div>
               <div style={{fontSize:"0.72rem",lineHeight:1.7,fontStyle:"italic"}}>
-                • Standard commish handbook<br/>
-                • If an object impedes your shot or stroke, it may be moved provided it is both smaller and larger than a microwave<br/>
+                • Standard commish <span onClick={()=>setTab&&setTab("rulebook")} style={{textDecoration:"underline",cursor:"pointer"}}>rulebook</span><br/>
                 • Razzing required
               </div>
             </div>
           </div>
           <div style={{background:"#caa06a",borderRadius:"10px",padding:"12px",color:"#3d2b12"}}>
-            <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"4px"}}>FOOD — ON THE LEAGUE</div>
-            <div style={{fontSize:"0.72rem",lineHeight:1.6,marginBottom:"8px"}}>
-              {(finalsMenu.mains||[]).map((m,i)=><div key={"m"+i}>{m}</div>)}
-              {(finalsMenu.drinks||[]).map((d,i)=><div key={"d"+i}>{d}</div>)}
+            <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"8px"}}>MENU</div>
+            <div style={{maxHeight:"220px",overflowY:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.66rem"}}>
+                <thead>
+                  <tr>
+                    <th style={{textAlign:"left",padding:"2px 4px",borderBottom:"1px solid #8a6a3a"}}>Item</th>
+                    <th style={{textAlign:"left",padding:"2px 4px",borderBottom:"1px solid #8a6a3a"}}>Category</th>
+                    <th style={{textAlign:"left",padding:"2px 4px",borderBottom:"1px solid #8a6a3a"}}>Bringing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {menuRows.length===0&&<tr><td colSpan={3} style={{padding:"6px 4px",fontStyle:"italic"}}>Menu coming soon</td></tr>}
+                  {menuRows.map((r,i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid #d8be8a"}}>
+                      <td style={{padding:"3px 4px"}}>{r.item}</td>
+                      <td style={{padding:"3px 4px"}}>{r.category}</td>
+                      <td style={{padding:"3px 4px",fontStyle:r.open?"italic":"normal",color:r.open?"#8a6a3a":"inherit"}}>{r.bringing}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div style={{fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>POTLUCK</div>
-            <div style={{fontSize:"0.72rem",lineHeight:1.6}}>Sign up below when you log in</div>
-            {FINALS_DISH_CATEGORIES.filter(([key])=>(finalsFoodCategories[key]||[]).length>0).map(([key,label])=>(
-              <div key={key} style={{fontSize:"0.68rem",color:"#5c4a2a",marginTop:"4px"}}><strong>{label}:</strong> {finalsFoodCategories[key].join(", ")}</div>
-            ))}
           </div>
         </div>
         <div style={{background:"#c1533f",color:"#fbe9e0",borderRadius:"8px",padding:"10px 14px",fontSize:"0.72rem",fontStyle:"italic",textAlign:"center",marginTop:"14px"}}>
@@ -4480,6 +4558,7 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             {FINALS_DISH_CATEGORIES.filter(([key])=>(entry[key]||[]).length>0).map(([key,label])=>(
               <span key={key} style={{color:C.muted}}> · {label.toLowerCase()}: {entry[key].join(", ")}</span>
             ))}
+            {(entry.leagueItems||[]).length>0&&<span style={{color:C.muted}}> · picking up: {entry.leagueItems.join(", ")}</span>}
             {entry.otherSide&&<span style={{color:C.muted}}> · bringing: {entry.otherSide}</span>}
             {entry.sideNote&&<span style={{color:C.muted,fontStyle:"italic"}}> · "{entry.sideNote}"</span>}
           </div>
