@@ -344,7 +344,8 @@ function Switch({checked, onChange, label, disabled=false}) {
 }
 
 function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsSides=[], onFinalsSignup=()=>{}}) {
-  const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestNote:"", sides:[], otherOn:false, otherSide:""});
+  const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", sides:[], otherOn:false, otherSide:"", sideNote:""});
+  const [editingRsvp, setEditingRsvp] = useState(false);
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
   const [username, setUsername] = useState("");
@@ -466,7 +467,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                   const isWait=waitlistIds.has(pid);
                   const isDeclined=declinedIds.has(pid);
                   return(
-                    <button key={p.id} onClick={()=>setSelected(p)}
+                    <button key={p.id} onClick={()=>{setSelected(p);setEditingRsvp(false);}}
                       style={{padding:"8px 16px",borderRadius:"20px",
                         border:`1px solid ${isIn?C.green:isWait?C.accent:isDeclined?C.red:C.border}`,
                         background:isIn?C.green+"33":isWait?C.accent+"22":isDeclined?C.red+"22":"transparent",
@@ -504,7 +505,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
         )}
 
         {/* CONFIRM OVERLAY */}
-        {selected&&finalsMode&&!finalsSignups[String(selected.id)]&&(()=>{
+        {selected&&finalsMode&&(!finalsSignups[String(selected.id)]||editingRsvp)&&(()=>{
           const elig=finalsPlayEligibility(weeklyGames,membershipDues,selected.id);
           const claimedBy=(sideName)=>{
             const pid=String(selected.id);
@@ -528,15 +529,18 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               coming:finalsForm.coming,
               playing:finalsForm.coming&&elig.canSignUpToPlay&&finalsForm.playing,
               guests:finalsForm.guests,
+              guestCount:finalsForm.guests?Math.max(1,parseInt(finalsForm.guestCount)||1):0,
               guestNote:finalsForm.guests?finalsForm.guestNote.trim():"",
               sides:finalsForm.sides,
               otherSide:finalsForm.otherOn?finalsForm.otherSide.trim():"",
+              sideNote:finalsForm.sideNote.trim(),
               meetsGameMinimum:elig.meetsGameMinimum,
               submittedAt:Date.now(),
             };
             onFinalsSignup(selected.id,payload);
             onLogin({name:selected.name,role:"viewer",id:selected.id});
             setSelected(null);
+            setEditingRsvp(false);
           };
           return (
             <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",zIndex:100,overflowY:"auto"}}>
@@ -564,9 +568,17 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                     )}
                     <Switch label="Bringing guests?" checked={finalsForm.guests} onChange={v=>setFinalsForm(f=>({...f,guests:v}))}/>
                     {finalsForm.guests&&(
-                      <input value={finalsForm.guestNote} onChange={e=>setFinalsForm(f=>({...f,guestNote:e.target.value}))}
-                        placeholder="who is coming with you? e.g. partner, 2 kids"
-                        style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px",marginBottom:"6px"}}/>
+                      <>
+                        <div style={{display:"flex",alignItems:"center",gap:"8px",marginTop:"6px"}}>
+                          <span style={{color:C.muted,fontSize:"0.8rem"}}>How many guests?</span>
+                          <input type="number" min="1" value={finalsForm.guestCount}
+                            onChange={e=>setFinalsForm(f=>({...f,guestCount:Math.max(1,parseInt(e.target.value)||1)}))}
+                            style={{width:"56px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"6px 8px",fontSize:"0.8rem",fontFamily:"Georgia,serif"}}/>
+                        </div>
+                        <input value={finalsForm.guestNote} onChange={e=>setFinalsForm(f=>({...f,guestNote:e.target.value}))}
+                          placeholder="who is coming with you? e.g. partner, 2 kids"
+                          style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px",marginBottom:"6px"}}/>
+                      </>
                     )}
 
                     <div style={{color:C.text,fontSize:"0.85rem",margin:"12px 0 6px"}}>Bringing a side? (pick any)</div>
@@ -591,19 +603,22 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                         placeholder="what are you bringing?"
                         style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px"}}/>
                     )}
+                    <input value={finalsForm.sideNote} onChange={e=>setFinalsForm(f=>({...f,sideNote:e.target.value}))}
+                      placeholder="note about your dish (optional) — e.g. vegan, serves 12, nut allergy"
+                      style={{width:"100%",boxSizing:"border-box",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"8px 10px",fontSize:"0.8rem",fontFamily:"Georgia,serif",marginTop:"6px"}}/>
                   </>
                 )}
 
                 <button onClick={save} style={{width:"100%",marginTop:"18px",padding:"11px",background:`linear-gradient(135deg,${C.accent},${C.accent}bb)`,border:"none",borderRadius:"8px",color:C.bg,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
-                  Save and enter
+                  {editingRsvp?"Save changes":"Save and enter"}
                 </button>
-                <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline",display:"block",width:"100%",textAlign:"center",marginTop:"10px"}}>Back</button>
+                <button onClick={()=>{setSelected(null);setEditingRsvp(false);}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline",display:"block",width:"100%",textAlign:"center",marginTop:"10px"}}>Back</button>
               </div>
             </div>
           );
         })()}
 
-        {selected&&!(finalsMode&&!finalsSignups[String(selected.id)])&&(
+        {selected&&!(finalsMode&&(!finalsSignups[String(selected.id)]||editingRsvp))&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",zIndex:100}}>
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"28px",maxWidth:"320px",width:"100%",textAlign:"center"}}>
               <div style={{fontSize:"1.8rem",marginBottom:"8px"}}>👋</div>
@@ -631,7 +646,27 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                   {signup.open?"Can't make it":"Just browsing"}
                 </button>
               </div>
-              <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline"}}>Back</button>
+              {finalsMode&&finalsSignups[String(selected.id)]&&(
+                <button onClick={()=>{
+                    const entry=finalsSignups[String(selected.id)];
+                    setFinalsForm({
+                      coming:!!entry.coming,
+                      playing:!!entry.playing,
+                      guests:!!entry.guests,
+                      guestCount:entry.guestCount||1,
+                      guestNote:entry.guestNote||"",
+                      sides:entry.sides||[],
+                      otherOn:!!entry.otherSide,
+                      otherSide:entry.otherSide||"",
+                      sideNote:entry.sideNote||"",
+                    });
+                    setEditingRsvp(true);
+                  }}
+                  style={{width:"100%",padding:"9px",background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.accentLight,fontFamily:"Georgia,serif",fontSize:"0.82rem",cursor:"pointer",marginBottom:"12px"}}>
+                  ✏️ Edit my RSVP
+                </button>
+              )}
+              <button onClick={()=>{setSelected(null);setEditingRsvp(false);}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline"}}>Back</button>
             </div>
           </div>
         )}
@@ -4330,6 +4365,8 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
   const responded=rows.filter(r=>r.entry);
   const comingCount=responded.filter(r=>r.entry.coming).length;
   const playingCount=responded.filter(r=>r.entry.playing).length;
+  const guestCount=responded.filter(r=>r.entry.coming&&r.entry.guests).reduce((sum,r)=>sum+(r.entry.guestCount||0),0);
+  const totalHeadcount=comingCount+guestCount;
 
   const playingRows=rows.filter(r=>r.entry?.coming&&r.entry?.playing);
   const tierSorted=[...playingRows].sort((a,b)=>(recentForm[b.player.id]?.rating??ELO_START)-(recentForm[a.player.id]?.rating??ELO_START));
@@ -4401,14 +4438,16 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
 
       {/* RSVP SUMMARY - everyone can see who's in */}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
-        <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"10px"}}>Who's in — {comingCount} coming, {playingCount} playing</div>
+        <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Who's in — {comingCount} coming, {playingCount} playing</div>
+        <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"10px"}}>{comingCount} member{comingCount!==1?"s":""} + {guestCount} guest{guestCount!==1?"s":""} = {totalHeadcount} total</div>
         {responded.length===0&&<div style={{color:C.muted,fontSize:"0.8rem"}}>No RSVPs yet.</div>}
         {responded.map(({player,entry})=>(
           <div key={player.id} style={{padding:"6px 0",borderBottom:`1px solid ${C.border}55`,fontSize:"0.78rem",color:C.text}}>
             <strong>{player.name}</strong> — {entry.coming?"coming":"not coming"}{entry.coming&&(entry.playing?", playing":", not playing")}
-            {entry.guests&&entry.guestNote&&<span style={{color:C.muted}}> · guests: {entry.guestNote}</span>}
+            {entry.guests&&<span style={{color:C.muted}}> · +{entry.guestCount||0} guest{(entry.guestCount||0)!==1?"s":""}{entry.guestNote?`: ${entry.guestNote}`:""}</span>}
             {(entry.sides||[]).length>0&&<span style={{color:C.muted}}> · bringing: {entry.sides.join(", ")}</span>}
             {entry.otherSide&&<span style={{color:C.muted}}> · bringing: {entry.otherSide}</span>}
+            {entry.sideNote&&<span style={{color:C.muted,fontStyle:"italic"}}> · "{entry.sideNote}"</span>}
           </div>
         ))}
       </div>
