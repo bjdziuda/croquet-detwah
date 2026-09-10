@@ -310,6 +310,13 @@ const EMPTY_STATE = {
   finalsSides: [
     "potato salad","coleslaw","baked beans","mac and cheese","corn on the cob","veggie tray","deviled eggs","fruit salad","dessert"
   ],
+  finalsFoodCategories: {
+    appetizers: [],
+    mains: [],
+    sides: ["potato salad","coleslaw","baked beans","mac and cheese","corn on the cob","veggie tray","deviled eggs","fruit salad"],
+    desserts: ["dessert"],
+    drinks: [],
+  },
   finalsMenu: {
     mains: ["Brisket, plus a veggie main for non-meat eaters"],
     drinks: ["Keg of something light"],
@@ -331,6 +338,14 @@ const EMPTY_STATE = {
   },
 };
 
+const FINALS_DISH_CATEGORIES = [
+  ["appetizers","Appetizers"],
+  ["mains","Mains"],
+  ["sides","Sides"],
+  ["desserts","Desserts"],
+  ["drinks","Drinks"],
+];
+
 function Switch({checked, onChange, label, disabled=false}) {
   return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${C.border}`,opacity:disabled?0.55:1}}>
@@ -343,8 +358,8 @@ function Switch({checked, onChange, label, disabled=false}) {
   );
 }
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsSides=[], onFinalsSignup=()=>{}}) {
-  const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", sides:[], otherOn:false, otherSide:"", sideNote:""});
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, onFinalsSignup=()=>{}}) {
+  const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", appetizers:[], mains:[], sides:[], desserts:[], drinks:[], otherOn:false, otherSide:"", sideNote:""});
   const [editingRsvp, setEditingRsvp] = useState(false);
   const [mode, setMode]       = useState("bubbles");
   const [selected, setSelected] = useState(null);
@@ -507,21 +522,22 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
         {/* CONFIRM OVERLAY */}
         {selected&&finalsMode&&(!finalsSignups[String(selected.id)]||editingRsvp)&&(()=>{
           const elig=finalsPlayEligibility(weeklyGames,membershipDues,selected.id);
-          const claimedBy=(sideName)=>{
+          const claimedBy=(category,itemName)=>{
             const pid=String(selected.id);
             for(const [otherId,entry] of Object.entries(finalsSignups||{})){
               if(String(otherId)===pid) continue;
-              if((entry.sides||[]).includes(sideName)){
+              if((entry[category]||[]).includes(itemName)){
                 const p=(players||[]).find(x=>String(x.id)===String(otherId));
                 return p?p.name:"someone";
               }
             }
             return null;
           };
-          const toggleSide=(name)=>{
+          const toggleItem=(category,name)=>{
             setFinalsForm(f=>{
-              const has=f.sides.includes(name);
-              return {...f,sides:has?f.sides.filter(s=>s!==name):[...f.sides,name]};
+              const cur=f[category]||[];
+              const has=cur.includes(name);
+              return {...f,[category]:has?cur.filter(s=>s!==name):[...cur,name]};
             });
           };
           const save=()=>{
@@ -531,7 +547,11 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               guests:finalsForm.guests,
               guestCount:finalsForm.guests?Math.max(1,parseInt(finalsForm.guestCount)||1):0,
               guestNote:finalsForm.guests?finalsForm.guestNote.trim():"",
+              appetizers:finalsForm.appetizers,
+              mains:finalsForm.mains,
               sides:finalsForm.sides,
+              desserts:finalsForm.desserts,
+              drinks:finalsForm.drinks,
               otherSide:finalsForm.otherOn?finalsForm.otherSide.trim():"",
               sideNote:finalsForm.sideNote.trim(),
               meetsGameMinimum:elig.meetsGameMinimum,
@@ -581,20 +601,25 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                       </>
                     )}
 
-                    <div style={{color:C.text,fontSize:"0.85rem",margin:"12px 0 6px"}}>Bringing a side? (pick any)</div>
-                    {finalsSides.map(sideName=>{
-                      const lockedBy=claimedBy(sideName);
-                      if(lockedBy) return (
-                        <div key={sideName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.muted}}>
-                          🔒 {sideName} — taken by {lockedBy}
-                        </div>
-                      );
-                      return (
-                        <label key={sideName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.text,cursor:"pointer"}}>
-                          <input type="checkbox" checked={finalsForm.sides.includes(sideName)} onChange={()=>toggleSide(sideName)}/> {sideName}
-                        </label>
-                      );
-                    })}
+                    <div style={{color:C.text,fontSize:"0.85rem",margin:"12px 0 2px"}}>Bringing something? (pick any)</div>
+                    {FINALS_DISH_CATEGORIES.filter(([key])=>(finalsFoodCategories[key]||[]).length>0).map(([key,label])=>(
+                      <div key={key} style={{marginBottom:"6px"}}>
+                        <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.06em",margin:"8px 0 2px"}}>{label.toUpperCase()}</div>
+                        {finalsFoodCategories[key].map(itemName=>{
+                          const lockedBy=claimedBy(key,itemName);
+                          if(lockedBy) return (
+                            <div key={itemName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.muted}}>
+                              🔒 {itemName} — taken by {lockedBy}
+                            </div>
+                          );
+                          return (
+                            <label key={itemName} style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.text,cursor:"pointer"}}>
+                              <input type="checkbox" checked={(finalsForm[key]||[]).includes(itemName)} onChange={()=>toggleItem(key,itemName)}/> {itemName}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ))}
                     <label style={{display:"flex",alignItems:"center",gap:"8px",padding:"4px 0",fontSize:"0.8rem",color:C.text,cursor:"pointer"}}>
                       <input type="checkbox" checked={finalsForm.otherOn} onChange={e=>setFinalsForm(f=>({...f,otherOn:e.target.checked}))}/> something else
                     </label>
@@ -655,7 +680,11 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                       guests:!!entry.guests,
                       guestCount:entry.guestCount||1,
                       guestNote:entry.guestNote||"",
+                      appetizers:entry.appetizers||[],
+                      mains:entry.mains||[],
                       sides:entry.sides||[],
+                      desserts:entry.desserts||[],
+                      drinks:entry.drinks||[],
                       otherOn:!!entry.otherSide,
                       otherSide:entry.otherSide||"",
                       sideNote:entry.sideNote||"",
@@ -861,7 +890,7 @@ export default function App() {
     weekVenues={appState?.weekVenues||{}}
     finalsMode={!!appState?.finalsMode}
     finalsSignups={appState?.finalsSignups||{}}
-    finalsSides={appState?.finalsSides||[]}
+    finalsFoodCategories={appState?.finalsFoodCategories||{appetizers:[],mains:[],sides:appState?.finalsSides||[],desserts:[],drinks:[]}}
     onFinalsSignup={(pid,payload)=>{
       const key=String(pid);
       const newFinalsSignups={...(appState?.finalsSignups||{}),[key]:payload};
@@ -875,6 +904,7 @@ export default function App() {
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
   const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}} = appState;
+  const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
   const [tab, setTab]               = useState("standings");
@@ -2481,7 +2511,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsSides={finalsSides} finalsMenu={finalsMenu} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} recentForm={recentForm} update={update}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} recentForm={recentForm} update={update}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -4347,7 +4377,7 @@ function EditableStringList({label, items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, players=[], membershipDues={}, weeklyGames={}, recentForm={}, update}) {
+function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, players=[], membershipDues={}, weeklyGames={}, recentForm={}, update}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
@@ -4426,9 +4456,11 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
               {(finalsMenu.mains||[]).map((m,i)=><div key={"m"+i}>{m}</div>)}
               {(finalsMenu.drinks||[]).map((d,i)=><div key={"d"+i}>{d}</div>)}
             </div>
-            <div style={{fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>SIDES</div>
+            <div style={{fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>POTLUCK</div>
             <div style={{fontSize:"0.72rem",lineHeight:1.6}}>Sign up below when you log in</div>
-            {finalsSides.length>0&&<div style={{fontSize:"0.68rem",color:"#5c4a2a",marginTop:"4px"}}>{finalsSides.join(", ")}</div>}
+            {FINALS_DISH_CATEGORIES.filter(([key])=>(finalsFoodCategories[key]||[]).length>0).map(([key,label])=>(
+              <div key={key} style={{fontSize:"0.68rem",color:"#5c4a2a",marginTop:"4px"}}><strong>{label}:</strong> {finalsFoodCategories[key].join(", ")}</div>
+            ))}
           </div>
         </div>
         <div style={{background:"#c1533f",color:"#fbe9e0",borderRadius:"8px",padding:"10px 14px",fontSize:"0.72rem",fontStyle:"italic",textAlign:"center",marginTop:"14px"}}>
@@ -4445,7 +4477,9 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
           <div key={player.id} style={{padding:"6px 0",borderBottom:`1px solid ${C.border}55`,fontSize:"0.78rem",color:C.text}}>
             <strong>{player.name}</strong> — {entry.coming?"coming":"not coming"}{entry.coming&&(entry.playing?", playing":", not playing")}
             {entry.guests&&<span style={{color:C.muted}}> · +{entry.guestCount||0} guest{(entry.guestCount||0)!==1?"s":""}{entry.guestNote?`: ${entry.guestNote}`:""}</span>}
-            {(entry.sides||[]).length>0&&<span style={{color:C.muted}}> · bringing: {entry.sides.join(", ")}</span>}
+            {FINALS_DISH_CATEGORIES.filter(([key])=>(entry[key]||[]).length>0).map(([key,label])=>(
+              <span key={key} style={{color:C.muted}}> · {label.toLowerCase()}: {entry[key].join(", ")}</span>
+            ))}
             {entry.otherSide&&<span style={{color:C.muted}}> · bringing: {entry.otherSide}</span>}
             {entry.sideNote&&<span style={{color:C.muted,fontStyle:"italic"}}> · "{entry.sideNote}"</span>}
           </div>
@@ -4510,10 +4544,14 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             <div><label style={lbSt}>FINALS SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.finalsSize} onChange={e=>saveCfg({finalsSize:Math.max(0,parseInt(e.target.value)||0)})}/></div>
           </div>
 
-          <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Menu</div>
+          <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Menu — provided by the league</div>
           <EditableStringList label="MAINS" items={finalsMenu.mains||[]} onChange={next=>update({finalsMenu:{...finalsMenu,mains:next}})}/>
           <EditableStringList label="DRINKS" items={finalsMenu.drinks||[]} onChange={next=>update({finalsMenu:{...finalsMenu,drinks:next}})}/>
-          <EditableStringList label="SIDES (also shown as sign-up choices at login)" items={finalsSides} onChange={next=>update({finalsSides:next})}/>
+
+          <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Potluck — sign-up choices at login</div>
+          {FINALS_DISH_CATEGORIES.map(([key,label])=>(
+            <EditableStringList key={key} label={label.toUpperCase()} items={finalsFoodCategories[key]||[]} onChange={next=>update({finalsFoodCategories:{...finalsFoodCategories,[key]:next}})}/>
+          ))}
 
           <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Eligibility check</div>
           <div style={{maxHeight:"260px",overflowY:"auto"}}>
