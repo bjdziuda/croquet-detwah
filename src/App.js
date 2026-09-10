@@ -598,8 +598,8 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
             setEditingRsvp(false);
           };
           return (
-            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",zIndex:100,overflowY:"auto"}}>
-              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"24px",maxWidth:"360px",width:"100%",margin:"20px 0"}}>
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px",zIndex:100,overflowY:"auto"}}>
+              <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"24px",maxWidth:"360px",width:"100%",margin:"20px auto"}}>
                 <div style={{color:C.accentLight,fontSize:"1rem",fontWeight:"bold",marginBottom:"4px",textAlign:"center"}}>Hey {selected.name}!</div>
                 <div style={{color:C.muted,fontSize:"0.82rem",marginBottom:"16px",textAlign:"center"}}>Let's get you set for the championship finals</div>
 
@@ -705,8 +705,8 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
         })()}
 
         {selected&&!(finalsMode&&(!finalsSignups[String(selected.id)]||editingRsvp))&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",zIndex:100}}>
-            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"28px",maxWidth:"320px",width:"100%",textAlign:"center"}}>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px",zIndex:100,overflowY:"auto"}}>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"28px",maxWidth:"320px",width:"100%",textAlign:"center",margin:"20px auto"}}>
               <div style={{fontSize:"1.8rem",marginBottom:"8px"}}>👋</div>
               <div style={{color:C.cream,fontSize:"1.1rem",fontWeight:"bold",marginBottom:"6px"}}>Hey {selected.name}!</div>
               <div style={{color:C.muted,fontSize:"0.88rem",marginBottom:groupsForDisplay&&signup.open?"8px":"24px"}}>
