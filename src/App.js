@@ -950,7 +950,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -2558,7 +2558,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -4424,8 +4424,8 @@ function EditableStringList({label, items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
-  const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,...finalsConfig});
+function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
+  const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
   const saveCfg=(patch)=>{
@@ -4484,6 +4484,41 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
       idx+=size;
     }
   }
+  const heat1ResultOf=pid=>{
+    const v=finalsHeat1Results[String(pid)];
+    return typeof v==="number"?v:null;
+  };
+  const setHeat1Result=(pid,val)=>{
+    const key=String(pid);
+    const next={...finalsHeat1Results};
+    if(val==="") delete next[key]; else next[key]=Math.max(1,parseInt(val)||1);
+    update({finalsHeat1Results:next});
+  };
+  const allHeat1ResultsIn=heat1Groups.length>0&&heat1Groups.every(grp=>grp.every(r=>heat1ResultOf(r.player.id)!=null));
+  const heat2PromoteCount=Math.max(0,parseInt(cfg.heat2PromoteCount)||0);
+  // Rank each Heat 1 tier by finish position (lower=better); missing results fall back to season elo
+  const heat1Ranked=heat1Groups.map(grp=>[...grp].sort((a,b)=>{
+    const pa=heat1ResultOf(a.player.id), pb=heat1ResultOf(b.player.id);
+    if(pa==null&&pb==null) return seasonElo(b.player.id)-seasonElo(a.player.id);
+    if(pa==null) return 1;
+    if(pb==null) return -1;
+    return pa-pb;
+  }));
+  // Promotion/relegation: top N of each tier move up a tier, bottom N move down a tier
+  // (top of the top tier and bottom of the bottom tier have nowhere to go, so they stay put)
+  const heat2Groups=heat1Ranked.map(()=>[]);
+  const numTiers=heat1Ranked.length;
+  heat1Ranked.forEach((grp,i)=>{
+    const n=Math.min(heat2PromoteCount,Math.floor(grp.length/2));
+    const topN=n>0?grp.slice(0,n):[];
+    const bottomN=n>0?grp.slice(grp.length-n):[];
+    const middle=n>0?grp.slice(n,grp.length-n):grp;
+    const promoteTarget=i>0?i-1:i;
+    const relegateTarget=i<numTiers-1?i+1:i;
+    heat2Groups[promoteTarget].push(...topN);
+    heat2Groups[relegateTarget].push(...bottomN);
+    heat2Groups[i].push(...middle);
+  });
   const stageBoxSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px",textAlign:"center"};
   const stageTitleSt={color:C.text,fontSize:"0.74rem",fontWeight:"bold",marginBottom:"4px"};
   const stageSubSt={color:C.muted,fontSize:"0.66rem"};
@@ -4532,27 +4567,25 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
           </div>
           <div style={{background:"#caa06a",borderRadius:"10px",padding:"12px",color:"#3d2b12"}}>
             <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"8px"}}>MENU</div>
-            <div style={{maxHeight:"220px",overflowY:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.66rem"}}>
-                <thead>
-                  <tr>
-                    <th style={{textAlign:"left",padding:"2px 4px",borderBottom:"1px solid #8a6a3a"}}>Item</th>
-                    <th style={{textAlign:"left",padding:"2px 4px",borderBottom:"1px solid #8a6a3a"}}>Category</th>
-                    <th style={{textAlign:"left",padding:"2px 4px",borderBottom:"1px solid #8a6a3a"}}>Bringing</th>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.74rem"}}>
+              <thead>
+                <tr>
+                  <th style={{textAlign:"left",padding:"4px 5px",borderBottom:"2px solid #8a6a3a"}}>Item</th>
+                  <th style={{textAlign:"left",padding:"4px 5px",borderBottom:"2px solid #8a6a3a"}}>Category</th>
+                  <th style={{textAlign:"left",padding:"4px 5px",borderBottom:"2px solid #8a6a3a"}}>Bringing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {menuRows.length===0&&<tr><td colSpan={3} style={{padding:"8px 5px",fontStyle:"italic"}}>Menu coming soon</td></tr>}
+                {menuRows.map((r,i)=>(
+                  <tr key={i} style={{borderBottom:"1px solid #d8be8a"}}>
+                    <td style={{padding:"5px"}}>{r.item}</td>
+                    <td style={{padding:"5px"}}>{r.category}</td>
+                    <td style={{padding:"5px",fontWeight:r.open?"bold":"normal",fontStyle:r.open?"italic":"normal",color:r.open?"#8a6a3a":"inherit"}}>{r.bringing}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {menuRows.length===0&&<tr><td colSpan={3} style={{padding:"6px 4px",fontStyle:"italic"}}>Menu coming soon</td></tr>}
-                  {menuRows.map((r,i)=>(
-                    <tr key={i} style={{borderBottom:"1px solid #d8be8a"}}>
-                      <td style={{padding:"3px 4px"}}>{r.item}</td>
-                      <td style={{padding:"3px 4px"}}>{r.category}</td>
-                      <td style={{padding:"3px 4px",fontStyle:r.open?"italic":"normal",color:r.open?"#8a6a3a":"inherit"}}>{r.bringing}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
         <div style={{background:"#c1533f",color:"#fbe9e0",borderRadius:"8px",padding:"10px 14px",fontSize:"0.72rem",fontStyle:"italic",textAlign:"center",marginTop:"14px"}}>
@@ -4602,17 +4635,26 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
         <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Bracket progression</div>
         <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"14px"}}>Heat 1 &amp; 2 tiers update live as people sign up. The stages below explain how the field narrows down to the Finals — no results yet.</div>
 
-        {/* Stage 1: Heat 1 & 2 tiers, by season elo */}
-        <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 &amp; 2 — {tierSorted.length} signed up, tiered by season elo into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize}</div>
+        {/* Stage 1: Heat 1 tiers, by season elo */}
+        <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 — {tierSorted.length} signed up, tiered by season elo into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize}</div>
         {heat1Groups.length===0&&<div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"8px"}}>No one signed up to play yet.</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:"8px",marginBottom:"10px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"8px",marginBottom:"10px"}}>
           {heat1Groups.map((grp,gi)=>(
             <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
               <div style={{color:C.blue,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER {gi+1}</div>
               {grp.map(r=>(
-                <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:C.text,padding:"2px 0"}}>
+                <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.74rem",color:C.text,padding:"2px 0",gap:"6px"}}>
                   <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
-                  <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
+                    <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                    {isAdmin?(
+                      <input type="number" min="1" placeholder="pos" value={heat1ResultOf(r.player.id)??""}
+                        onChange={e=>setHeat1Result(r.player.id,e.target.value)}
+                        style={{width:"34px",background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
+                    ):(
+                      heat1ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.66rem",fontWeight:"bold"}}>#{heat1ResultOf(r.player.id)}</span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -4621,6 +4663,31 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
         {tierSorted.some(r=>!r.elig.meetsGameMinimum)&&(
           <div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>* under 2 rounds played this season — can play heats 1 &amp; 2, cut before heat 3</div>
         )}
+        {isAdmin&&<div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>Enter each player's Heat 1 finish position (1 = best) to drive Heat 2 promotion/relegation below.</div>}
+
+        <div style={arrowSt}>↓</div>
+
+        {/* Stage 1.5: Heat 2 tiers, promoted/relegated from Heat 1 results */}
+        <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>Heat 2 — top &amp; bottom {heat2PromoteCount} from each Heat 1 tier swap with the tier above/below</div>
+        <div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"8px"}}>{allHeat1ResultsIn?"Based on Heat 1 finish positions.":"Preview — uses season elo for anyone missing a Heat 1 result."}</div>
+        {heat2Groups.length===0&&<div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"8px"}}>No one signed up to play yet.</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"8px",marginBottom:"10px"}}>
+          {heat2Groups.map((grp,gi)=>(
+            <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
+              <div style={{color:C.greenLight,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER {gi+1}</div>
+              {grp.map(r=>{
+                const originalTier=heat1Ranked.findIndex(g=>g.includes(r));
+                const moved=originalTier!==gi;
+                return (
+                  <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:C.text,padding:"2px 0"}}>
+                    <span>{r.player.name}{moved&&<span style={{color:originalTier>gi?C.greenLight:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>{originalTier>gi?"↑":"↓"}</span>}</span>
+                    <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
 
         <div style={arrowSt}>↓</div>
 
@@ -4662,7 +4729,11 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             <div><label style={lbSt}>HEAT 3 CAP</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat3Cap} onChange={e=>saveCfg({heat3Cap:Math.max(0,parseInt(e.target.value)||0)})}/></div>
             <div><label style={lbSt}>FINALS SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.finalsSize} onChange={e=>saveCfg({finalsSize:Math.max(0,parseInt(e.target.value)||0)})}/></div>
             <div><label style={lbSt}>HEAT 1 GROUP SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat1GroupSize} onChange={e=>saveCfg({heat1GroupSize:Math.max(2,parseInt(e.target.value)||2)})}/></div>
+            <div><label style={lbSt}>HEAT 2 PROMOTE/RELEGATE COUNT</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat2PromoteCount} onChange={e=>saveCfg({heat2PromoteCount:Math.max(0,parseInt(e.target.value)||0)})}/></div>
           </div>
+          {Object.keys(finalsHeat1Results).length>0&&(
+            <button onClick={()=>update({finalsHeat1Results:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem",marginTop:"10px"}}>Clear all Heat 1 results</button>
+          )}
 
           <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Menu — provided by the league</div>
           <EditableStringList label="MAINS" items={finalsMenu.mains||[]} onChange={next=>update({finalsMenu:{...finalsMenu,mains:next}})}/>
