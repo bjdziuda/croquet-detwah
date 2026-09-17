@@ -4425,7 +4425,7 @@ function EditableStringList({label, items=[], onChange}) {
 }
 
 function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, players=[], membershipDues={}, weeklyGames={}, recentForm={}, update, setTab, onEditRsvp}) {
-  const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,...finalsConfig});
+  const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
   const saveCfg=(patch)=>{
@@ -4442,6 +4442,9 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
   const responded=rows.filter(r=>r.entry);
   const comingCount=responded.filter(r=>r.entry.coming).length;
   const playingCount=responded.filter(r=>r.entry.playing).length;
+  const attendingRows=responded.filter(r=>r.entry.coming);
+  const notAttendingRows=responded.filter(r=>!r.entry.coming);
+  const noResponseRows=rows.filter(r=>!r.entry);
 
   const leagueItemClaimant=item=>{
     const claimant=responded.find(r=>(r.entry.leagueItems||[]).includes(item));
@@ -4467,13 +4470,23 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
 
   const playingRows=rows.filter(r=>r.entry?.coming&&r.entry?.playing);
   const tierSorted=[...playingRows].sort((a,b)=>(recentForm[b.player.id]?.rating??ELO_START)-(recentForm[a.player.id]?.rating??ELO_START));
-  const tierMid=Math.ceil(tierSorted.length/2);
-  const tierA=tierSorted.slice(0,tierMid);
-  const tierB=tierSorted.slice(tierMid);
-  const heat3FieldSize=Math.max(0,tierSorted.length-cfg.autoQualifyCount);
+  const heat1GroupSize=Math.max(2,parseInt(cfg.heat1GroupSize)||4);
+  const heat1NumGroups=tierSorted.length>0?Math.max(1,Math.ceil(tierSorted.length/heat1GroupSize)):0;
+  const heat1Groups=Array.from({length:heat1NumGroups},()=>[]);
+  // Snake draft by Elo so total strength is balanced across the smaller groups
+  tierSorted.forEach((r,idx)=>{
+    const cycle=Math.floor(idx/heat1NumGroups);
+    const g=cycle%2===0?idx%heat1NumGroups:heat1NumGroups-1-(idx%heat1NumGroups);
+    heat1Groups[g].push(r);
+  });
+  const autoQualifiers=tierSorted.slice(0,Math.min(cfg.autoQualifyCount,tierSorted.length));
+  const heat3Field=tierSorted.slice(cfg.autoQualifyCount);
+  const heat3FieldSize=heat3Field.length;
+  const finalsSlotsFromHeat3=Math.max(0,cfg.finalsSize-autoQualifiers.length);
   const stageBoxSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px",textAlign:"center"};
   const stageTitleSt={color:C.text,fontSize:"0.74rem",fontWeight:"bold",marginBottom:"4px"};
   const stageSubSt={color:C.muted,fontSize:"0.66rem"};
+  const arrowSt={textAlign:"center",color:C.muted,fontSize:"1rem",margin:"4px 0"};
 
   const iSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",outline:"none"};
   const lbSt={color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",display:"block",marginBottom:"4px"};
@@ -4549,11 +4562,13 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
       {/* RSVP SUMMARY - everyone can see who's in */}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
         <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Who's in — {comingCount} coming, {playingCount} playing</div>
-        <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"10px"}}>{comingCount} member{comingCount!==1?"s":""} + {guestCount} guest{guestCount!==1?"s":""} = {totalHeadcount} total</div>
-        {responded.length===0&&<div style={{color:C.muted,fontSize:"0.8rem"}}>No RSVPs yet.</div>}
-        {responded.map(({player,entry})=>(
+        <div style={{color:C.muted,fontSize:"0.72rem",marginBottom:"12px"}}>{comingCount} member{comingCount!==1?"s":""} + {guestCount} guest{guestCount!==1?"s":""} = {totalHeadcount} total</div>
+
+        <div style={{color:C.greenLight,fontSize:"0.7rem",fontWeight:"bold",letterSpacing:"0.06em",margin:"6px 0"}}>✅ ATTENDING ({attendingRows.length})</div>
+        {attendingRows.length===0&&<div style={{color:C.muted,fontSize:"0.78rem",marginBottom:"6px"}}>No one yet.</div>}
+        {attendingRows.map(({player,entry})=>(
           <div key={player.id} style={{padding:"6px 0",borderBottom:`1px solid ${C.border}55`,fontSize:"0.78rem",color:C.text}}>
-            <strong>{player.name}</strong> — {entry.coming?"coming":"not coming"}{entry.coming&&(entry.playing?", playing":", not playing")}
+            <strong>{player.name}</strong> — {entry.playing?"playing":"not playing"}
             {entry.guests&&<span style={{color:C.muted}}> · +{entry.guestCount||0} guest{(entry.guestCount||0)!==1?"s":""}{entry.guestNote?`: ${entry.guestNote}`:""}</span>}
             {FINALS_DISH_CATEGORIES.filter(([key])=>(entry[key]||[]).length>0).map(([key,label])=>(
               <span key={key} style={{color:C.muted}}> · {label.toLowerCase()}: {entry[key].join(", ")}</span>
@@ -4563,51 +4578,90 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             {entry.sideNote&&<span style={{color:C.muted,fontStyle:"italic"}}> · "{entry.sideNote}"</span>}
           </div>
         ))}
+
+        <div style={{color:C.red,fontSize:"0.7rem",fontWeight:"bold",letterSpacing:"0.06em",margin:"14px 0 6px"}}>❌ NOT ATTENDING ({notAttendingRows.length})</div>
+        {notAttendingRows.length===0&&<div style={{color:C.muted,fontSize:"0.78rem"}}>—</div>}
+        {notAttendingRows.map(({player})=>(
+          <div key={player.id} style={{padding:"4px 0",borderBottom:`1px solid ${C.border}55`,fontSize:"0.78rem",color:C.muted}}>{player.name}</div>
+        ))}
+
+        <div style={{color:C.accentLight,fontSize:"0.7rem",fontWeight:"bold",letterSpacing:"0.06em",margin:"14px 0 6px"}}>⏳ HAVEN'T RSVP'D ({noResponseRows.length})</div>
+        {noResponseRows.length===0
+          ?<div style={{color:C.muted,fontSize:"0.78rem"}}>Everyone has responded!</div>
+          :<div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+            {noResponseRows.map(({player})=>(
+              <span key={player.id} style={{background:C.accent+"15",border:`1px solid ${C.accent}44`,color:C.accentLight,borderRadius:"12px",padding:"2px 10px",fontSize:"0.75rem"}}>{player.name}</span>
+            ))}
+          </div>
+        }
       </div>
 
       {/* BRACKET PROGRESSION - live */}
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
         <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Bracket progression</div>
-        <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"12px"}}>Live preview — updates automatically as people sign up to play and elo shifts week to week.</div>
+        <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"14px"}}>Live preview — updates automatically as people sign up to play and elo shifts week to week.</div>
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px",marginBottom:"14px"}}>
-          <div style={stageBoxSt}><div style={stageTitleSt}>Heat 1 &amp; 2</div><div style={stageSubSt}>{tierSorted.length} signed up to play</div></div>
-          <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Heat 1 + heat 2 points</div></div>
-          <div style={stageBoxSt}><div style={stageTitleSt}>Auto-qualify</div><div style={stageSubSt}>Top {cfg.autoQualifyCount}</div></div>
-          <div style={stageBoxSt}><div style={stageTitleSt}>Heat 3 decider</div><div style={{...stageSubSt,color:heat3FieldSize>cfg.heat3Cap?C.red:stageSubSt.color}}>{heat3FieldSize} would play</div></div>
+        {/* Stage 1: Heat 1 & 2 groups */}
+        <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 &amp; 2 — {tierSorted.length} signed up, split into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize}</div>
+        {heat1Groups.length===0&&<div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"8px"}}>No one signed up to play yet.</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:"8px",marginBottom:"10px"}}>
+          {heat1Groups.map((grp,gi)=>(
+            <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
+              <div style={{color:C.blue,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>GROUP {gi+1}</div>
+              {grp.map(r=>(
+                <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:C.text,padding:"2px 0"}}>
+                  <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
+                  <span style={{color:C.muted}}>{Math.round(recentForm[r.player.id]?.rating??ELO_START)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        {tierSorted.some(r=>!r.elig.meetsGameMinimum)&&(
+          <div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>* under 2 rounds played this season — can play heats 1 &amp; 2, cut before heat 3</div>
+        )}
+
+        <div style={arrowSt}>↓</div>
+
+        {/* Stage 2: Combined rank */}
+        <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Ranked by heat 1 + heat 2 points</div></div>
+
+        <div style={arrowSt}>↓</div>
+
+        {/* Stage 3: splits into auto-qualify vs heat 3 */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"6px"}}>
+          <div style={{...stageBoxSt,background:C.green+"15",borderColor:C.green+"44",textAlign:"left"}}>
+            <div style={{...stageTitleSt,color:C.greenLight,textAlign:"center"}}>Auto-qualify — top {cfg.autoQualifyCount}</div>
+            {autoQualifiers.length===0&&<div style={{color:C.muted,fontSize:"0.72rem",textAlign:"center"}}>No one yet</div>}
+            {autoQualifiers.map(r=>(
+              <div key={r.player.id} style={{fontSize:"0.72rem",color:C.text,padding:"2px 0"}}>{r.player.name}</div>
+            ))}
+          </div>
+          <div style={{...stageBoxSt,background:C.blue+"15",borderColor:C.blue+"44",textAlign:"left"}}>
+            <div style={{...stageTitleSt,color:C.blue,textAlign:"center"}}>Heat 3 decider — {heat3FieldSize} would play</div>
+            {heat3Field.length===0&&<div style={{color:C.muted,fontSize:"0.72rem",textAlign:"center"}}>No one yet</div>}
+            {heat3Field.map(r=>(
+              <div key={r.player.id} style={{fontSize:"0.72rem",color:C.text,padding:"2px 0"}}>{r.player.name}</div>
+            ))}
+          </div>
         </div>
         {heat3FieldSize>cfg.heat3Cap&&(
-          <div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"8px",padding:"8px 10px",fontSize:"0.72rem",color:C.red,marginBottom:"14px"}}>
+          <div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"8px",padding:"8px 10px",fontSize:"0.72rem",color:C.red,marginBottom:"10px"}}>
             Heat 3 field ({heat3FieldSize}) is over the {cfg.heat3Cap} cap right now — tighten auto-qualify or double check headcount before finals day.
           </div>
         )}
 
-        <div style={{color:C.text,fontSize:"0.8rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 tiers, right now</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
-          <div>
-            <div style={{color:C.greenLight,fontSize:"0.68rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER A — TOP HALF BY ELO</div>
-            {tierA.length===0&&<div style={{color:C.muted,fontSize:"0.76rem"}}>No one signed up to play yet.</div>}
-            {tierA.map(r=>(
-              <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.76rem",color:C.text,padding:"3px 0",borderBottom:`1px solid ${C.border}55`}}>
-                <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
-                <span style={{color:C.muted}}>{Math.round(recentForm[r.player.id]?.rating??ELO_START)}</span>
-              </div>
-            ))}
-          </div>
-          <div>
-            <div style={{color:C.blue,fontSize:"0.68rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER B — BOTTOM HALF BY ELO</div>
-            {tierB.length===0&&<div style={{color:C.muted,fontSize:"0.76rem"}}>—</div>}
-            {tierB.map(r=>(
-              <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.76rem",color:C.text,padding:"3px 0",borderBottom:`1px solid ${C.border}55`}}>
-                <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
-                <span style={{color:C.muted}}>{Math.round(recentForm[r.player.id]?.rating??ELO_START)}</span>
-              </div>
-            ))}
-          </div>
+        <div style={arrowSt}>↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; top {finalsSlotsFromHeat3} from heat 3 ↓</div>
+
+        {/* Stage 4: Finals */}
+        <div style={{...stageBoxSt,background:C.accent+"15",borderColor:C.accent+"44",textAlign:"left"}}>
+          <div style={{...stageTitleSt,color:C.accentLight,textAlign:"center"}}>Finals — {cfg.finalsSize} spots</div>
+          <div style={{fontSize:"0.72rem",color:C.text,textAlign:"center",marginBottom:"6px"}}>{autoQualifiers.length} auto-qualified + {finalsSlotsFromHeat3} from heat 3</div>
+          {autoQualifiers.map(r=>(
+            <div key={r.player.id} style={{fontSize:"0.72rem",color:C.text,padding:"2px 0"}}>{r.player.name}</div>
+          ))}
+          {finalsSlotsFromHeat3>0&&<div style={{fontSize:"0.72rem",color:C.muted,fontStyle:"italic",padding:"2px 0"}}>+ {finalsSlotsFromHeat3} slot{finalsSlotsFromHeat3!==1?"s":""} TBD from heat 3</div>}
         </div>
-        {tierSorted.some(r=>!r.elig.meetsGameMinimum)&&(
-          <div style={{color:C.muted,fontSize:"0.66rem",marginTop:"8px"}}>* under 2 rounds played this season — can play heats 1 &amp; 2, cut before heat 3</div>
-        )}
       </div>
 
       {/* ADMIN CONTROLS */}
@@ -4621,6 +4675,7 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             <div><label style={lbSt}>AUTO-QUALIFY COUNT</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.autoQualifyCount} onChange={e=>saveCfg({autoQualifyCount:Math.max(0,parseInt(e.target.value)||0)})}/></div>
             <div><label style={lbSt}>HEAT 3 CAP</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat3Cap} onChange={e=>saveCfg({heat3Cap:Math.max(0,parseInt(e.target.value)||0)})}/></div>
             <div><label style={lbSt}>FINALS SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.finalsSize} onChange={e=>saveCfg({finalsSize:Math.max(0,parseInt(e.target.value)||0)})}/></div>
+            <div><label style={lbSt}>HEAT 1 GROUP SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat1GroupSize} onChange={e=>saveCfg({heat1GroupSize:Math.max(2,parseInt(e.target.value)||2)})}/></div>
           </div>
 
           <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Menu — provided by the league</div>
