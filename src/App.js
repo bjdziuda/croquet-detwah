@@ -1085,7 +1085,6 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const mvpSeries=weeklyMvpSeries(p.id,weeklyGames);
       const consistency=weeksAttended>=MIN_WEEKS_FOR_AWARDS?stdev(mvpSeries):null;
       const improvement=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-ELO_START:null;
-      // Anomaly: biggest single-week swing away from a player's own season-average MVP%.
       const mvpByWeek=[];
       Object.entries(weeklyGames[p.id]||{}).forEach(([w,gs])=>{
         if(!gs.some(g=>!g.absent)) return;
@@ -1094,14 +1093,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
         if(wmax>0) mvpByWeek.push({week:parseInt(w),mvp:(wpts/wmax)*100});
       });
       const avgMvp=mvpByWeek.length?mvpByWeek.reduce((s,x)=>s+x.mvp,0)/mvpByWeek.length:null;
-      let anomalyGap=null,anomalyWeek=null,anomalyDirection=null;
-      if(mvpByWeek.length>=MIN_WEEKS_FOR_AWARDS){
-        mvpByWeek.forEach(x=>{
-          const gap=Math.abs(x.mvp-avgMvp);
-          if(anomalyGap===null||gap>anomalyGap){anomalyGap=gap;anomalyWeek=x.week;anomalyDirection=x.mvp>avgMvp?"up":"down";}
-        });
-      }
-      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,consistency,improvement,avgMvp,anomalyGap,anomalyWeek,anomalyDirection};
+      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,consistency,improvement,avgMvp};
     }).sort((a,b)=>b.pts-a.pts);
     const consistCands=rows.filter(p=>p.consistency!=null);
     const mostConsistentId=consistCands.length?consistCands.reduce((best,p)=>p.consistency<best.consistency?p:best).id:null;
@@ -1951,7 +1943,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               {isAdmin&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"6px 10px",fontSize:"0.72rem"}}>+Wk</button>}
               {isAdmin&&<div style={{display:"flex",gap:"4px",alignItems:"center"}}>
                 <select value={appState.nextMatchWeek||1} onChange={e=>update({nextMatchWeek:parseInt(e.target.value)})} style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:"6px",color:C.accent,padding:"4px 6px",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
-                  {Array.from({length:20},(_,i)=>i+1).map(w=><option key={w} value={w}>Wk {w}</option>)}
+                  {Array.from({length:Math.max(20,totalWeeks+2)},(_,i)=>i+1).map(w=><option key={w} value={w}>Wk {w}</option>)}
                 </select>
                 <select value={appState.nextVenueId||""} onChange={e=>update({nextVenueId:e.target.value?parseInt(e.target.value):null})} style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:"6px",color:C.accent,padding:"4px 6px",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
                   <option value="">📍 Set venue</option>
@@ -3050,36 +3042,45 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             {(()=>{
               // Builds a winner + up to 3 runners-up list from a pre-sorted candidate array,
               // tagging consecutive ties (equal value to the entry above) so ties are visible
-              // rather than looking like an arbitrary ranking.
-              const buildAwardList=(cands,valueFn,detailFn)=>cands.slice(0,4).map((c,i)=>({
-                name:c.name+(i>0&&valueFn(c)===valueFn(cands[i-1])?" (tie)":""),
-                detail:detailFn(c)
-              }));
-              const consistCands=[...standings.filter(p=>p.consistency!=null)].sort((a,b)=>a.consistency-b.consistency);
-              const consistentList=buildAwardList(consistCands,p=>p.consistency.toFixed(2),p=>`±${p.consistency.toFixed(1)}%`);
-              const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement);
-              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement),p=>`+${Math.round(p.improvement)} Elo`);
-              const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount);
-              const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`);
-              const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal);
-              const sotdList=buildAwardList(sotdCands,p=>p.sotdTotal,p=>`${p.sotdTotal} SOTD${p.sotdTotal!==1?"s":""}`);
-              const rookieCands=[...standings.filter(p=>rookiePool.includes(String(p.id))&&p.weeksAttended>=2)].sort((a,b)=>b.elo-a.elo);
-              const rookieList=buildAwardList(rookieCands,p=>p.elo,p=>`Elo ${p.elo}`);
-              const grinderCands=[...standings.filter(p=>p.gamesPlayed>0)].sort((a,b)=>b.gamesPlayed-a.gamesPlayed);
-              const grinderList=buildAwardList(grinderCands,p=>p.gamesPlayed,p=>`${p.gamesPlayed} games`);
-              const attendanceCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.weeksAttended-a.weeksAttended||a.absences-b.absences);
-              const attendanceList=buildAwardList(attendanceCands,p=>`${p.weeksAttended}-${p.absences}`,p=>`${p.weeksAttended} weeks${p.absences>0?`, ${p.absences} absence${p.absences!==1?"s":""}`:", zero absences"}`);
-              const peakEloCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.peakElo-a.peakElo);
-              const peakEloList=buildAwardList(peakEloCands,p=>p.peakElo,p=>`${p.peakElo} Elo`);
-              const anomalyCands=[...standings.filter(p=>p.anomalyGap!=null)].sort((a,b)=>b.anomalyGap-a.anomalyGap);
-              const anomalyList=buildAwardList(anomalyCands,p=>Math.round(p.anomalyGap),p=>`Week ${p.anomalyWeek}, ${Math.round(p.anomalyGap)}pt ${p.anomalyDirection==="up"?"above":"below"} avg`);
+              // rather than looking like an arbitrary ranking. Candidates are pre-sorted with a
+              // tiebreak metric as the secondary sort key, so when a tie is flagged, the deciding
+              // metric (passed as tiebreakFn) is called out rather than leaving the order looking arbitrary.
+              const buildAwardList=(cands,valueFn,detailFn,tiebreakFn)=>cands.slice(0,4).map((c,i)=>{
+                const tied=i>0&&valueFn(c)===valueFn(cands[i-1]);
+                return {
+                  name:c.name+(tied?" (tie)":""),
+                  detail:detailFn(c)+(tied&&tiebreakFn?` · tiebreak: ${tiebreakFn(c)}`:"")
+                };
+              });
+              const consistCands=[...standings.filter(p=>p.consistency!=null)].sort((a,b)=>a.consistency-b.consistency||b.elo-a.elo);
+              const consistentList=buildAwardList(consistCands,p=>p.consistency.toFixed(2),p=>`±${p.consistency.toFixed(1)}%`,p=>`${p.elo} Elo`);
+              const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement||b.elo-a.elo);
+              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement),p=>`+${Math.round(p.improvement)} Elo`,p=>`${p.elo} Elo`);
+              const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||b.elo-a.elo);
+              const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`,p=>`${p.elo} Elo`);
+              const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal||b.elo-a.elo);
+              const sotdList=buildAwardList(sotdCands,p=>p.sotdTotal,p=>`${p.sotdTotal} SOTD${p.sotdTotal!==1?"s":""}`,p=>`${p.elo} Elo`);
+              // Rookie of the Year is already ranked by Elo, so its tiebreak falls back to MVP%.
+              const rookieCands=[...standings.filter(p=>rookiePool.includes(String(p.id))&&p.weeksAttended>=2)].sort((a,b)=>b.elo-a.elo||parseFloat(b.mvp||0)-parseFloat(a.mvp||0));
+              const rookieList=buildAwardList(rookieCands,p=>p.elo,p=>`Elo ${p.elo}`,p=>`${p.mvp}% MVP`);
+              const attendanceCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.weeksAttended-a.weeksAttended||a.absences-b.absences||b.elo-a.elo);
+              const attendanceList=buildAwardList(attendanceCands,p=>`${p.weeksAttended}-${p.absences}`,p=>`${p.weeksAttended} weeks${p.absences>0?`, ${p.absences} absence${p.absences!==1?"s":""}`:", zero absences"}`,p=>`${p.elo} Elo`);
+              // MVP: combines season Elo (normalized against this year's field) with MVP% (percent of
+              // possible points earned) into one composite score, so it rewards both power and payoff.
+              // Ties on the composite fall back to whoever played more weeks.
+              const mvpAwardPool=standings.filter(p=>p.weeksAttended>=MIN_WEEKS_FOR_AWARDS&&p.mvp!=="—");
+              const mvpEloVals=mvpAwardPool.map(p=>p.peakElo);
+              const mvpEloMin=mvpEloVals.length?Math.min(...mvpEloVals):0, mvpEloMax=mvpEloVals.length?Math.max(...mvpEloVals):1;
+              const mvpEloRange=(mvpEloMax-mvpEloMin)||1;
+              const mvpAwardCands=mvpAwardPool.map(p=>({...p,mvpAwardScore:((p.peakElo-mvpEloMin)/mvpEloRange)*100+parseFloat(p.mvp)})).sort((a,b)=>b.mvpAwardScore-a.mvpAwardScore||b.weeksAttended-a.weeksAttended);
+              const mvpAwardList=buildAwardList(mvpAwardCands,p=>p.mvpAwardScore.toFixed(2),p=>`${p.peakElo} Elo · ${parseFloat(p.mvp).toFixed(1)}% MVP`,p=>`${p.weeksAttended} weeks played`);
               // Most Committed: rewards showing up a lot despite not performing well — a combined
               // score of attendance (normalized against the field) and low average MVP% (inverted),
               // rather than pure attendance or pure low performance alone.
               const committedPool=standings.filter(p=>p.weeksAttended>=MIN_WEEKS_FOR_AWARDS&&p.avgMvp!=null);
               const maxAttended=committedPool.length?Math.max(...committedPool.map(p=>p.weeksAttended)):1;
-              const committedCands=committedPool.map(p=>({...p,committedScore:(p.weeksAttended/maxAttended)+((100-p.avgMvp)/100)})).sort((a,b)=>b.committedScore-a.committedScore);
-              const committedList=buildAwardList(committedCands,p=>p.committedScore.toFixed(3),p=>`${p.weeksAttended} weeks, ${p.avgMvp.toFixed(1)}% avg MVP`);
+              const committedCands=committedPool.map(p=>({...p,committedScore:(p.weeksAttended/maxAttended)+((100-p.avgMvp)/100)})).sort((a,b)=>b.committedScore-a.committedScore||b.weeksAttended-a.weeksAttended);
+              const committedList=buildAwardList(committedCands,p=>p.committedScore.toFixed(3),p=>`${p.weeksAttended} weeks, ${p.avgMvp.toFixed(1)}% avg MVP`,p=>`${p.weeksAttended} weeks played`);
               const AwardCard=({icon,label,list})=>{
                 const [winner,...runners]=list.length?list:[null];
                 return(
@@ -3099,16 +3100,14 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               };
               return(<>
                 <div style={{...cardSt,marginBottom:"14px"}}>
-                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent, Most Improved, Anomaly, and Most Committed require 8+ weeks played to qualify.</p>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent, Most Improved, MVP, and Most Committed require 8+ weeks played to qualify. Ties are broken by season Elo (Rookie of the Year by MVP%; MVP and Most Committed by weeks played) — shown as "tiebreak: ..." next to a runner-up who tied the winner.</p>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                    <AwardCard icon="🏆" label="MVP" list={mvpAwardList}/>
                     <AwardCard icon="⚖" label="MOST CONSISTENT" list={consistentList}/>
                     <AwardCard icon="📈" label="MOST IMPROVED" list={improvedList}/>
                     <AwardCard icon="👰" label="BRIDESMAID" list={bridesmaidList}/>
                     <AwardCard icon="⭐" label="MOST SOTDS" list={sotdList}/>
-                    <AwardCard icon="💪" label="THE GRINDER" list={grinderList}/>
                     <AwardCard icon="🦾" label="BEST ATTENDANCE" list={attendanceList}/>
-                    <AwardCard icon="📊" label="HIGHEST PEAK ELO" list={peakEloList}/>
-                    <AwardCard icon="🌀" label="ANOMALY" list={anomalyList}/>
                     <AwardCard icon="❤️" label="MOST COMMITTED" list={committedList}/>
                   </div>
                 </div>
