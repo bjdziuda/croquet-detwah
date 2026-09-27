@@ -226,23 +226,6 @@ const computeHomeTurf = (pid, wg) => {
   });
   return best;
 };
-// Weekly MVP% series for a player, one entry per week they attended (for consistency calc).
-const weeklyMvpSeries = (pid, wg) => {
-  const out=[];
-  Object.entries(wg[pid]||{}).forEach(([w,gs])=>{
-    if(!gs.some(g=>!g.absent)) return;
-    const pts=gs.reduce((s,g)=>s+(g.pts||0)+(g.sotd||0),0);
-    const maxPts=gs.reduce((s,g)=>s+(g.absent?1:(g.groupSize||1)),0);
-    if(maxPts>0) out.push((pts/maxPts)*100);
-  });
-  return out;
-};
-const stdev = arr => {
-  if(arr.length<2) return null;
-  const mean=arr.reduce((a,b)=>a+b,0)/arr.length;
-  const variance=arr.reduce((a,b)=>a+(b-mean)**2,0)/arr.length;
-  return Math.sqrt(variance);
-};
 
 const StarRating = ({value, onChange, size=24}) => (
   <div style={{display:"flex",gap:"4px"}}>
@@ -344,6 +327,16 @@ const FINALS_DISH_CATEGORIES = [
   ["sides","Sides"],
   ["desserts","Desserts"],
   ["drinks","Drinks"],
+];
+
+// Season-award tiebreak metrics an admin can choose between when two players tie on an award's
+// primary stat. Rookie of the Year, MVP, and Most Committed already blend elo/weeks-played into
+// their own primary score, so they keep their own built-in fallback instead of using this choice.
+const AWARD_TIEBREAK_METRICS = [
+  ["elo", "Season Elo", p=>p.elo, p=>`${p.elo} Elo`],
+  ["peakElo", "Peak Elo", p=>p.peakElo, p=>`${p.peakElo} Peak Elo`],
+  ["mvp", "MVP %", p=>parseFloat(p.mvp)||0, p=>`${parseFloat(p.mvp||0).toFixed(1)}% MVP`],
+  ["weeksAttended", "Weeks Played", p=>p.weeksAttended, p=>`${p.weeksAttended} weeks played`],
 ];
 
 function Switch({checked, onChange, label, disabled=false}) {
@@ -950,7 +943,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo"} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -1082,8 +1075,6 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const eloChange=elo-prevElo;
       const peakElo=Math.round(Math.max(ELO_START,...Object.values(hist)));
       const homeTurf=computeHomeTurf(p.id,weeklyGames);
-      const mvpSeries=weeklyMvpSeries(p.id,weeklyGames);
-      const consistency=weeksAttended>=MIN_WEEKS_FOR_AWARDS?stdev(mvpSeries):null;
       const improvement=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-ELO_START:null;
       const mvpByWeek=[];
       Object.entries(weeklyGames[p.id]||{}).forEach(([w,gs])=>{
@@ -1093,13 +1084,11 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
         if(wmax>0) mvpByWeek.push({week:parseInt(w),mvp:(wpts/wmax)*100});
       });
       const avgMvp=mvpByWeek.length?mvpByWeek.reduce((s,x)=>s+x.mvp,0)/mvpByWeek.length:null;
-      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,consistency,improvement,avgMvp};
+      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,improvement,avgMvp};
     }).sort((a,b)=>b.pts-a.pts);
-    const consistCands=rows.filter(p=>p.consistency!=null);
-    const mostConsistentId=consistCands.length?consistCands.reduce((best,p)=>p.consistency<best.consistency?p:best).id:null;
     const improveCands=rows.filter(p=>p.improvement!=null);
     const mostImprovedId=improveCands.length?improveCands.reduce((best,p)=>p.improvement>best.improvement?p:best).id:null;
-    return rows.map(p=>({...p,isMostConsistent:p.id===mostConsistentId,isMostImproved:p.id===mostImprovedId}));
+    return rows.map(p=>({...p,isMostImproved:p.id===mostImprovedId}));
   },[players,weeklyGames,eloSystem,maxWk]);
 
 
@@ -2550,7 +2539,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -3052,19 +3041,18 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   detail:detailFn(c)+(tied&&tiebreakFn?` · tiebreak: ${tiebreakFn(c)}`:"")
                 };
               });
-              const consistCands=[...standings.filter(p=>p.consistency!=null)].sort((a,b)=>a.consistency-b.consistency||b.elo-a.elo);
-              const consistentList=buildAwardList(consistCands,p=>p.consistency.toFixed(2),p=>`±${p.consistency.toFixed(1)}%`,p=>`${p.elo} Elo`);
-              const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement||b.elo-a.elo);
-              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement),p=>`+${Math.round(p.improvement)} Elo`,p=>`${p.elo} Elo`);
-              const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||b.elo-a.elo);
-              const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`,p=>`${p.elo} Elo`);
-              const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal||b.elo-a.elo);
-              const sotdList=buildAwardList(sotdCands,p=>p.sotdTotal,p=>`${p.sotdTotal} SOTD${p.sotdTotal!==1?"s":""}`,p=>`${p.elo} Elo`);
+              const [tbKey,tbLabel,tiebreakValue,tiebreakLabel]=AWARD_TIEBREAK_METRICS.find(([k])=>k===awardTiebreakMetric)||AWARD_TIEBREAK_METRICS[0];
+              const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement||tiebreakValue(b)-tiebreakValue(a));
+              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement),p=>`+${Math.round(p.improvement)} Elo`,tiebreakLabel);
+              const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||tiebreakValue(b)-tiebreakValue(a));
+              const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`,tiebreakLabel);
+              const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal||tiebreakValue(b)-tiebreakValue(a));
+              const sotdList=buildAwardList(sotdCands,p=>p.sotdTotal,p=>`${p.sotdTotal} SOTD${p.sotdTotal!==1?"s":""}`,tiebreakLabel);
               // Rookie of the Year is already ranked by Elo, so its tiebreak falls back to MVP%.
               const rookieCands=[...standings.filter(p=>rookiePool.includes(String(p.id))&&p.weeksAttended>=2)].sort((a,b)=>b.elo-a.elo||parseFloat(b.mvp||0)-parseFloat(a.mvp||0));
               const rookieList=buildAwardList(rookieCands,p=>p.elo,p=>`Elo ${p.elo}`,p=>`${p.mvp}% MVP`);
-              const attendanceCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.weeksAttended-a.weeksAttended||a.absences-b.absences||b.elo-a.elo);
-              const attendanceList=buildAwardList(attendanceCands,p=>`${p.weeksAttended}-${p.absences}`,p=>`${p.weeksAttended} weeks${p.absences>0?`, ${p.absences} absence${p.absences!==1?"s":""}`:", zero absences"}`,p=>`${p.elo} Elo`);
+              const attendanceCands=[...standings.filter(p=>p.weeksAttended>0)].sort((a,b)=>b.weeksAttended-a.weeksAttended||a.absences-b.absences||tiebreakValue(b)-tiebreakValue(a));
+              const attendanceList=buildAwardList(attendanceCands,p=>`${p.weeksAttended}-${p.absences}`,p=>`${p.weeksAttended} weeks${p.absences>0?`, ${p.absences} absence${p.absences!==1?"s":""}`:", zero absences"}`,tiebreakLabel);
               // MVP: combines season Elo (normalized against this year's field) with MVP% (percent of
               // possible points earned) into one composite score, so it rewards both power and payoff.
               // Ties on the composite fall back to whoever played more weeks.
@@ -3100,10 +3088,17 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               };
               return(<>
                 <div style={{...cardSt,marginBottom:"14px"}}>
-                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 12px"}}>Most Consistent, Most Improved, MVP, and Most Committed require 8+ weeks played to qualify. Ties are broken by season Elo (Rookie of the Year by MVP%; MVP and Most Committed by weeks played) — shown as "tiebreak: ..." next to a runner-up who tied the winner.</p>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 6px"}}>Most Improved, MVP, and Most Committed require 8+ weeks played to qualify. Ties are broken by <strong style={{color:C.text}}>{tbLabel}</strong> (Rookie of the Year by MVP%; MVP and Most Committed by weeks played) — shown as "tiebreak: ..." next to a runner-up who tied the winner.</p>
+                  {isAdmin&&(
+                    <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px"}}>
+                      <label style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.06em"}}>TIEBREAK METRIC</label>
+                      <select value={tbKey} onChange={e=>update({awardTiebreakMetric:e.target.value})} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"4px 8px",fontSize:"0.72rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                        {AWARD_TIEBREAK_METRICS.map(([k,label])=><option key={k} value={k}>{label}</option>)}
+                      </select>
+                    </div>
+                  )}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
                     <AwardCard icon="🏆" label="MVP" list={mvpAwardList}/>
-                    <AwardCard icon="⚖" label="MOST CONSISTENT" list={consistentList}/>
                     <AwardCard icon="📈" label="MOST IMPROVED" list={improvedList}/>
                     <AwardCard icon="👰" label="BRIDESMAID" list={bridesmaidList}/>
                     <AwardCard icon="⭐" label="MOST SOTDS" list={sotdList}/>
@@ -4423,7 +4418,7 @@ function EditableStringList({label, items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
+function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
@@ -4464,6 +4459,16 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
     })),
     ...responded.filter(r=>r.entry.otherSide).map(r=>({item:r.entry.otherSide,category:"Other",bringing:r.player.name,open:false})),
   ];
+  const MENU_CATEGORY_ORDER=["Appetizer","Main","Side","Dessert","Drink","Other"];
+  const menuByCategory=MENU_CATEGORY_ORDER.map(cat=>({cat,rows:menuRows.filter(r=>r.category===cat)})).filter(g=>g.rows.length>0);
+  const unclaimedRows=menuRows.filter(r=>r.open);
+  const hasFoodSignup=entry=>(entry.appetizers||[]).length>0||(entry.mains||[]).length>0||(entry.sides||[]).length>0||(entry.desserts||[]).length>0||(entry.drinks||[]).length>0||(entry.leagueItems||[]).length>0||!!entry.otherSide;
+  const foodReminderRows=attendingRows.filter(r=>!hasFoodSignup(r.entry)&&!finalsFoodReminderDismissed.includes(String(r.player.id)));
+  const dismissFoodReminder=pid=>{
+    const key=String(pid);
+    if(finalsFoodReminderDismissed.includes(key)) return;
+    update({finalsFoodReminderDismissed:[...finalsFoodReminderDismissed,key]});
+  };
   const guestCount=responded.filter(r=>r.entry.coming&&r.entry.guests).reduce((sum,r)=>sum+(r.entry.guestCount||0),0);
   const totalHeadcount=comingCount+guestCount;
 
@@ -4544,48 +4549,63 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
             ✏️ EDIT RSVP
           </button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1.15fr 1fr",gap:"16px"}}>
-          <div>
-            <div style={{fontSize:"0.85rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"6px"}}>ITINERARY</div>
-            <div style={{fontSize:"0.72rem",lineHeight:1.9}}>
-              11AM–12PM &nbsp;Arrive, general set up<br/>
-              12 PM &nbsp;Championship kickoff<br/>
-              12:15 PM &nbsp;Heat 1 &amp; 2 games<br/>
-              3:00 PM &nbsp;Heat 3 decider<br/>
-              4:30 PM &nbsp;Finals!!<br/>
-              6:00 PM &nbsp;Dinner / award ceremony<br/>
-              7:00 PM on &nbsp;Afters
+        <div>
+          <div style={{fontSize:"0.85rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"6px"}}>ITINERARY</div>
+          <div style={{fontSize:"0.72rem",lineHeight:1.9}}>
+            11AM–12PM &nbsp;Arrive, general set up<br/>
+            12 PM &nbsp;Championship kickoff<br/>
+            12:15 PM &nbsp;Heat 1 &amp; 2 games<br/>
+            3:00 PM &nbsp;Heat 3 decider<br/>
+            4:30 PM &nbsp;Finals!!<br/>
+            6:00 PM &nbsp;Dinner / award ceremony<br/>
+            7:00 PM on &nbsp;Afters
+          </div>
+          <div style={{background:"#2b4a6b",color:"#e8eef4",borderRadius:"10px",padding:"12px",marginTop:"12px"}}>
+            <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"4px"}}>RULES</div>
+            <div style={{fontSize:"0.72rem",lineHeight:1.7,fontStyle:"italic"}}>
+              • Standard commish <span onClick={()=>setTab&&setTab("rulebook")} style={{textDecoration:"underline",cursor:"pointer"}}>rulebook</span><br/>
+              • Razzing required
             </div>
-            <div style={{background:"#2b4a6b",color:"#e8eef4",borderRadius:"10px",padding:"12px",marginTop:"12px"}}>
-              <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"4px"}}>RULES</div>
-              <div style={{fontSize:"0.72rem",lineHeight:1.7,fontStyle:"italic"}}>
-                • Standard commish <span onClick={()=>setTab&&setTab("rulebook")} style={{textDecoration:"underline",cursor:"pointer"}}>rulebook</span><br/>
-                • Razzing required
+          </div>
+        </div>
+
+        <div style={{background:"#caa06a",borderRadius:"10px",padding:"12px",color:"#3d2b12",marginTop:"16px"}}>
+          <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"8px"}}>MENU</div>
+          {menuByCategory.length===0
+            ?<div style={{fontSize:"0.74rem",fontStyle:"italic"}}>Menu coming soon</div>
+            :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"14px"}}>
+              {menuByCategory.map(({cat,rows:catRows})=>(
+                <div key={cat}>
+                  <div style={{fontSize:"0.7rem",fontWeight:"bold",letterSpacing:"0.06em",borderBottom:"2px solid #8a6a3a",paddingBottom:"3px",marginBottom:"5px"}}>{cat.toUpperCase()}{cat!=="Other"?"S":""}</div>
+                  {catRows.map((r,i)=>(
+                    <div key={i} style={{fontSize:"0.72rem",padding:"3px 0",borderBottom:"1px solid #d8be8a"}}>
+                      <div>{r.item}</div>
+                      <div style={{fontSize:"0.66rem",fontWeight:r.open?"bold":"normal",fontStyle:r.open?"italic":"normal",color:r.open?"#8a6a3a":"#5c4a2a"}}>{r.bringing}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          }
+          {unclaimedRows.length>0&&(
+            <div style={{marginTop:"12px",paddingTop:"10px",borderTop:"2px solid #8a6a3a"}}>
+              <div style={{fontSize:"0.72rem",fontWeight:"bold",marginBottom:"4px"}}>🔔 Still needed</div>
+              <div style={{fontSize:"0.72rem"}}>{unclaimedRows.map(r=>r.item).join(", ")}</div>
+            </div>
+          )}
+          {foodReminderRows.length>0&&(
+            <div style={{marginTop:"12px",paddingTop:"10px",borderTop:"2px solid #8a6a3a"}}>
+              <div style={{fontSize:"0.72rem",fontWeight:"bold",marginBottom:"4px"}}>📋 Coming but haven't signed up to bring anything yet</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                {foodReminderRows.map(r=>(
+                  <span key={r.player.id} style={{background:"#3d2b1222",border:"1px solid #8a6a3a",borderRadius:"12px",padding:"2px 8px",fontSize:"0.7rem",display:"flex",alignItems:"center",gap:"5px"}}>
+                    {r.player.name}
+                    {isAdmin&&<span onClick={()=>dismissFoodReminder(r.player.id)} style={{cursor:"pointer",fontWeight:"bold"}} title="Remove from reminder list">✕</span>}
+                  </span>
+                ))}
               </div>
             </div>
-          </div>
-          <div style={{background:"#caa06a",borderRadius:"10px",padding:"12px",color:"#3d2b12"}}>
-            <div style={{fontSize:"0.78rem",fontWeight:"bold",fontStyle:"italic",marginBottom:"8px"}}>MENU</div>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:"0.74rem"}}>
-              <thead>
-                <tr>
-                  <th style={{textAlign:"left",padding:"4px 5px",borderBottom:"2px solid #8a6a3a"}}>Item</th>
-                  <th style={{textAlign:"left",padding:"4px 5px",borderBottom:"2px solid #8a6a3a"}}>Category</th>
-                  <th style={{textAlign:"left",padding:"4px 5px",borderBottom:"2px solid #8a6a3a"}}>Bringing</th>
-                </tr>
-              </thead>
-              <tbody>
-                {menuRows.length===0&&<tr><td colSpan={3} style={{padding:"8px 5px",fontStyle:"italic"}}>Menu coming soon</td></tr>}
-                {menuRows.map((r,i)=>(
-                  <tr key={i} style={{borderBottom:"1px solid #d8be8a"}}>
-                    <td style={{padding:"5px"}}>{r.item}</td>
-                    <td style={{padding:"5px"}}>{r.category}</td>
-                    <td style={{padding:"5px",fontWeight:r.open?"bold":"normal",fontStyle:r.open?"italic":"normal",color:r.open?"#8a6a3a":"inherit"}}>{r.bringing}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          )}
         </div>
         <div style={{background:"#c1533f",color:"#fbe9e0",borderRadius:"8px",padding:"10px 14px",fontSize:"0.72rem",fontStyle:"italic",textAlign:"center",marginTop:"14px"}}>
           ! If you have not played 2 regular season rounds and paid league dues, you are not eligible to play in the finals but you are welcome to join in the festivities !
