@@ -943,7 +943,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo"} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -2539,7 +2539,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} user={user} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} finalsSuperlatives={finalsSuperlatives} finalsSuperlativeVotingOpen={finalsSuperlativeVotingOpen} finalsSuperlativeRevealed={finalsSuperlativeRevealed} finalsSuperlativeVotes={finalsSuperlativeVotes} finalsChampionshipDayMode={finalsChampionshipDayMode} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -3037,11 +3037,16 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               const buildAwardList=(cands,valueFn,detailFn,tiebreakFn)=>cands.slice(0,4).map((c,i)=>{
                 const tied=i>0&&valueFn(c)===valueFn(cands[i-1]);
                 return {
-                  name:c.name+(tied?" (tie)":""),
+                  id:c.id,
+                  name:c.name,
+                  tied,
                   detail:detailFn(c)+(tied&&tiebreakFn?` · tiebreak: ${tiebreakFn(c)}`:"")
                 };
               });
+              const setManualWinner=(awardKey,pid)=>update({awardManualWinners:{...awardManualWinners,[awardKey]:String(pid)}});
               const [tbKey,tbLabel,tiebreakValue,tiebreakLabel]=AWARD_TIEBREAK_METRICS.find(([k])=>k===awardTiebreakMetric)||AWARD_TIEBREAK_METRICS[0];
+              const champCands=[...standings].sort((a,b)=>b.pts-a.pts||tiebreakValue(b)-tiebreakValue(a));
+              const champList=buildAwardList(champCands,p=>p.pts,p=>`${p.pts} pts`,tiebreakLabel);
               const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement||tiebreakValue(b)-tiebreakValue(a));
               const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement),p=>`+${Math.round(p.improvement)} Elo`,tiebreakLabel);
               const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||tiebreakValue(b)-tiebreakValue(a));
@@ -3069,8 +3074,22 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               const maxAttended=committedPool.length?Math.max(...committedPool.map(p=>p.weeksAttended)):1;
               const committedCands=committedPool.map(p=>({...p,committedScore:(p.weeksAttended/maxAttended)+((100-p.avgMvp)/100)})).sort((a,b)=>b.committedScore-a.committedScore||b.weeksAttended-a.weeksAttended);
               const committedList=buildAwardList(committedCands,p=>p.committedScore.toFixed(3),p=>`${p.weeksAttended} weeks, ${p.avgMvp.toFixed(1)}% avg MVP`,p=>`${p.weeksAttended} weeks played`);
-              const AwardCard=({icon,label,list})=>{
-                const [winner,...runners]=list.length?list:[null];
+              const AwardCard=({icon,label,list,awardKey})=>{
+                const [origWinner,...origRunners]=list.length?list:[null];
+                // Gather everyone tied for 1st (consecutive tied entries right after the winner).
+                const tieGroup=[];
+                if(origWinner){
+                  tieGroup.push(origWinner);
+                  for(const r of origRunners){ if(r.tied) tieGroup.push(r); else break; }
+                }
+                const hasTie=tieGroup.length>1;
+                const manualId=hasTie?awardManualWinners[awardKey]:null;
+                let displayList=list;
+                if(manualId&&tieGroup.some(c=>String(c.id)===String(manualId))&&String(manualId)!==String(origWinner.id)){
+                  const idx=list.findIndex(c=>String(c.id)===String(manualId));
+                  displayList=[list[idx],...list.filter((_,i)=>i!==idx)];
+                }
+                const [winner,...runners]=displayList.length?displayList:[null];
                 return(
                   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
                     <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>{icon} {label}</div>
@@ -3079,8 +3098,20 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                     {runners.length>0&&(
                       <div style={{marginTop:"8px",paddingTop:"8px",borderTop:`1px solid ${C.border}`}}>
                         {runners.map((r,i)=>(
-                          <div key={i} style={{color:C.muted,fontSize:"0.66rem",marginTop:i>0?"3px":0}}>{["🥈","🥉","4th"][i]} <span style={{color:C.cream}}>{r.name}</span>{r.detail&&` · ${r.detail}`}</div>
+                          <div key={i} style={{color:C.muted,fontSize:"0.66rem",marginTop:i>0?"3px":0}}>{["🥈","🥉","4th"][i]} <span style={{color:C.cream}}>{r.name}{r.tied?" (tie)":""}</span>{r.detail&&` · ${r.detail}`}</div>
                         ))}
+                      </div>
+                    )}
+                    {hasTie&&isAdmin&&awardKey&&(
+                      <div style={{marginTop:"8px",paddingTop:"8px",borderTop:`1px dashed ${C.border}`}}>
+                        <div style={{color:C.muted,fontSize:"0.6rem",marginBottom:"3px"}}>Tied for 1st — pick the official winner:</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>
+                          {tieGroup.map(c=>{
+                            const picked=String(c.id)===String(winner.id);
+                            return <button key={c.id} onClick={()=>setManualWinner(awardKey,c.id)}
+                              style={{fontSize:"0.62rem",padding:"2px 7px",borderRadius:"9px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.muted,cursor:"pointer",fontFamily:"Georgia,serif"}}>{c.name}</button>;
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3098,12 +3129,13 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                     </div>
                   )}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-                    <AwardCard icon="🏆" label="MVP" list={mvpAwardList}/>
-                    <AwardCard icon="📈" label="MOST IMPROVED" list={improvedList}/>
-                    <AwardCard icon="👰" label="BRIDESMAID" list={bridesmaidList}/>
-                    <AwardCard icon="⭐" label="MOST SOTDS" list={sotdList}/>
-                    <AwardCard icon="🦾" label="BEST ATTENDANCE" list={attendanceList}/>
-                    <AwardCard icon="❤️" label="MOST COMMITTED" list={committedList}/>
+                    <AwardCard icon="👑" label="REGULAR SEASON CHAMPION" list={champList} awardKey="champion"/>
+                    <AwardCard icon="🏆" label="MVP" list={mvpAwardList} awardKey="mvp"/>
+                    <AwardCard icon="📈" label="MOST IMPROVED" list={improvedList} awardKey="improved"/>
+                    <AwardCard icon="👰" label="BRIDESMAID" list={bridesmaidList} awardKey="bridesmaid"/>
+                    <AwardCard icon="⭐" label="MOST SOTDS" list={sotdList} awardKey="sotd"/>
+                    <AwardCard icon="🦾" label="BEST ATTENDANCE" list={attendanceList} awardKey="attendance"/>
+                    <AwardCard icon="❤️" label="MOST COMMITTED" list={committedList} awardKey="committed"/>
                   </div>
                 </div>
                 <div style={cardSt}>
@@ -3120,7 +3152,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       );
                     })}
                   </div>
-                  <AwardCard icon="🌱" label="CURRENT LEADER" list={rookieList}/>
+                  <AwardCard icon="🌱" label="CURRENT LEADER" list={rookieList} awardKey="rookie"/>
                   {!rookieList.length&&(
                     <div style={{color:C.muted,fontSize:"0.68rem",marginTop:"6px"}}>{!rookiePool.length?"Select rookies above to see a leader.":"Needs 2+ weeks played to qualify."}</div>
                   )}
@@ -4418,7 +4450,7 @@ function EditableStringList({label, items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
+function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
@@ -4471,6 +4503,23 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
   };
   const guestCount=responded.filter(r=>r.entry.coming&&r.entry.guests).reduce((sum,r)=>sum+(r.entry.guestCount||0),0);
   const totalHeadcount=comingCount+guestCount;
+
+  // Superlatives voting: members cast one vote per category while voting is open; nobody (except
+  // the commissioner, live) sees tallies until finalsSuperlativeRevealed is switched on.
+  const myVoterId=user?String(user.id):null;
+  const castSuperlativeVote=(category,nomineeId)=>{
+    if(!myVoterId) return;
+    const cur=finalsSuperlativeVotes[category]||{};
+    update({finalsSuperlativeVotes:{...finalsSuperlativeVotes,[category]:{...cur,[myVoterId]:String(nomineeId)}}});
+  };
+  const superlativeTally=category=>{
+    const votes=Object.values(finalsSuperlativeVotes[category]||{});
+    const counts={};
+    votes.forEach(pid=>{counts[pid]=(counts[pid]||0)+1;});
+    return Object.entries(counts)
+      .map(([pid,count])=>({pid,count,name:players.find(p=>String(p.id)===pid)?.name||"?"}))
+      .sort((a,b)=>b.count-a.count);
+  };
 
   const seasonElo=pid=>eloSystem.elo?.[pid]??eloSystem.elo?.[String(pid)]??ELO_START;
   const playingRows=rows.filter(r=>r.entry?.coming&&r.entry?.playing);
@@ -4531,8 +4580,104 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
   const iSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",outline:"none"};
   const lbSt={color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",display:"block",marginBottom:"4px"};
 
+  // Extracted so "Championship day mode" can move it to the top of the tab without duplicating it.
+  const bracketSection=(
+    <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
+      <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Bracket progression</div>
+      <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"14px"}}>Heat 1 &amp; 2 tiers update live as people sign up. The stages below explain how the field narrows down to the Finals — no results yet.</div>
+
+      {/* Stage 1: Heat 1 tiers, by season elo */}
+      <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 — {tierSorted.length} signed up, tiered by season elo into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize}</div>
+      {heat1Groups.length===0&&<div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"8px"}}>No one signed up to play yet.</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"8px",marginBottom:"10px"}}>
+        {heat1Groups.map((grp,gi)=>(
+          <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
+            <div style={{color:C.blue,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER {gi+1}</div>
+            {grp.map(r=>(
+              <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.74rem",color:C.text,padding:"2px 0",gap:"6px"}}>
+                <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
+                <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
+                  <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                  {isAdmin?(
+                    <input type="number" min="1" placeholder="pos" value={heat1ResultOf(r.player.id)??""}
+                      onChange={e=>setHeat1Result(r.player.id,e.target.value)}
+                      style={{width:"34px",background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
+                  ):(
+                    heat1ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.66rem",fontWeight:"bold"}}>#{heat1ResultOf(r.player.id)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      {tierSorted.some(r=>!r.elig.meetsGameMinimum)&&(
+        <div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>* under 2 rounds played this season — can play heats 1 &amp; 2, cut before heat 3</div>
+      )}
+      {isAdmin&&<div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>Enter each player's Heat 1 finish position (1 = best) to drive Heat 2 promotion/relegation below.</div>}
+
+      <div style={arrowSt}>↓</div>
+
+      {/* Stage 1.5: Heat 2 tiers, promoted/relegated from Heat 1 results */}
+      <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>Heat 2 — top &amp; bottom {heat2PromoteCount} from each Heat 1 tier swap with the tier above/below</div>
+      {allHeat1ResultsIn?(
+        <>
+          <div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"8px"}}>Based on Heat 1 finish positions.</div>
+          {heat2Groups.length===0&&<div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"8px"}}>No one signed up to play yet.</div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"8px",marginBottom:"10px"}}>
+            {heat2Groups.map((grp,gi)=>(
+              <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
+                <div style={{color:C.greenLight,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER {gi+1}</div>
+                {grp.map(r=>{
+                  const originalTier=heat1Ranked.findIndex(g=>g.includes(r));
+                  const moved=originalTier!==gi;
+                  return (
+                    <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:C.text,padding:"2px 0"}}>
+                      <span>{r.player.name}{moved&&<span style={{color:originalTier>gi?C.greenLight:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>{originalTier>gi?"↑":"↓"}</span>}</span>
+                      <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </>
+      ):(
+        <div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"10px",fontStyle:"italic"}}>Waiting on Heat 1 finish positions — Heat 2 groups will appear once every Heat 1 player has a result entered.</div>
+      )}
+
+      <div style={arrowSt}>↓</div>
+
+      {/* Stage 2: Combined rank */}
+      <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Ranked by heat 1 + heat 2 points</div></div>
+
+      <div style={arrowSt}>↓</div>
+
+      {/* Stage 3: splits into auto-qualify vs heat 3 (explanatory only — no results yet) */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"10px"}}>
+        <div style={{...stageBoxSt,background:C.green+"15",borderColor:C.green+"44"}}>
+          <div style={{...stageTitleSt,color:C.greenLight}}>Auto-qualify</div>
+          <div style={stageSubSt}>Top {cfg.autoQualifyCount} advance straight to the Finals</div>
+        </div>
+        <div style={{...stageBoxSt,background:C.blue+"15",borderColor:C.blue+"44"}}>
+          <div style={{...stageTitleSt,color:C.blue}}>Heat 3 decider</div>
+          <div style={stageSubSt}>Everyone else plays one more heat (cap: {cfg.heat3Cap})</div>
+        </div>
+      </div>
+
+      <div style={arrowSt}>↓</div>
+
+      {/* Stage 4: Finals (explanatory only — no results yet) */}
+      <div style={stageBoxSt}>
+        <div style={{...stageTitleSt,color:C.accentLight}}>Finals — {cfg.finalsSize} spots</div>
+        <div style={stageSubSt}>{cfg.autoQualifyCount} auto-qualifiers + top {Math.max(0,cfg.finalsSize-cfg.autoQualifyCount)} finishers from heat 3</div>
+      </div>
+    </div>
+  );
+
   return (
     <div>
+      {finalsChampionshipDayMode && bracketSection}
       {/* FLYER */}
       <div style={{background:C.cream,borderRadius:"12px",padding:"20px",color:"#2a2a26",marginBottom:"20px"}}>
         <div style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"16px"}}>
@@ -4649,98 +4794,68 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
         }
       </div>
 
-      {/* BRACKET PROGRESSION - live */}
-      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
-        <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Bracket progression</div>
-        <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"14px"}}>Heat 1 &amp; 2 tiers update live as people sign up. The stages below explain how the field narrows down to the Finals — no results yet.</div>
-
-        {/* Stage 1: Heat 1 tiers, by season elo */}
-        <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 — {tierSorted.length} signed up, tiered by season elo into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize}</div>
-        {heat1Groups.length===0&&<div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"8px"}}>No one signed up to play yet.</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"8px",marginBottom:"10px"}}>
-          {heat1Groups.map((grp,gi)=>(
-            <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
-              <div style={{color:C.blue,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER {gi+1}</div>
-              {grp.map(r=>(
-                <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.74rem",color:C.text,padding:"2px 0",gap:"6px"}}>
-                  <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
-                  <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
-                    <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
-                    {isAdmin?(
-                      <input type="number" min="1" placeholder="pos" value={heat1ResultOf(r.player.id)??""}
-                        onChange={e=>setHeat1Result(r.player.id,e.target.value)}
-                        style={{width:"34px",background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
-                    ):(
-                      heat1ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.66rem",fontWeight:"bold"}}>#{heat1ResultOf(r.player.id)}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-        {tierSorted.some(r=>!r.elig.meetsGameMinimum)&&(
-          <div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>* under 2 rounds played this season — can play heats 1 &amp; 2, cut before heat 3</div>
-        )}
-        {isAdmin&&<div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>Enter each player's Heat 1 finish position (1 = best) to drive Heat 2 promotion/relegation below.</div>}
-
-        <div style={arrowSt}>↓</div>
-
-        {/* Stage 1.5: Heat 2 tiers, promoted/relegated from Heat 1 results */}
-        <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"4px"}}>Heat 2 — top &amp; bottom {heat2PromoteCount} from each Heat 1 tier swap with the tier above/below</div>
-        <div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"8px"}}>{allHeat1ResultsIn?"Based on Heat 1 finish positions.":"Preview — uses season elo for anyone missing a Heat 1 result."}</div>
-        {heat2Groups.length===0&&<div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"8px"}}>No one signed up to play yet.</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"8px",marginBottom:"10px"}}>
-          {heat2Groups.map((grp,gi)=>(
-            <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
-              <div style={{color:C.greenLight,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER {gi+1}</div>
-              {grp.map(r=>{
-                const originalTier=heat1Ranked.findIndex(g=>g.includes(r));
-                const moved=originalTier!==gi;
-                return (
-                  <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:C.text,padding:"2px 0"}}>
-                    <span>{r.player.name}{moved&&<span style={{color:originalTier>gi?C.greenLight:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>{originalTier>gi?"↑":"↓"}</span>}</span>
-                    <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-
-        <div style={arrowSt}>↓</div>
-
-        {/* Stage 2: Combined rank */}
-        <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Ranked by heat 1 + heat 2 points</div></div>
-
-        <div style={arrowSt}>↓</div>
-
-        {/* Stage 3: splits into auto-qualify vs heat 3 (explanatory only — no results yet) */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"10px"}}>
-          <div style={{...stageBoxSt,background:C.green+"15",borderColor:C.green+"44"}}>
-            <div style={{...stageTitleSt,color:C.greenLight}}>Auto-qualify</div>
-            <div style={stageSubSt}>Top {cfg.autoQualifyCount} advance straight to the Finals</div>
+      {/* SUPERLATIVES VOTING - hidden until revealed */}
+      {finalsSuperlatives.length>0&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
+          <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>🎉 Finals Superlatives</div>
+          <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"12px"}}>
+            {finalsSuperlativeRevealed?"Results are in!":finalsSuperlativeVotingOpen?"Cast your vote below — results stay hidden until the commissioner reveals them.":"Voting hasn't opened yet."}
           </div>
-          <div style={{...stageBoxSt,background:C.blue+"15",borderColor:C.blue+"44"}}>
-            <div style={{...stageTitleSt,color:C.blue}}>Heat 3 decider</div>
-            <div style={stageSubSt}>Everyone else plays one more heat (cap: {cfg.heat3Cap})</div>
-          </div>
+          {finalsSuperlatives.map(category=>{
+            const tally=superlativeTally(category);
+            const myVote=myVoterId?finalsSuperlativeVotes[category]?.[myVoterId]:null;
+            return (
+              <div key={category} style={{marginBottom:"14px",paddingBottom:"14px",borderBottom:`1px solid ${C.border}55`}}>
+                <div style={{color:C.text,fontSize:"0.82rem",fontWeight:"bold",marginBottom:"6px"}}>{category}</div>
+                {finalsSuperlativeRevealed?(
+                  tally.length===0
+                    ?<div style={{color:C.muted,fontSize:"0.76rem"}}>No votes cast.</div>
+                    :(()=>{
+                      const topCount=tally[0].count;
+                      const winners=tally.filter(t=>t.count===topCount);
+                      return (
+                        <div>
+                          <div style={{color:C.accentLight,fontSize:"0.95rem",fontWeight:"bold"}}>{winners.map(w=>w.name).join(" / ")}</div>
+                          <div style={{color:C.muted,fontSize:"0.7rem"}}>{topCount} vote{topCount!==1?"s":""}{winners.length>1?" · tie":""}</div>
+                        </div>
+                      );
+                    })()
+                ):finalsSuperlativeVotingOpen?(
+                  myVoterId?(
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                      {players.filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
+                        const picked=myVote===String(p.id);
+                        return (
+                          <button key={p.id} onClick={()=>castSuperlativeVote(category,p.id)}
+                            style={{padding:"4px 10px",borderRadius:"14px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.text,fontSize:"0.74rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                            {picked?"✓ ":""}{p.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ):<div style={{color:C.muted,fontSize:"0.76rem"}}>Log in as a player to vote.</div>
+                ):(
+                  <div style={{color:C.muted,fontSize:"0.76rem"}}>Not open yet.</div>
+                )}
+                {isAdmin&&!finalsSuperlativeRevealed&&(
+                  <div style={{marginTop:"6px",fontSize:"0.66rem",color:C.muted}}>
+                    👁 commissioner preview: {tally.length===0?"no votes yet":tally.map(t=>`${t.name} (${t.count})`).join(", ")}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
+      )}
 
-        <div style={arrowSt}>↓</div>
-
-        {/* Stage 4: Finals (explanatory only — no results yet) */}
-        <div style={stageBoxSt}>
-          <div style={{...stageTitleSt,color:C.accentLight}}>Finals — {cfg.finalsSize} spots</div>
-          <div style={stageSubSt}>{cfg.autoQualifyCount} auto-qualifiers + top {Math.max(0,cfg.finalsSize-cfg.autoQualifyCount)} finishers from heat 3</div>
-        </div>
-      </div>
+      {!finalsChampionshipDayMode && bracketSection}
 
       {/* ADMIN CONTROLS */}
       {isAdmin&&(
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"}}>
           <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"10px"}}>Admin — finals settings</div>
           <Switch label="Finals mode (gates login with RSVP)" checked={!!finalsMode} onChange={v=>update({finalsMode:v})}/>
+          <Switch label="Championship day mode (bracket front and center)" checked={!!finalsChampionshipDayMode} onChange={v=>update({finalsChampionshipDayMode:v})}/>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginTop:"12px"}}>
             <div><label style={lbSt}>DATE</label><input style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.date} onChange={e=>saveCfg({date:e.target.value})} placeholder="Saturday, October 3, 2026"/></div>
             <div><label style={lbSt}>LOCATION</label><input style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.location} onChange={e=>saveCfg({location:e.target.value})} placeholder="991 N Fletcher Rd, Dexter, MI"/></div>
@@ -4762,6 +4877,14 @@ function FinalsTab({isAdmin, leagueLogo, finalsMode=false, finalsConfig={}, fina
           {FINALS_DISH_CATEGORIES.map(([key,label])=>(
             <EditableStringList key={key} label={label.toUpperCase()} items={finalsFoodCategories[key]||[]} onChange={next=>update({finalsFoodCategories:{...finalsFoodCategories,[key]:next}})}/>
           ))}
+
+          <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>🎉 Superlatives voting</div>
+          <EditableStringList label="CATEGORIES" items={finalsSuperlatives} onChange={next=>update({finalsSuperlatives:next})}/>
+          <Switch label="Voting open (members can cast votes)" checked={!!finalsSuperlativeVotingOpen} onChange={v=>update({finalsSuperlativeVotingOpen:v})}/>
+          <Switch label="Reveal results to everyone" checked={!!finalsSuperlativeRevealed} onChange={v=>update({finalsSuperlativeRevealed:v})}/>
+          {Object.keys(finalsSuperlativeVotes).length>0&&(
+            <button onClick={()=>{if(window.confirm("Clear all superlative votes? This can't be undone.")) update({finalsSuperlativeVotes:{}});}} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem",marginTop:"10px"}}>Clear all votes</button>
+          )}
 
           <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Eligibility check</div>
           <div style={{maxHeight:"260px",overflowY:"auto"}}>
