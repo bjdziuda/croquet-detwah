@@ -2856,8 +2856,12 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
         )}
 
         {tab==="history"&&isAdmin&&(
-          <div>
-            <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>Season Summary</h2>
+          <div id="print-area">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
+              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",margin:0}}>Season Summary</h2>
+              <button className="no-print" onClick={()=>window.print()} style={{...btnSt(C.accent,true),padding:"7px 14px",fontSize:"0.76rem"}}>🖨 Print / Export PDF</button>
+            </div>
+            <p className="no-print" style={{color:C.muted,fontSize:"0.68rem",margin:"-6px 0 12px"}}>Opens your browser's print dialog — choose "Save as PDF" as the destination to export.</p>
 
             {(()=>{
               const colSet=new Set(), cols=[];
@@ -2915,8 +2919,42 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       </tr>
                     </thead>
                     <tbody>
-                      {standings.map((p,ri)=>{
-                        let wins=0,sotds=0,abs=0;
+                      {(()=>{
+                        // Precompute wins/SOTD/absences per player once so the summary columns and
+                        // the "best in column" highlighting use the exact same numbers as the cells.
+                        const totals={};
+                        standings.forEach(p=>{
+                          let wins=0,sotds=0,abs=0;
+                          cols.forEach(col=>{
+                            const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
+                            if(!entries.length){abs++;return;}
+                            const allAbsent=entries.every(g=>g.absent);
+                            let isWin=false,colSotd=0;
+                            entries.forEach(g=>{
+                              if(g.absent){abs++;return;}
+                              if(g.position===1)isWin=true;
+                              colSotd+=g.sotd||0;
+                            });
+                            if(allAbsent) return;
+                            if(isWin) wins++;
+                            sotds+=colSotd;
+                          });
+                          totals[p.id]={wins,sotds,abs};
+                        });
+                        const maxOf=fn=>standings.length?Math.max(...standings.map(fn)):0;
+                        const maxPts=maxOf(p=>p.pts);
+                        const maxGP=maxOf(p=>p.gamesPlayed||0);
+                        const maxWins=maxOf(p=>totals[p.id].wins);
+                        const maxSotds=maxOf(p=>totals[p.id].sotds);
+                        const playedPlayers=standings.filter(p=>(p.gamesPlayed||0)>0);
+                        const minAbs=playedPlayers.length?Math.min(...playedPlayers.map(p=>totals[p.id].abs)):null;
+                        const mvpEligible=standings.filter(p=>p.mvp!=="—");
+                        const maxMvp=mvpEligible.length?Math.max(...mvpEligible.map(p=>parseFloat(p.mvp))):null;
+                        const maxElo=maxOf(p=>p.elo);
+                        const maxPeakElo=maxOf(p=>p.peakElo);
+                        const winSt={border:`2px solid ${C.gold}`,boxShadow:`0 0 6px ${C.gold}66`};
+                      return standings.map((p,ri)=>{
+                        const {wins,sotds,abs}=totals[p.id];
                         const medal=ri===0?"🥇":ri===1?"🥈":ri===2?"🥉":`${ri+1}.`;
                         return(
                           <tr key={p.id}>
@@ -2934,7 +2972,6 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                             {cols.map(col=>{
                               const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
                               if(!entries.length){
-                                abs++;
                                 return(
                                   <td key={col.key} style={{padding:"2px"}}>
                                     <div style={cellSt(false,false)}>
@@ -2946,7 +2983,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                               let wkPts=0,isWin=false,isLast=false,colSotd=0;
                               const allAbsent=entries.every(g=>g.absent);
                               entries.forEach(g=>{
-                                if(g.absent){abs++;return;}
+                                if(g.absent) return;
                                 wkPts+=g.pts+(g.sotd||0);
                                 if(g.position===1)isWin=true;
                                 if(g.position===(g.actualGroupSize||g.groupSize))isLast=true;
@@ -2961,8 +2998,6 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                                   </td>
                                 );
                               }
-                              if(isWin)wins++;
-                              sotds+=colSotd;
                               return(
                                 <td key={col.key} style={{padding:"2px"}}>
                                   <div style={cellSt(isWin,isLast)}>
@@ -2977,55 +3012,56 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                             })}
                             <td style={{padding:"2px"}}>
                               <div style={{background:"#1e2a1e",borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.pts===maxPts&&maxPts>0?winSt:{})}}>
                                 <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.82rem"}}>{p.pts}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...((p.gamesPlayed||0)===maxGP&&maxGP>0?winSt:{})}}>
                                 <span style={{color:C.muted,fontSize:"0.78rem"}}>{p.gamesPlayed||"—"}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(wins===maxWins&&maxWins>0?winSt:{})}}>
                                 <span style={{color:C.gold,fontSize:"0.78rem"}}>{wins||"—"}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(sotds===maxSotds&&maxSotds>0?winSt:{})}}>
                                 <span style={{color:C.gold,fontSize:"0.78rem"}}>{sotds?`⭐ ${sotds}`:"—"}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...((p.gamesPlayed||0)>0&&abs===minAbs?winSt:{})}}>
                                 <span style={{color:C.muted,fontSize:"0.78rem"}}>{abs||"—"}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.mvp!=="—"&&parseFloat(p.mvp)===maxMvp?winSt:{})}}>
                                 <span style={{color:C.cream,fontSize:"0.78rem"}}>{p.mvp}{p.mvp!=="—"?"%":""}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.elo===maxElo?winSt:{})}}>
                                 <span style={{color:C.cream,fontSize:"0.78rem"}}>{p.elo}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.peakElo===maxPeakElo?winSt:{})}}>
                                 <span style={{color:C.blue,fontSize:"0.78rem"}}>{p.peakElo}</span>
                               </div>
                             </td>
                           </tr>
                         );
-                      })}
+                      });
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -3039,6 +3075,10 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   <span style={{color:C.muted,fontSize:"0.65rem"}}>{label}</span>
                 </div>
               ))}
+              <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+                <div style={{width:"10px",height:"10px",borderRadius:"2px",background:C.surface,border:`2px solid ${C.gold}`}}/>
+                <span style={{color:C.muted,fontSize:"0.65rem"}}>Season leader in that column</span>
+              </div>
               <span style={{color:C.muted,fontSize:"0.65rem"}}>⭐ = Shot of the Day &nbsp;·&nbsp; — = absent</span>
             </div>
           </div>

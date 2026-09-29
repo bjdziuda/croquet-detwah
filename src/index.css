@@ -16,3 +16,14 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Print / "Export PDF" support: when printing, show only #print-area (the History
+   tab's Season Summary) and hide the rest of the app chrome, including any element
+   marked .no-print inside the printed area itself (e.g. the print button). */
+@media print {
+  @page { size: landscape; margin: 0.4in; }
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print-area { position: absolute; left: 0; top: 0; width: 100%; background: #fff; }
+  .no-print { display: none !important; }
+}
