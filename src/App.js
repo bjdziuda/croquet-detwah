@@ -375,12 +375,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
 
   const superlativeCategories=normalizeSuperlatives(finalsSuperlatives);
   const canVoteAtLogin=finalsSuperlativeVotingOpen&&superlativeCategories.length>0;
-  // If voting's open, route the just-logged-in player through a quick vote step before
-  // actually calling onLogin; otherwise behave exactly as before.
-  const finishLogin=(userObj)=>{
-    if(canVoteAtLogin) setVoteStep(userObj);
-    else onLogin(userObj);
-  };
+  const hasVoted=pid=>superlativeCategories.some(cat=>(finalsSuperlativeVotes[cat.name]?.[String(pid)]||[]).length>0);
   const castLoginVote=(category,nomineeId,maxPicks)=>{
     if(!voteStep) return;
     const voterId=String(voteStep.id);
@@ -615,7 +610,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               submittedAt:Date.now(),
             };
             onFinalsSignup(selected.id,payload);
-            finishLogin({name:selected.name,role:"viewer",id:selected.id});
+            onLogin({name:selected.name,role:"viewer",id:selected.id});
             setSelected(null);
             setEditingRsvp(false);
           };
@@ -744,12 +739,12 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               })()}
               <div style={{display:"flex",gap:"10px",marginBottom:"12px"}}>
                 {signup.open&&(
-                  <button onClick={()=>{onSignup(selected.id,true);finishLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
+                  <button onClick={()=>{onSignup(selected.id,true);onLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
                     style={{flex:1,padding:"11px",background:`linear-gradient(135deg,${C.green},${C.green}bb)`,border:"none",borderRadius:"8px",color:C.text,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
                     Yes, I'm in! 🏑
                   </button>
                 )}
-                <button onClick={()=>{if(signup.open)onSignup(selected.id,false);finishLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
+                <button onClick={()=>{if(signup.open)onSignup(selected.id,false);onLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
                   style={{flex:1,padding:"11px",background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.muted,fontFamily:"Georgia,serif",fontSize:"0.9rem",cursor:"pointer"}}>
                   {signup.open?"Can't make it":"Just browsing"}
                 </button>
@@ -763,6 +758,12 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                   ✏️ Edit my RSVP
                 </button>
               )}
+              {canVoteAtLogin&&(
+                <button onClick={()=>setVoteStep({name:selected.name,role:"viewer",id:selected.id})}
+                  style={{width:"100%",padding:"9px",background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.accentLight,fontFamily:"Georgia,serif",fontSize:"0.82rem",cursor:"pointer",marginBottom:"12px"}}>
+                  {hasVoted(selected.id)?"✏️ Edit my superlative vote":"🎉 Superlative Voting"}
+                </button>
+              )}
               <button onClick={()=>{setSelected(null);setEditingRsvp(false);}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline"}}>Back</button>
             </div>
           </div>
@@ -771,22 +772,25 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
         {/* SUPERLATIVE VOTE STEP - shown right after login, only while voting is open */}
         {voteStep&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px",zIndex:100,overflowY:"auto"}}>
-            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"24px",maxWidth:"360px",width:"100%",margin:"20px auto"}}>
-              <div style={{color:C.accentLight,fontSize:"1rem",fontWeight:"bold",marginBottom:"4px",textAlign:"center"}}>🎉 Quick vote, {voteStep.name}!</div>
-              <div style={{color:C.muted,fontSize:"0.82rem",marginBottom:"16px",textAlign:"center"}}>Results stay hidden until the commissioner reveals them.</div>
-              {superlativeCategories.map(cat=>{
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"26px",maxWidth:"560px",width:"100%",margin:"20px auto"}}>
+              <div style={{color:C.accentLight,fontSize:"1.15rem",fontWeight:"bold",marginBottom:"4px",textAlign:"center"}}>🎉 Quick vote, {voteStep.name}!</div>
+              <div style={{color:C.muted,fontSize:"0.82rem",marginBottom:"20px",textAlign:"center"}}>Results stay hidden until the commissioner reveals them.</div>
+              {superlativeCategories.map((cat,ci)=>{
                 const myVotes=(finalsSuperlativeVotes[cat.name]?.[String(voteStep.id)])||[];
                 return (
-                  <div key={cat.name} style={{marginBottom:"14px"}}>
-                    <div style={{color:C.text,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"2px"}}>{cat.name}</div>
-                    <div style={{color:C.muted,fontSize:"0.68rem",marginBottom:"6px"}}>Pick {cat.maxPicks}{cat.maxPicks>1?` (${myVotes.length}/${cat.maxPicks})`:""}</div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                  <div key={cat.name} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 16px",marginBottom:"12px"}}>
+                    <div style={{display:"flex",alignItems:"baseline",gap:"8px",marginBottom:"2px"}}>
+                      <span style={{color:C.muted,fontSize:"0.7rem",fontWeight:"bold"}}>Q{ci+1}</span>
+                      <span style={{color:C.text,fontSize:"0.95rem",fontWeight:"bold"}}>{cat.name}</span>
+                    </div>
+                    <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"10px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>Pick {cat.maxPicks}{cat.maxPicks>1?` (${myVotes.length}/${cat.maxPicks} selected)`:""}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
                       {players.filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
                         const picked=myVotes.includes(String(p.id));
                         const atCap=myVotes.length>=cat.maxPicks;
                         return (
                           <button key={p.id} onClick={()=>castLoginVote(cat.name,p.id,cat.maxPicks)} disabled={!picked&&atCap}
-                            style={{padding:"4px 10px",borderRadius:"14px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.text,fontSize:"0.74rem",fontFamily:"Georgia,serif",cursor:(!picked&&atCap)?"default":"pointer",opacity:(!picked&&atCap)?0.4:1}}>
+                            style={{padding:"6px 12px",borderRadius:"16px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":C.card,color:picked?C.accentLight:C.text,fontSize:"0.78rem",fontFamily:"Georgia,serif",cursor:(!picked&&atCap)?"default":"pointer",opacity:(!picked&&atCap)?0.4:1}}>
                             {picked?"✓ ":""}{p.name}
                           </button>
                         );
@@ -795,7 +799,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                   </div>
                 );
               })}
-              <button onClick={()=>{onLogin(voteStep);setVoteStep(null);}} style={{width:"100%",marginTop:"6px",padding:"11px",background:`linear-gradient(135deg,${C.accent},${C.accent}bb)`,border:"none",borderRadius:"8px",color:C.bg,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
+              <button onClick={()=>{onLogin(voteStep);setVoteStep(null);}} style={{width:"100%",marginTop:"10px",padding:"11px",background:`linear-gradient(135deg,${C.accent},${C.accent}bb)`,border:"none",borderRadius:"8px",color:C.bg,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
                 Continue →
               </button>
             </div>
@@ -5028,14 +5032,18 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
           <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"12px"}}>
             {finalsSuperlativeRevealed?"Results are in!":finalsSuperlativeVotingOpen?"Cast your vote below (also available right after logging in) — results stay hidden until the commissioner reveals them.":"Voting hasn't opened yet."}
           </div>
-          {superlativeCategories.map(cat=>{
+          {superlativeCategories.map((cat,ci)=>{
             const category=cat.name;
             const maxPicks=cat.maxPicks||1;
             const tally=superlativeTally(category);
             const myVotes=(myVoterId?finalsSuperlativeVotes[category]?.[myVoterId]:null)||[];
             return (
-              <div key={category} style={{marginBottom:"14px",paddingBottom:"14px",borderBottom:`1px solid ${C.border}55`}}>
-                <div style={{color:C.text,fontSize:"0.82rem",fontWeight:"bold",marginBottom:"6px"}}>{category}{maxPicks>1&&<span style={{color:C.muted,fontWeight:"normal"}}> — pick {maxPicks}</span>}</div>
+              <div key={category} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 16px",marginBottom:"12px"}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:"8px",marginBottom:"2px"}}>
+                  <span style={{color:C.muted,fontSize:"0.68rem",fontWeight:"bold"}}>Q{ci+1}</span>
+                  <span style={{color:C.text,fontSize:"0.9rem",fontWeight:"bold"}}>{category}</span>
+                </div>
+                <div style={{color:C.muted,fontSize:"0.68rem",marginBottom:"10px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>Pick {maxPicks}{maxPicks>1?` (${myVotes.length}/${maxPicks} selected)`:""}</div>
                 {finalsSuperlativeRevealed?(
                   tally.length===0
                     ?<div style={{color:C.muted,fontSize:"0.76rem"}}>No votes cast.</div>
@@ -5051,13 +5059,13 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
                     })()
                 ):finalsSuperlativeVotingOpen?(
                   myVoterId?(
-                    <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
                       {players.filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
                         const picked=myVotes.includes(String(p.id));
                         const atCap=myVotes.length>=maxPicks;
                         return (
                           <button key={p.id} onClick={()=>castSuperlativeVote(category,p.id,maxPicks)} disabled={!picked&&atCap}
-                            style={{padding:"4px 10px",borderRadius:"14px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.text,fontSize:"0.74rem",fontFamily:"Georgia,serif",cursor:(!picked&&atCap)?"default":"pointer",opacity:(!picked&&atCap)?0.4:1}}>
+                            style={{padding:"6px 12px",borderRadius:"16px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":C.card,color:picked?C.accentLight:C.text,fontSize:"0.78rem",fontFamily:"Georgia,serif",cursor:(!picked&&atCap)?"default":"pointer",opacity:(!picked&&atCap)?0.4:1}}>
                             {picked?"✓ ":""}{p.name}
                           </button>
                         );
@@ -5068,7 +5076,7 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
                   <div style={{color:C.muted,fontSize:"0.76rem"}}>Not open yet.</div>
                 )}
                 {isAdmin&&!finalsSuperlativeRevealed&&(
-                  <div style={{marginTop:"6px",fontSize:"0.66rem",color:C.muted}}>
+                  <div style={{marginTop:"8px",paddingTop:"8px",borderTop:`1px dashed ${C.border}`,fontSize:"0.66rem",color:C.muted}}>
                     👁 commissioner preview: {tally.length===0?"no votes yet":tally.map(t=>`${t.name} (${t.count})`).join(", ")}
                   </div>
                 )}
