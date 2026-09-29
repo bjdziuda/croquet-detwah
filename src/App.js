@@ -339,6 +339,18 @@ const AWARD_TIEBREAK_METRICS = [
   ["weeksAttended", "Weeks Played", p=>p.weeksAttended, p=>`${p.weeksAttended} weeks played`],
 ];
 
+// Superlative categories used to be a flat string array (one pick each); normalize old data
+// into {name, maxPicks} so categories like "Rivalry" can allow picking 2 nominees.
+const normalizeSuperlatives = list => (list||[]).map(c => typeof c==="string" ? {name:c, maxPicks:1} : c);
+// Toggles a nominee in/out of a voter's picks for a category, capped at maxPicks.
+const toggleSuperlativeVote = (current, nomineeId, maxPicks) => {
+  const arr = current||[];
+  const id = String(nomineeId);
+  if (arr.includes(id)) return arr.filter(x=>x!==id);
+  if (arr.length>=maxPicks) return arr;
+  return [...arr, id];
+};
+
 function Switch({checked, onChange, label, disabled=false}) {
   return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${C.border}`,opacity:disabled?0.55:1}}>
@@ -351,7 +363,7 @@ function Switch({checked, onChange, label, disabled=false}) {
   );
 }
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, onFinalsSignup=()=>{}}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeVotes={}, onFinalsSignup=()=>{}, onSuperlativeVote=()=>{}}) {
   const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", appetizers:[], mains:[], sides:[], desserts:[], drinks:[], leagueItems:[], otherOn:false, otherSide:"", sideNote:""});
   const [editingRsvp, setEditingRsvp] = useState(false);
   const [mode, setMode]       = useState("bubbles");
@@ -359,6 +371,23 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr]         = useState("");
+  const [voteStep, setVoteStep] = useState(null);
+
+  const superlativeCategories=normalizeSuperlatives(finalsSuperlatives);
+  const canVoteAtLogin=finalsSuperlativeVotingOpen&&superlativeCategories.length>0;
+  // If voting's open, route the just-logged-in player through a quick vote step before
+  // actually calling onLogin; otherwise behave exactly as before.
+  const finishLogin=(userObj)=>{
+    if(canVoteAtLogin) setVoteStep(userObj);
+    else onLogin(userObj);
+  };
+  const castLoginVote=(category,nomineeId,maxPicks)=>{
+    if(!voteStep) return;
+    const voterId=String(voteStep.id);
+    const cur=finalsSuperlativeVotes[category]?.[voterId];
+    const next=toggleSuperlativeVote(cur,nomineeId,maxPicks);
+    onSuperlativeVote(voterId,category,next);
+  };
 
   const hydrateFinalsFormFromEntry=(entry)=>{
     setFinalsForm({
@@ -586,7 +615,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               submittedAt:Date.now(),
             };
             onFinalsSignup(selected.id,payload);
-            onLogin({name:selected.name,role:"viewer",id:selected.id});
+            finishLogin({name:selected.name,role:"viewer",id:selected.id});
             setSelected(null);
             setEditingRsvp(false);
           };
@@ -715,12 +744,12 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               })()}
               <div style={{display:"flex",gap:"10px",marginBottom:"12px"}}>
                 {signup.open&&(
-                  <button onClick={()=>{onSignup(selected.id,true);onLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
+                  <button onClick={()=>{onSignup(selected.id,true);finishLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
                     style={{flex:1,padding:"11px",background:`linear-gradient(135deg,${C.green},${C.green}bb)`,border:"none",borderRadius:"8px",color:C.text,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
                     Yes, I'm in! 🏑
                   </button>
                 )}
-                <button onClick={()=>{if(signup.open)onSignup(selected.id,false);onLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
+                <button onClick={()=>{if(signup.open)onSignup(selected.id,false);finishLogin({name:selected.name,role:"viewer",id:selected.id});setSelected(null);}}
                   style={{flex:1,padding:"11px",background:"none",border:`1px solid ${C.border}`,borderRadius:"8px",color:C.muted,fontFamily:"Georgia,serif",fontSize:"0.9rem",cursor:"pointer"}}>
                   {signup.open?"Can't make it":"Just browsing"}
                 </button>
@@ -735,6 +764,40 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                 </button>
               )}
               <button onClick={()=>{setSelected(null);setEditingRsvp(false);}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.78rem",fontFamily:"Georgia,serif",textDecoration:"underline"}}>Back</button>
+            </div>
+          </div>
+        )}
+
+        {/* SUPERLATIVE VOTE STEP - shown right after login, only while voting is open */}
+        {voteStep&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px",zIndex:100,overflowY:"auto"}}>
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"14px",padding:"24px",maxWidth:"360px",width:"100%",margin:"20px auto"}}>
+              <div style={{color:C.accentLight,fontSize:"1rem",fontWeight:"bold",marginBottom:"4px",textAlign:"center"}}>🎉 Quick vote, {voteStep.name}!</div>
+              <div style={{color:C.muted,fontSize:"0.82rem",marginBottom:"16px",textAlign:"center"}}>Results stay hidden until the commissioner reveals them.</div>
+              {superlativeCategories.map(cat=>{
+                const myVotes=(finalsSuperlativeVotes[cat.name]?.[String(voteStep.id)])||[];
+                return (
+                  <div key={cat.name} style={{marginBottom:"14px"}}>
+                    <div style={{color:C.text,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"2px"}}>{cat.name}</div>
+                    <div style={{color:C.muted,fontSize:"0.68rem",marginBottom:"6px"}}>Pick {cat.maxPicks}{cat.maxPicks>1?` (${myVotes.length}/${cat.maxPicks})`:""}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
+                      {players.filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
+                        const picked=myVotes.includes(String(p.id));
+                        const atCap=myVotes.length>=cat.maxPicks;
+                        return (
+                          <button key={p.id} onClick={()=>castLoginVote(cat.name,p.id,cat.maxPicks)} disabled={!picked&&atCap}
+                            style={{padding:"4px 10px",borderRadius:"14px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.text,fontSize:"0.74rem",fontFamily:"Georgia,serif",cursor:(!picked&&atCap)?"default":"pointer",opacity:(!picked&&atCap)?0.4:1}}>
+                            {picked?"✓ ":""}{p.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+              <button onClick={()=>{onLogin(voteStep);setVoteStep(null);}} style={{width:"100%",marginTop:"6px",padding:"11px",background:`linear-gradient(135deg,${C.accent},${C.accent}bb)`,border:"none",borderRadius:"8px",color:C.bg,fontFamily:"Georgia,serif",fontSize:"0.9rem",fontWeight:"bold",cursor:"pointer"}}>
+                Continue →
+              </button>
             </div>
           </div>
         )}
@@ -931,6 +994,9 @@ export default function App() {
     finalsSignups={appState?.finalsSignups||{}}
     finalsFoodCategories={appState?.finalsFoodCategories||{appetizers:[],mains:[],sides:appState?.finalsSides||[],desserts:[],drinks:[]}}
     finalsMenu={appState?.finalsMenu||{}}
+    finalsSuperlatives={appState?.finalsSuperlatives||[]}
+    finalsSuperlativeVotingOpen={!!appState?.finalsSuperlativeVotingOpen}
+    finalsSuperlativeVotes={appState?.finalsSuperlativeVotes||{}}
     onFinalsSignup={(pid,payload)=>{
       const key=String(pid);
       const newFinalsSignups={...(appState?.finalsSignups||{}),[key]:payload};
@@ -938,12 +1004,19 @@ export default function App() {
       // Targeted updateDoc only - never trigger the debounced full-document save here
       updateDoc(LEAGUE_DOC,{[`finalsSignups.${key}`]:payload}).catch(e=>console.error("Finals RSVP save failed:",e));
     }}
+    onSuperlativeVote={(voterId,category,nomineeArray)=>{
+      const cur=appState?.finalsSuperlativeVotes||{};
+      const catVotes={...(cur[category]||{}),[voterId]:nomineeArray};
+      const newVotes={...cur,[category]:catVotes};
+      setAppState({...appState,finalsSuperlativeVotes:newVotes});
+      updateDoc(LEAGUE_DOC,{[`finalsSuperlativeVotes.${category}.${voterId}`]:nomineeArray}).catch(e=>console.error("Superlative vote save failed:",e));
+    }}
   />;
   return <LeagueApp user={user} isAdmin={isAdmin} appState={appState} persist={persist} setLocal={setAppState} saving={saving} onLogout={()=>{setUser(null);sessionStorage.removeItem("croquetUser");}} uploadImage={uploadImage}/>;
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, seasonLocked=false, pastSeasons={}} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -1020,6 +1093,8 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const [gridEditKey, setGridEditKey]       = useState(null);
   const [gridEditPos, setGridEditPos]       = useState("");
   const [gridEditSotd, setGridEditSotd]     = useState(0);
+  const [archiveYear, setArchiveYear]       = useState(String(new Date().getFullYear()));
+  const [archiveConfirmText, setArchiveConfirmText] = useState("");
   const [gridSelWeek, setGridSelWeek]       = useState("");
   const [standingsView, setStandingsView]   = useState("list");
   const [standingsSort, setStandingsSort]   = useState("pts");
@@ -1925,11 +2000,11 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   {isAdmin&&<button onClick={()=>{setTempName(leagueName);setEditingName(true);}} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"4px",padding:"2px 6px",cursor:"pointer",fontSize:"0.65rem",fontFamily:"Georgia,serif",flexShrink:0}}>✎</button>}
                 </div>
               )}
-              <p style={{margin:"2px 0 0",color:C.muted,fontSize:"0.68rem"}}>{players.length} players · Wk {maxWk} · {venues.length} venues{saving?" · 💾":""}</p>
+              <p style={{margin:"2px 0 0",color:C.muted,fontSize:"0.68rem"}}>{players.length} players · Wk {maxWk} · {venues.length} venues{saving?" · 💾":""}{seasonLocked?" · 🔒 season locked":""}</p>
             </div>
             {/* Right controls */}
             <div style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
-              {isAdmin&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"6px 10px",fontSize:"0.72rem"}}>+Wk</button>}
+              {isAdmin&&!seasonLocked&&<button onClick={()=>update({totalWeeks:totalWeeks+1})} style={{...btnSt(C.green,true),padding:"6px 10px",fontSize:"0.72rem"}}>+Wk</button>}
               {isAdmin&&<div style={{display:"flex",gap:"4px",alignItems:"center"}}>
                 <select value={appState.nextMatchWeek||1} onChange={e=>update({nextMatchWeek:parseInt(e.target.value)})} style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:"6px",color:C.accent,padding:"4px 6px",fontSize:"0.65rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
                   {Array.from({length:Math.max(20,totalWeeks+2)},(_,i)=>i+1).map(w=><option key={w} value={w}>Wk {w}</option>)}
@@ -2814,9 +2889,13 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                           </th>
                         ))}
                         <th style={{...thSt,color:C.accent}}>TOT</th>
+                        <th style={thSt}>GP</th>
                         <th style={thSt}>🥇</th>
                         <th style={thSt}>⭐</th>
                         <th style={thSt}>ABS</th>
+                        <th style={thSt}>MVP%</th>
+                        <th style={thSt}>ELO</th>
+                        <th style={thSt}>PEAK ELO</th>
                       </tr>
                       <tr>
                         <th style={{...thSt,textAlign:"left",position:"sticky",left:0,zIndex:2}}></th>
@@ -2828,7 +2907,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                             </div>
                           </th>
                         ))}
-                        <th/><th/><th/><th/>
+                        <th/><th/><th/><th/><th/><th/><th/><th/>
                       </tr>
                     </thead>
                     <tbody>
@@ -2860,14 +2939,14 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                                   </td>
                                 );
                               }
-                              let wkPts=0,isWin=false,isLast=false,hasSotd=false;
+                              let wkPts=0,isWin=false,isLast=false,colSotd=0;
                               const allAbsent=entries.every(g=>g.absent);
                               entries.forEach(g=>{
                                 if(g.absent){abs++;return;}
                                 wkPts+=g.pts+(g.sotd||0);
                                 if(g.position===1)isWin=true;
                                 if(g.position===(g.actualGroupSize||g.groupSize))isLast=true;
-                                if(g.sotd>0)hasSotd=true;
+                                colSotd+=g.sotd||0;
                               });
                               if(allAbsent){
                                 return(
@@ -2879,14 +2958,14 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                                 );
                               }
                               if(isWin)wins++;
-                              if(hasSotd)sotds++;
+                              sotds+=colSotd;
                               return(
                                 <td key={col.key} style={{padding:"2px"}}>
                                   <div style={cellSt(isWin,isLast)}>
                                     <span style={{fontSize:"0.72rem",fontWeight:"bold",
                                       color:isWin?C.gold:isLast?C.red:C.cream}}>{wkPts}pt</span>
                                     <span style={{fontSize:"0.58rem",lineHeight:1}}>
-                                      {isWin?"🥇":isLast?"💀":""}{hasSotd?"⭐":""}
+                                      {isWin?"🥇":isLast?"💀":""}{colSotd>0?`⭐${colSotd>1?colSotd:""}`:""}
                                     </span>
                                   </div>
                                 </td>
@@ -2901,19 +2980,43 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{color:C.muted,fontSize:"0.78rem"}}>{p.gamesPlayed||"—"}</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
                                 <span style={{color:C.gold,fontSize:"0.78rem"}}>{wins||"—"}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                                <span style={{fontSize:"0.72px"}}>{sotds?"⭐".repeat(Math.min(sotds,3)):"—"}</span>
+                                <span style={{color:C.gold,fontSize:"0.78rem"}}>{sotds?`⭐ ${sotds}`:"—"}</span>
                               </div>
                             </td>
                             <td style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
                                 <span style={{color:C.muted,fontSize:"0.78rem"}}>{abs||"—"}</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{color:C.cream,fontSize:"0.78rem"}}>{p.mvp}{p.mvp!=="—"?"%":""}</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{color:C.cream,fontSize:"0.78rem"}}>{p.elo}</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"2px"}}>
+                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                <span style={{color:C.blue,fontSize:"0.78rem"}}>{p.peakElo}</span>
                               </div>
                             </td>
                           </tr>
@@ -3270,6 +3373,12 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 </Section>
 
                 <Section id="weekactions" title="⚙ WEEK ACTIONS" color={C.accent}>
+            {seasonLocked&&(
+              <div style={{...cardSt,marginBottom:"14px",borderColor:C.red+"44",background:"#1a0f0f",color:C.muted,fontSize:"0.76rem"}}>
+                🔒 The season is locked, so week actions are disabled. Unlock it in Season Management below to make changes.
+              </div>
+            )}
+            {!seasonLocked&&<>
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.blue+"44",background:"#0a0f1a"}}>
               <div style={{color:C.blue,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>☔ RAIN OUT WEEK</div>
               <div style={{display:"flex",gap:"8px",alignItems:"center",flexWrap:"wrap"}}>
@@ -3359,7 +3468,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               </div>
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"8px 0 0"}}>This removes all recorded scores for that week. Players will need to be re-recorded.</p>
             </div>
-
+            </>}
 
                 </Section>
 
@@ -3491,6 +3600,98 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 })()}
               </div>
             </div>
+                </Section>
+
+                <Section id="season" title="🔒 SEASON MANAGEMENT" color={C.red}>
+            <div style={{...cardSt,marginBottom:"14px",borderColor:C.accent+"44",background:"#1a1400"}}>
+              <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>🔒 LOCK SEASON</div>
+              <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 10px",lineHeight:"1.5"}}>Locking disables +Wk and the Week Actions above (rain out, rebalance, delete) so nothing changes by accident once the regular season is over. Good to flip on once you've hit your last match, before the finals.</p>
+              <Switch label={seasonLocked?"Season is locked":"Season is unlocked"} checked={!!seasonLocked} onChange={v=>update({seasonLocked:v})}/>
+            </div>
+
+            {(()=>{
+              const archivedYears=Object.entries(pastSeasons).filter(([,v])=>v&&Array.isArray(v.standings)).sort((a,b)=>b[0].localeCompare(a[0]));
+              const confirmReady=archiveConfirmText.trim().toUpperCase()==="RESET";
+              const archiveAndResetSeason=()=>{
+                const year=archiveYear.trim()||String(new Date().getFullYear());
+                const snapshot={
+                  archivedAt:Date.now(),
+                  totalWeeks,
+                  weeklyGames,
+                  standings:standings.map(p=>({id:p.id,name:p.name,pts:p.pts,wins:p.wins,sotdTotal:p.sotdTotal,weeksAttended:p.weeksAttended,absences:p.absences,mvp:p.mvp,elo:p.elo,peakElo:p.peakElo,gamesPlayed:p.gamesPlayed})),
+                };
+                const freshPlayers=players.map(p=>({...p,joinedWeek:1}));
+                update({
+                  pastSeasons:{...pastSeasons,[year]:{...(pastSeasons[year]||{}),...snapshot}},
+                  players:freshPlayers,
+                  weeklyGames:{},
+                  weeklyGuests:{},
+                  totalWeeks:1,
+                  nextMatchWeek:1,
+                  weekSignups:{},
+                  weekVenues:{},
+                  weekTiebreakers:{},
+                  publishedGroups:null,
+                  rookiePool:[],
+                  handicapTiers:{},
+                  membershipDues:{},
+                  suspendedPlayers:[],
+                  leagueExpenses:[],
+                  announcement:{title:"",body:""},
+                  loginPosts:[],
+                  seasonLocked:false,
+                  awardManualWinners:{},
+                  awardTiebreakMetric:"elo",
+                  finalsMode:false,
+                  finalsConfig:{},
+                  finalsSignups:{},
+                  finalsHeat1Results:{},
+                  finalsFoodReminderDismissed:[],
+                  finalsSuperlatives:[],
+                  finalsSuperlativeVotingOpen:false,
+                  finalsSuperlativeRevealed:false,
+                  finalsSuperlativeVotes:{},
+                  finalsChampionshipDayMode:false,
+                });
+                setArchiveConfirmText("");
+                notify(`Season archived as ${year} — fresh season started!`);
+              };
+              return(
+                <div style={{...cardSt,borderColor:C.red+"44",background:"#1a0f0f"}}>
+                  <div style={{color:C.red,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>⚠ ARCHIVE &amp; START NEXT SEASON</div>
+                  <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 10px",lineHeight:"1.5"}}>
+                    Saves a full snapshot of this season's final standings (points, wins, SOTD, elo, peak elo, MVP%, games played) and raw game history under the year below, then resets weekly games, weeks, sign-ups, dues, and finals data so the app is ready for a new season. Players, venues, and league branding are kept — player Elo naturally restarts at the default rating once games reset. <strong style={{color:C.text}}>This can't be undone from the app</strong> — the archived snapshot is your only copy of this season's data afterward.
+                  </p>
+                  <div style={{marginBottom:"10px"}}>
+                    <label style={lbSt}>ARCHIVE AS SEASON / YEAR</label>
+                    <input style={{...inputSt,maxWidth:"160px"}} value={archiveYear} onChange={e=>setArchiveYear(e.target.value)}/>
+                  </div>
+                  <div style={{marginBottom:"10px"}}>
+                    <label style={lbSt}>TYPE "RESET" TO CONFIRM</label>
+                    <input style={{...inputSt,maxWidth:"160px"}} value={archiveConfirmText} onChange={e=>setArchiveConfirmText(e.target.value)} placeholder="RESET"/>
+                  </div>
+                  <button disabled={!confirmReady} onClick={()=>{
+                      if(!window.confirm(`Archive this season as "${archiveYear.trim()||new Date().getFullYear()}" and reset all weekly games, sign-ups, dues, and finals data for a new season? This can't be undone from the app.`)) return;
+                      archiveAndResetSeason();
+                    }} style={{...btnSt(C.red,true),opacity:confirmReady?1:0.4,cursor:confirmReady?"pointer":"not-allowed"}}>Archive &amp; Start Fresh Season</button>
+
+                  {archivedYears.length>0&&(
+                    <div style={{marginTop:"16px",paddingTop:"12px",borderTop:`1px solid ${C.border}`}}>
+                      <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.08em",marginBottom:"8px"}}>ARCHIVED SEASONS</div>
+                      {archivedYears.map(([yr,data])=>{
+                        const top=[...data.standings].sort((a,b)=>b.pts-a.pts)[0];
+                        return (
+                          <div key={yr} style={{padding:"6px 0",borderBottom:`1px solid ${C.border}55`,fontSize:"0.74rem",color:C.text}}>
+                            <strong>{yr}</strong> — archived {new Date(data.archivedAt).toLocaleDateString()} · {data.standings.length} players
+                            {top&&<span style={{color:C.muted}}> · top scorer: {top.name} ({top.pts} pts)</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
                 </Section>
               </>);
             })()}
@@ -4450,6 +4651,30 @@ function EditableStringList({label, items=[], onChange}) {
   );
 }
 
+function SuperlativeCategoryEditor({items=[], onChange}) {
+  const [draft,setDraft]=useState("");
+  const iSt={flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"6px 8px",fontSize:"0.78rem",fontFamily:"Georgia,serif",outline:"none"};
+  const picksSt={width:"48px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"6px 4px",fontSize:"0.78rem",fontFamily:"Georgia,serif",outline:"none",textAlign:"center"};
+  const cats=normalizeSuperlatives(items);
+  const addItem=()=>{ if(draft.trim()){ onChange([...cats,{name:draft.trim(),maxPicks:1}]); setDraft(""); } };
+  return (
+    <div style={{marginBottom:"14px"}}>
+      <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"6px"}}>CATEGORIES <span style={{textTransform:"none"}}>(picks = how many nominees a member can select, e.g. 2 for "Rivalry")</span></div>
+      {cats.map((cat,i)=>(
+        <div key={i} style={{display:"flex",gap:"6px",marginBottom:"4px",alignItems:"center"}}>
+          <input style={iSt} value={cat.name} onChange={e=>{const next=[...cats];next[i]={...next[i],name:e.target.value};onChange(next);}}/>
+          <input type="number" min="1" max="4" style={picksSt} value={cat.maxPicks} onChange={e=>{const next=[...cats];next[i]={...next[i],maxPicks:Math.max(1,parseInt(e.target.value)||1)};onChange(next);}}/>
+          <button onClick={()=>onChange(cats.filter((_,idx)=>idx!==i))} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"6px 10px",cursor:"pointer"}}>×</button>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:"6px"}}>
+        <input style={iSt} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Add category…" onKeyDown={e=>e.key==="Enter"&&addItem()}/>
+        <button onClick={addItem} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"6px",padding:"0 10px",cursor:"pointer"}}>+</button>
+      </div>
+    </div>
+  );
+}
+
 function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
@@ -4504,16 +4729,18 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
   const guestCount=responded.filter(r=>r.entry.coming&&r.entry.guests).reduce((sum,r)=>sum+(r.entry.guestCount||0),0);
   const totalHeadcount=comingCount+guestCount;
 
-  // Superlatives voting: members cast one vote per category while voting is open; nobody (except
-  // the commissioner, live) sees tallies until finalsSuperlativeRevealed is switched on.
+  // Superlatives voting: members pick up to maxPicks nominees per category while voting is open;
+  // nobody (except the commissioner, live) sees tallies until finalsSuperlativeRevealed is switched on.
+  const superlativeCategories=normalizeSuperlatives(finalsSuperlatives);
   const myVoterId=user?String(user.id):null;
-  const castSuperlativeVote=(category,nomineeId)=>{
+  const castSuperlativeVote=(category,nomineeId,maxPicks)=>{
     if(!myVoterId) return;
-    const cur=finalsSuperlativeVotes[category]||{};
-    update({finalsSuperlativeVotes:{...finalsSuperlativeVotes,[category]:{...cur,[myVoterId]:String(nomineeId)}}});
+    const cur=finalsSuperlativeVotes[category]?.[myVoterId];
+    const next=toggleSuperlativeVote(cur,nomineeId,maxPicks);
+    update({finalsSuperlativeVotes:{...finalsSuperlativeVotes,[category]:{...(finalsSuperlativeVotes[category]||{}),[myVoterId]:next}}});
   };
   const superlativeTally=category=>{
-    const votes=Object.values(finalsSuperlativeVotes[category]||{});
+    const votes=Object.values(finalsSuperlativeVotes[category]||{}).flat();
     const counts={};
     votes.forEach(pid=>{counts[pid]=(counts[pid]||0)+1;});
     return Object.entries(counts)
@@ -4795,18 +5022,20 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
       </div>
 
       {/* SUPERLATIVES VOTING - hidden until revealed */}
-      {finalsSuperlatives.length>0&&(
+      {superlativeCategories.length>0&&(
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
           <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>🎉 Finals Superlatives</div>
           <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"12px"}}>
-            {finalsSuperlativeRevealed?"Results are in!":finalsSuperlativeVotingOpen?"Cast your vote below — results stay hidden until the commissioner reveals them.":"Voting hasn't opened yet."}
+            {finalsSuperlativeRevealed?"Results are in!":finalsSuperlativeVotingOpen?"Cast your vote below (also available right after logging in) — results stay hidden until the commissioner reveals them.":"Voting hasn't opened yet."}
           </div>
-          {finalsSuperlatives.map(category=>{
+          {superlativeCategories.map(cat=>{
+            const category=cat.name;
+            const maxPicks=cat.maxPicks||1;
             const tally=superlativeTally(category);
-            const myVote=myVoterId?finalsSuperlativeVotes[category]?.[myVoterId]:null;
+            const myVotes=(myVoterId?finalsSuperlativeVotes[category]?.[myVoterId]:null)||[];
             return (
               <div key={category} style={{marginBottom:"14px",paddingBottom:"14px",borderBottom:`1px solid ${C.border}55`}}>
-                <div style={{color:C.text,fontSize:"0.82rem",fontWeight:"bold",marginBottom:"6px"}}>{category}</div>
+                <div style={{color:C.text,fontSize:"0.82rem",fontWeight:"bold",marginBottom:"6px"}}>{category}{maxPicks>1&&<span style={{color:C.muted,fontWeight:"normal"}}> — pick {maxPicks}</span>}</div>
                 {finalsSuperlativeRevealed?(
                   tally.length===0
                     ?<div style={{color:C.muted,fontSize:"0.76rem"}}>No votes cast.</div>
@@ -4824,10 +5053,11 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
                   myVoterId?(
                     <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>
                       {players.filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
-                        const picked=myVote===String(p.id);
+                        const picked=myVotes.includes(String(p.id));
+                        const atCap=myVotes.length>=maxPicks;
                         return (
-                          <button key={p.id} onClick={()=>castSuperlativeVote(category,p.id)}
-                            style={{padding:"4px 10px",borderRadius:"14px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.text,fontSize:"0.74rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                          <button key={p.id} onClick={()=>castSuperlativeVote(category,p.id,maxPicks)} disabled={!picked&&atCap}
+                            style={{padding:"4px 10px",borderRadius:"14px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.text,fontSize:"0.74rem",fontFamily:"Georgia,serif",cursor:(!picked&&atCap)?"default":"pointer",opacity:(!picked&&atCap)?0.4:1}}>
                             {picked?"✓ ":""}{p.name}
                           </button>
                         );
@@ -4879,7 +5109,7 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
           ))}
 
           <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>🎉 Superlatives voting</div>
-          <EditableStringList label="CATEGORIES" items={finalsSuperlatives} onChange={next=>update({finalsSuperlatives:next})}/>
+          <SuperlativeCategoryEditor items={finalsSuperlatives} onChange={next=>update({finalsSuperlatives:next})}/>
           <Switch label="Voting open (members can cast votes)" checked={!!finalsSuperlativeVotingOpen} onChange={v=>update({finalsSuperlativeVotingOpen:v})}/>
           <Switch label="Reveal results to everyone" checked={!!finalsSuperlativeRevealed} onChange={v=>update({finalsSuperlativeRevealed:v})}/>
           {Object.keys(finalsSuperlativeVotes).length>0&&(
