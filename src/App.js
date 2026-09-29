@@ -1137,12 +1137,14 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const eloSystem = useMemo(()=>computeEloSystem(players,weeklyGames,maxWk),[players,weeklyGames,maxWk]);
   const recentForm = useMemo(()=>computeRecentForm(players,eloSystem,5),[players,eloSystem]);
   const MIN_WEEKS_FOR_AWARDS=8;
+  // Most Improved ignores the season's first 2 weeks — ratings and groups haven't settled yet,
+  // so early swings would otherwise read as a "recovery" or trajectory that isn't real.
+  const MOST_IMPROVED_SKIP_WEEKS=2;
   const standings = useMemo(()=>{
     const rows=[...players].filter(p=>!suspendedPlayers.includes(String(p.id))).map(p=>{
       const pts=totalPts(p.id,weeklyGames);
       const allG=Object.values(weeklyGames[p.id]||{}).flat();
       const wins=allG.filter(g=>g.position===1&&!g.absent).length;
-      const secondPlaceCount=allG.filter(g=>g.position===2&&!g.absent).length;
       // Count missed WEEKS, not missed game entries — a week with multiple rounds where a
       // player is absent in all of them is one missed week, not one absence per round.
       const absences=Object.values(weeklyGames[p.id]||{}).filter(gs=>gs.length>0&&gs.every(g=>g.absent)).length;
@@ -1168,20 +1170,22 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       // Most Improved: average performance in the season's second half vs its first half, so it
       // rewards genuine upward trajectory rather than just who ended up with the highest Elo.
       // Offered as either MVP% or Elo trajectory (admin picks which via improvementMetric).
+      // Weeks 1-2 are excluded from both — see MOST_IMPROVED_SKIP_WEEKS above.
       const halfWk=Math.ceil(maxWk/2);
       const avgOf=arr=>arr.length?arr.reduce((s,x)=>s+x.val,0)/arr.length:null;
-      const mvpSplit=mvpByWeek.map(x=>({week:x.week,val:x.mvp}));
+      const mvpSplit=mvpByWeek.filter(x=>x.week>MOST_IMPROVED_SKIP_WEEKS).map(x=>({week:x.week,val:x.mvp}));
       const mvpFirstHalfAvg=avgOf(mvpSplit.filter(x=>x.week<=halfWk));
       const mvpSecondHalfAvg=avgOf(mvpSplit.filter(x=>x.week>halfWk));
       const improvementMvp=(weeksAttended>=MIN_WEEKS_FOR_AWARDS&&mvpFirstHalfAvg!=null&&mvpSecondHalfAvg!=null)?mvpSecondHalfAvg-mvpFirstHalfAvg:null;
-      // Elo variant of Most Improved: biggest recovery from this player's lowest point in the
-      // season's Elo trajectory (including the 1500 starting rating) up to their current Elo —
-      // rewards climbing back from a slump, not just ending the season with a high rating.
+      // Elo variant of Most Improved: biggest recovery from this player's lowest point (from week
+      // 3 on, using their week-2 rating as the floor) up to their current Elo — rewards climbing
+      // back from a slump, not just ending the season with a high rating.
       const eloByWeek=mvpByWeek.map(x=>({week:x.week,val:hist[x.week]??ELO_START}));
-      let minElo=ELO_START,minEloWeek=0;
-      eloByWeek.forEach(x=>{ if(x.val<minElo){minElo=x.val;minEloWeek=x.week;} });
+      const eloBaseline=hist[MOST_IMPROVED_SKIP_WEEKS]??ELO_START;
+      let minElo=eloBaseline,minEloWeek=MOST_IMPROVED_SKIP_WEEKS;
+      eloByWeek.filter(x=>x.week>MOST_IMPROVED_SKIP_WEEKS).forEach(x=>{ if(x.val<minElo){minElo=x.val;minEloWeek=x.week;} });
       const improvementElo=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-minElo:null;
-      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,avgMvp,improvementMvp,mvpFirstHalfAvg,mvpSecondHalfAvg,improvementElo,minElo,minEloWeek};
+      return{...p,pts,wins,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,avgMvp,improvementMvp,mvpFirstHalfAvg,mvpSecondHalfAvg,improvementElo,minElo,minEloWeek};
     }).sort((a,b)=>b.pts-a.pts);
     return rows;
   },[players,weeklyGames,eloSystem,maxWk]);
@@ -3225,7 +3229,15 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   detail:detailFn(c)+(tied&&tiebreakFn?` · tiebreak: ${tiebreakFn(c)}`:"")
                 };
               });
-              const setManualWinner=(awardKey,pid)=>update({awardManualWinners:{...awardManualWinners,[awardKey]:String(pid)}});
+              // awardManualWinners[awardKey] is an array of ids so admins can name co-winners for
+              // a genuine tie (e.g. two people tied for Best Attendance), not just pick one.
+              const toggleManualWinner=(awardKey,pid)=>{
+                const cur=awardManualWinners[awardKey];
+                const curArr=Array.isArray(cur)?cur:(cur?[cur]:[]);
+                const id=String(pid);
+                const next=curArr.includes(id)?curArr.filter(x=>x!==id):[...curArr,id];
+                update({awardManualWinners:{...awardManualWinners,[awardKey]:next}});
+              };
               const [tbKey,tbLabel,tiebreakValue,tiebreakLabel]=AWARD_TIEBREAK_METRICS.find(([k])=>k===awardTiebreakMetric)||AWARD_TIEBREAK_METRICS[0];
               const champCands=[...standings].sort((a,b)=>b.pts-a.pts||tiebreakValue(b)-tiebreakValue(a));
               const champList=buildAwardList(champCands,p=>p.pts,p=>`${p.pts} pts`,tiebreakLabel);
@@ -3233,11 +3245,9 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               const improveCands=[...standings.filter(p=>improvementOf(p)!=null)].sort((a,b)=>improvementOf(b)-improvementOf(a)||tiebreakValue(b)-tiebreakValue(a));
               const improvedList=buildAwardList(improveCands,p=>Math.round(improvementOf(p)*10),
                 p=>improvementMetric==="elo"
-                  ?`${Math.round(p.minElo)} (wk ${p.minEloWeek||"start"}) → ${p.elo} Elo`
+                  ?`${Math.round(p.minElo)} (wk ${p.minEloWeek}) → ${p.elo} Elo`
                   :`${p.mvpFirstHalfAvg.toFixed(1)}% → ${p.mvpSecondHalfAvg.toFixed(1)}% MVP (2nd half)`,
                 tiebreakLabel);
-              const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||tiebreakValue(b)-tiebreakValue(a));
-              const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`,tiebreakLabel);
               const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal||tiebreakValue(b)-tiebreakValue(a));
               const sotdList=buildAwardList(sotdCands,p=>p.sotdTotal,p=>`${p.sotdTotal} SOTD${p.sotdTotal!==1?"s":""}`,tiebreakLabel);
               // Rookie of the Year is already ranked by Elo, so its tiebreak falls back to MVP%.
@@ -3270,18 +3280,16 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   for(const r of origRunners){ if(r.tied) tieGroup.push(r); else break; }
                 }
                 const hasTie=tieGroup.length>1;
-                const manualId=hasTie?awardManualWinners[awardKey]:null;
-                let displayList=list;
-                if(manualId&&tieGroup.some(c=>String(c.id)===String(manualId))&&String(manualId)!==String(origWinner.id)){
-                  const idx=list.findIndex(c=>String(c.id)===String(manualId));
-                  displayList=[list[idx],...list.filter((_,i)=>i!==idx)];
-                }
-                const [winner,...runners]=displayList.length?displayList:[null];
+                const manualRaw=hasTie?awardManualWinners[awardKey]:null;
+                const manualIds=(Array.isArray(manualRaw)?manualRaw:(manualRaw?[manualRaw]:[])).map(String).filter(id=>tieGroup.some(c=>String(c.id)===id));
+                const winners=manualIds.length>0?tieGroup.filter(c=>manualIds.includes(String(c.id))):(origWinner?[origWinner]:[]);
+                const winnerIds=new Set(winners.map(c=>String(c.id)));
+                const runners=list.filter(c=>!winnerIds.has(String(c.id)));
                 return(
                   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"12px"}}>
                     <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.06em"}}>{icon} {label}</div>
-                    <div style={{color:winner?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{winner?winner.name:"—"}</div>
-                    {winner&&winner.detail&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>{winner.detail}</div>}
+                    <div style={{color:winners.length?C.accentLight:C.muted,fontSize:"1.05rem",fontWeight:"bold",marginTop:"4px"}}>{winners.length?winners.map(w=>w.name).join(" / "):"—"}</div>
+                    {winners.length>0&&winners.some(w=>w.detail)&&<div style={{color:C.muted,fontSize:"0.68rem",marginTop:"2px"}}>{winners.map(w=>w.detail).filter(Boolean).join(" · ")}</div>}
                     {runners.length>0&&(
                       <div style={{marginTop:"8px",paddingTop:"8px",borderTop:`1px solid ${C.border}`}}>
                         {runners.map((r,i)=>(
@@ -3291,12 +3299,12 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                     )}
                     {hasTie&&isAdmin&&awardKey&&(
                       <div style={{marginTop:"8px",paddingTop:"8px",borderTop:`1px dashed ${C.border}`}}>
-                        <div style={{color:C.muted,fontSize:"0.6rem",marginBottom:"3px"}}>Tied for 1st — pick the official winner:</div>
+                        <div style={{color:C.muted,fontSize:"0.6rem",marginBottom:"3px"}}>Tied for 1st — pick official co-winner(s):</div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>
                           {tieGroup.map(c=>{
-                            const picked=String(c.id)===String(winner.id);
-                            return <button key={c.id} onClick={()=>setManualWinner(awardKey,c.id)}
-                              style={{fontSize:"0.62rem",padding:"2px 7px",borderRadius:"9px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.muted,cursor:"pointer",fontFamily:"Georgia,serif"}}>{c.name}</button>;
+                            const picked=winnerIds.has(String(c.id));
+                            return <button key={c.id} onClick={()=>toggleManualWinner(awardKey,c.id)}
+                              style={{fontSize:"0.62rem",padding:"2px 7px",borderRadius:"9px",border:`1px solid ${picked?C.accent:C.border}`,background:picked?C.accent+"33":"transparent",color:picked?C.accentLight:C.muted,cursor:"pointer",fontFamily:"Georgia,serif"}}>{picked?"✓ ":""}{c.name}</button>;
                           })}
                         </div>
                       </div>
@@ -3328,7 +3336,6 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                     <AwardCard icon="👑" label="REGULAR SEASON CHAMPION" list={champList} awardKey="champion"/>
                     <AwardCard icon="🏆" label="MVP" list={mvpAwardList} awardKey="mvp"/>
                     <AwardCard icon="📈" label="MOST IMPROVED" list={improvedList} awardKey="improved"/>
-                    <AwardCard icon="👰" label="BRIDESMAID" list={bridesmaidList} awardKey="bridesmaid"/>
                     <AwardCard icon="⭐" label="MOST SOTDS" list={sotdList} awardKey="sotd"/>
                     <AwardCard icon="🦾" label="BEST ATTENDANCE" list={attendanceList} awardKey="attendance"/>
                     <AwardCard icon="❤️" label="MOST COMMITTED" list={committedList} awardKey="committed"/>
