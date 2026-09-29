@@ -32,6 +32,10 @@ code {
   #print-area { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; }
   .no-print { display: none !important; }
 
+  /* Shrinks the whole table to fit one page, per a scale computed from its row/column
+     counts (see printHistory() in App.js) and stashed in this variable right before printing. */
+  #print-area table { zoom: var(--hist-print-scale, 1); }
+
   #print-area, #print-area * { color: #000 !important; }
   #print-area table { border-collapse: collapse !important; border-spacing: 0 !important; }
   #print-area td, #print-area th { border: 1px solid #aaa !important; padding: 2px !important; }

@@ -2935,13 +2935,15 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   const s=String(v??"");
                   return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
                 };
-                const header=["Player",...cols.map(c=>`Wk${c.wk} G${c.round}`),"TOT","WKS","Wins","SOTD","MVP%","ELO","Peak Elo"];
+                const header=["Player",...cols.flatMap(c=>[`Wk${c.wk} G${c.round} Pts`,`Wk${c.wk} G${c.round} SOTD`]),"TOT","WKS","Wins","SOTD","MVP%","ELO","Peak Elo"];
                 const rows=standings.map(p=>{
                   const {wins,sotds}=totals[p.id];
-                  const weekCells=cols.map(col=>{
+                  const weekCells=cols.flatMap(col=>{
                     const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
-                    if(!entries.length||entries.every(g=>g.absent)) return "";
-                    return entries.reduce((s,g)=>s+(g.absent?0:g.pts+(g.sotd||0)),0);
+                    if(!entries.length||entries.every(g=>g.absent)) return ["",""];
+                    const ptsVal=entries.reduce((s,g)=>s+(g.absent?0:(g.pts||0)),0);
+                    const sotdVal=entries.reduce((s,g)=>s+(g.absent?0:(g.sotd||0)),0);
+                    return [ptsVal,sotdVal];
                   });
                   return [p.name,...weekCells,p.pts,p.weeksAttended||0,wins,sotds,p.mvp,p.elo,p.peakElo];
                 });
@@ -2956,16 +2958,27 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
               };
+              const printHistory=()=>{
+                // Estimate the printed table's size from its column/row counts (rather than
+                // measuring the on-screen DOM, which uses different fonts/padding than print does)
+                // and scale it down via a CSS variable so the whole season fits on one landscape page.
+                const estWidth=110+cols.length*38+7*42;
+                const estHeight=46+standings.length*30;
+                const pageWidth=950,pageHeight=710;
+                const scale=Math.min(1,pageWidth/estWidth,pageHeight/estHeight);
+                document.documentElement.style.setProperty("--hist-print-scale",scale.toFixed(3));
+                window.print();
+              };
               return(
                 <>
                 <div className="no-print" style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
                   <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",margin:0}}>Season Summary</h2>
                   <div style={{display:"flex",gap:"8px"}}>
                     <button onClick={exportHistoryCSV} style={{...btnSt(C.green,true),padding:"7px 14px",fontSize:"0.76rem"}}>📄 Export CSV</button>
-                    <button onClick={()=>window.print()} style={{...btnSt(C.accent,true),padding:"7px 14px",fontSize:"0.76rem"}}>🖨 Print / Export PDF</button>
+                    <button onClick={printHistory} style={{...btnSt(C.accent,true),padding:"7px 14px",fontSize:"0.76rem"}}>🖨 Print / Export PDF</button>
                   </div>
                 </div>
-                <p className="no-print" style={{color:C.muted,fontSize:"0.68rem",margin:"-6px 0 12px"}}>Export CSV to edit in Excel/Sheets, or print/save as PDF for a formatted copy.</p>
+                <p className="no-print" style={{color:C.muted,fontSize:"0.68rem",margin:"-6px 0 12px"}}>Export CSV to edit in Excel/Sheets, or print/save as PDF — automatically shrunk to fit one landscape page (Chrome/Edge/Safari; older Firefox may not support the auto-shrink and could split across pages).</p>
                 <div style={{overflowX:"auto",marginBottom:"20px"}}>
                   <table style={{borderCollapse:"separate",borderSpacing:"3px",minWidth:"100%"}}>
                     <thead>
