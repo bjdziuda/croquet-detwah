@@ -1020,7 +1020,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, seasonLocked=false, pastSeasons={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, improvementMetric="mvp", finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, seasonLocked=false, pastSeasons={}} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -1164,19 +1164,22 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
         if(wmax>0) mvpByWeek.push({week:parseInt(w),mvp:(wpts/wmax)*100});
       });
       const avgMvp=mvpByWeek.length?mvpByWeek.reduce((s,x)=>s+x.mvp,0)/mvpByWeek.length:null;
-      // Most Improved: average weekly MVP% in the season's second half vs its first half, so it
+      // Most Improved: average performance in the season's second half vs its first half, so it
       // rewards genuine upward trajectory rather than just who ended up with the highest Elo.
+      // Offered as either MVP% or Elo trajectory (admin picks which via improvementMetric).
       const halfWk=Math.ceil(maxWk/2);
-      const firstHalf=mvpByWeek.filter(x=>x.week<=halfWk);
-      const secondHalf=mvpByWeek.filter(x=>x.week>halfWk);
-      const firstHalfAvg=firstHalf.length?firstHalf.reduce((s,x)=>s+x.mvp,0)/firstHalf.length:null;
-      const secondHalfAvg=secondHalf.length?secondHalf.reduce((s,x)=>s+x.mvp,0)/secondHalf.length:null;
-      const improvement=(weeksAttended>=MIN_WEEKS_FOR_AWARDS&&firstHalfAvg!=null&&secondHalfAvg!=null)?secondHalfAvg-firstHalfAvg:null;
-      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,improvement,avgMvp,firstHalfAvg,secondHalfAvg};
+      const avgOf=arr=>arr.length?arr.reduce((s,x)=>s+x.val,0)/arr.length:null;
+      const mvpSplit=mvpByWeek.map(x=>({week:x.week,val:x.mvp}));
+      const mvpFirstHalfAvg=avgOf(mvpSplit.filter(x=>x.week<=halfWk));
+      const mvpSecondHalfAvg=avgOf(mvpSplit.filter(x=>x.week>halfWk));
+      const improvementMvp=(weeksAttended>=MIN_WEEKS_FOR_AWARDS&&mvpFirstHalfAvg!=null&&mvpSecondHalfAvg!=null)?mvpSecondHalfAvg-mvpFirstHalfAvg:null;
+      const eloByWeek=mvpByWeek.map(x=>({week:x.week,val:hist[x.week]??ELO_START}));
+      const eloFirstHalfAvg=avgOf(eloByWeek.filter(x=>x.week<=halfWk));
+      const eloSecondHalfAvg=avgOf(eloByWeek.filter(x=>x.week>halfWk));
+      const improvementElo=(weeksAttended>=MIN_WEEKS_FOR_AWARDS&&eloFirstHalfAvg!=null&&eloSecondHalfAvg!=null)?eloSecondHalfAvg-eloFirstHalfAvg:null;
+      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,avgMvp,improvementMvp,mvpFirstHalfAvg,mvpSecondHalfAvg,improvementElo,eloFirstHalfAvg,eloSecondHalfAvg};
     }).sort((a,b)=>b.pts-a.pts);
-    const improveCands=rows.filter(p=>p.improvement!=null);
-    const mostImprovedId=improveCands.length?improveCands.reduce((best,p)=>p.improvement>best.improvement?p:best).id:null;
-    return rows.map(p=>({...p,isMostImproved:p.id===mostImprovedId}));
+    return rows;
   },[players,weeklyGames,eloSystem,maxWk]);
 
 
@@ -3194,8 +3197,13 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               const [tbKey,tbLabel,tiebreakValue,tiebreakLabel]=AWARD_TIEBREAK_METRICS.find(([k])=>k===awardTiebreakMetric)||AWARD_TIEBREAK_METRICS[0];
               const champCands=[...standings].sort((a,b)=>b.pts-a.pts||tiebreakValue(b)-tiebreakValue(a));
               const champList=buildAwardList(champCands,p=>p.pts,p=>`${p.pts} pts`,tiebreakLabel);
-              const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement||tiebreakValue(b)-tiebreakValue(a));
-              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement*10),p=>`${p.firstHalfAvg.toFixed(1)}% → ${p.secondHalfAvg.toFixed(1)}% MVP (2nd half)`,tiebreakLabel);
+              const improvementOf=p=>improvementMetric==="elo"?p.improvementElo:p.improvementMvp;
+              const improveCands=[...standings.filter(p=>improvementOf(p)!=null)].sort((a,b)=>improvementOf(b)-improvementOf(a)||tiebreakValue(b)-tiebreakValue(a));
+              const improvedList=buildAwardList(improveCands,p=>Math.round(improvementOf(p)*10),
+                p=>improvementMetric==="elo"
+                  ?`${Math.round(p.eloFirstHalfAvg)} → ${Math.round(p.eloSecondHalfAvg)} Elo (2nd half)`
+                  :`${p.mvpFirstHalfAvg.toFixed(1)}% → ${p.mvpSecondHalfAvg.toFixed(1)}% MVP (2nd half)`,
+                tiebreakLabel);
               const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||tiebreakValue(b)-tiebreakValue(a));
               const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`,tiebreakLabel);
               const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal||tiebreakValue(b)-tiebreakValue(a));
@@ -3268,11 +3276,20 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 <div style={{...cardSt,marginBottom:"14px"}}>
                   <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 6px"}}>Most Improved, MVP, and Most Committed require 8+ weeks played to qualify. Ties are broken by <strong style={{color:C.text}}>{tbLabel}</strong> (Rookie of the Year by MVP%; MVP and Most Committed by weeks played) — shown as "tiebreak: ..." next to a runner-up who tied the winner.</p>
                   {isAdmin&&(
-                    <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"12px"}}>
-                      <label style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.06em"}}>TIEBREAK METRIC</label>
-                      <select value={tbKey} onChange={e=>update({awardTiebreakMetric:e.target.value})} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"4px 8px",fontSize:"0.72rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
-                        {AWARD_TIEBREAK_METRICS.map(([k,label])=><option key={k} value={k}>{label}</option>)}
-                      </select>
+                    <div style={{display:"flex",alignItems:"center",gap:"14px",flexWrap:"wrap",marginBottom:"12px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                        <label style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.06em"}}>TIEBREAK METRIC</label>
+                        <select value={tbKey} onChange={e=>update({awardTiebreakMetric:e.target.value})} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"4px 8px",fontSize:"0.72rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                          {AWARD_TIEBREAK_METRICS.map(([k,label])=><option key={k} value={k}>{label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                        <label style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.06em"}}>MOST IMPROVED METRIC</label>
+                        <select value={improvementMetric} onChange={e=>update({improvementMetric:e.target.value})} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"4px 8px",fontSize:"0.72rem",fontFamily:"Georgia,serif",cursor:"pointer"}}>
+                          <option value="mvp">MVP %</option>
+                          <option value="elo">Elo</option>
+                        </select>
+                      </div>
                     </div>
                   )}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
