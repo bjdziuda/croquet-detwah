@@ -340,8 +340,9 @@ const AWARD_TIEBREAK_METRICS = [
 ];
 
 // Superlative categories used to be a flat string array (one pick each); normalize old data
-// into {name, maxPicks} so categories like "Rivalry" can allow picking 2 nominees.
-const normalizeSuperlatives = list => (list||[]).map(c => typeof c==="string" ? {name:c, maxPicks:1} : c);
+// into {name, maxPicks, pairMode}. pairMode categories (e.g. "Rivalry") are tallied by the
+// whole combination of nominees a voter picked, not by counting each nominee separately.
+const normalizeSuperlatives = list => (list||[]).map(c => typeof c==="string" ? {name:c, maxPicks:1, pairMode:false} : {pairMode:false,...c});
 // Toggles a nominee in/out of a voter's picks for a category, capped at maxPicks.
 const toggleSuperlativeVote = (current, nomineeId, maxPicks) => {
   const arr = current||[];
@@ -1173,11 +1174,14 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const mvpFirstHalfAvg=avgOf(mvpSplit.filter(x=>x.week<=halfWk));
       const mvpSecondHalfAvg=avgOf(mvpSplit.filter(x=>x.week>halfWk));
       const improvementMvp=(weeksAttended>=MIN_WEEKS_FOR_AWARDS&&mvpFirstHalfAvg!=null&&mvpSecondHalfAvg!=null)?mvpSecondHalfAvg-mvpFirstHalfAvg:null;
+      // Elo variant of Most Improved: biggest recovery from this player's lowest point in the
+      // season's Elo trajectory (including the 1500 starting rating) up to their current Elo —
+      // rewards climbing back from a slump, not just ending the season with a high rating.
       const eloByWeek=mvpByWeek.map(x=>({week:x.week,val:hist[x.week]??ELO_START}));
-      const eloFirstHalfAvg=avgOf(eloByWeek.filter(x=>x.week<=halfWk));
-      const eloSecondHalfAvg=avgOf(eloByWeek.filter(x=>x.week>halfWk));
-      const improvementElo=(weeksAttended>=MIN_WEEKS_FOR_AWARDS&&eloFirstHalfAvg!=null&&eloSecondHalfAvg!=null)?eloSecondHalfAvg-eloFirstHalfAvg:null;
-      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,avgMvp,improvementMvp,mvpFirstHalfAvg,mvpSecondHalfAvg,improvementElo,eloFirstHalfAvg,eloSecondHalfAvg};
+      let minElo=ELO_START,minEloWeek=0;
+      eloByWeek.forEach(x=>{ if(x.val<minElo){minElo=x.val;minEloWeek=x.week;} });
+      const improvementElo=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-minElo:null;
+      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,avgMvp,improvementMvp,mvpFirstHalfAvg,mvpSecondHalfAvg,improvementElo,minElo,minEloWeek};
     }).sort((a,b)=>b.pts-a.pts);
     return rows;
   },[players,weeklyGames,eloSystem,maxWk]);
@@ -2869,12 +2873,6 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
 
         {tab==="history"&&isAdmin&&(
           <div id="print-area">
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
-              <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",margin:0}}>Season Summary</h2>
-              <button className="no-print" onClick={()=>window.print()} style={{...btnSt(C.accent,true),padding:"7px 14px",fontSize:"0.76rem"}}>🖨 Print / Export PDF</button>
-            </div>
-            <p className="no-print" style={{color:C.muted,fontSize:"0.68rem",margin:"-6px 0 12px"}}>Opens your browser's print dialog — choose "Save as PDF" as the destination to export.</p>
-
             {(()=>{
               const colSet=new Set(), cols=[];
               players.forEach(p=>{
@@ -2896,7 +2894,73 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 background:isWin?"#2a2200":isLast?"#1f0f0f":C.card,
                 border:`1px solid ${C.border}`,
               });
+              // Precompute wins/SOTD per player once so the summary columns, the "best in column"
+              // highlighting, and the CSV export all use the exact same numbers as the cells.
+              const totals={};
+              standings.forEach(p=>{
+                let wins=0,sotds=0;
+                cols.forEach(col=>{
+                  const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
+                  if(!entries.length) return;
+                  const allAbsent=entries.every(g=>g.absent);
+                  if(allAbsent) return;
+                  let isWin=false,colSotd=0;
+                  entries.forEach(g=>{
+                    if(g.absent) return;
+                    if(g.position===1)isWin=true;
+                    colSotd+=g.sotd||0;
+                  });
+                  if(isWin) wins++;
+                  sotds+=colSotd;
+                });
+                totals[p.id]={wins,sotds};
+              });
+              const maxOf=fn=>standings.length?Math.max(...standings.map(fn)):0;
+              const maxPts=maxOf(p=>p.pts);
+              const maxWeeksAttended=maxOf(p=>p.weeksAttended||0);
+              const maxWins=maxOf(p=>totals[p.id].wins);
+              const maxSotds=maxOf(p=>totals[p.id].sotds);
+              const mvpEligible=standings.filter(p=>p.mvp!=="—");
+              const maxMvp=mvpEligible.length?Math.max(...mvpEligible.map(p=>parseFloat(p.mvp))):null;
+              const maxElo=maxOf(p=>p.elo);
+              const maxPeakElo=maxOf(p=>p.peakElo);
+              const winSt={border:`2px solid ${C.gold}`,boxShadow:`0 0 6px ${C.gold}66`};
+              const exportHistoryCSV=()=>{
+                const csvEscape=v=>{
+                  const s=String(v??"");
+                  return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
+                };
+                const header=["Player",...cols.map(c=>`Wk${c.wk} G${c.round}`),"TOT","WKS","Wins","SOTD","MVP%","ELO","Peak Elo"];
+                const rows=standings.map(p=>{
+                  const {wins,sotds}=totals[p.id];
+                  const weekCells=cols.map(col=>{
+                    const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
+                    if(!entries.length||entries.every(g=>g.absent)) return "";
+                    return entries.reduce((s,g)=>s+(g.absent?0:g.pts+(g.sotd||0)),0);
+                  });
+                  return [p.name,...weekCells,p.pts,p.weeksAttended||0,wins,sotds,p.mvp,p.elo,p.peakElo];
+                });
+                const csv=[header,...rows].map(r=>r.map(csvEscape).join(",")).join("\r\n");
+                const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+                const url=URL.createObjectURL(blob);
+                const a=document.createElement("a");
+                a.href=url;
+                a.download=`season-summary-${new Date().toISOString().slice(0,10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              };
               return(
+                <>
+                <div className="no-print" style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
+                  <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",margin:0}}>Season Summary</h2>
+                  <div style={{display:"flex",gap:"8px"}}>
+                    <button onClick={exportHistoryCSV} style={{...btnSt(C.green,true),padding:"7px 14px",fontSize:"0.76rem"}}>📄 Export CSV</button>
+                    <button onClick={()=>window.print()} style={{...btnSt(C.accent,true),padding:"7px 14px",fontSize:"0.76rem"}}>🖨 Print / Export PDF</button>
+                  </div>
+                </div>
+                <p className="no-print" style={{color:C.muted,fontSize:"0.68rem",margin:"-6px 0 12px"}}>Export CSV to edit in Excel/Sheets, or print/save as PDF for a formatted copy.</p>
                 <div style={{overflowX:"auto",marginBottom:"20px"}}>
                   <table style={{borderCollapse:"separate",borderSpacing:"3px",minWidth:"100%"}}>
                     <thead>
@@ -2930,39 +2994,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       </tr>
                     </thead>
                     <tbody>
-                      {(()=>{
-                        // Precompute wins/SOTD per player once so the summary columns and the
-                        // "best in column" highlighting use the exact same numbers as the cells.
-                        const totals={};
-                        standings.forEach(p=>{
-                          let wins=0,sotds=0;
-                          cols.forEach(col=>{
-                            const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
-                            if(!entries.length) return;
-                            const allAbsent=entries.every(g=>g.absent);
-                            if(allAbsent) return;
-                            let isWin=false,colSotd=0;
-                            entries.forEach(g=>{
-                              if(g.absent) return;
-                              if(g.position===1)isWin=true;
-                              colSotd+=g.sotd||0;
-                            });
-                            if(isWin) wins++;
-                            sotds+=colSotd;
-                          });
-                          totals[p.id]={wins,sotds};
-                        });
-                        const maxOf=fn=>standings.length?Math.max(...standings.map(fn)):0;
-                        const maxPts=maxOf(p=>p.pts);
-                        const maxWeeksAttended=maxOf(p=>p.weeksAttended||0);
-                        const maxWins=maxOf(p=>totals[p.id].wins);
-                        const maxSotds=maxOf(p=>totals[p.id].sotds);
-                        const mvpEligible=standings.filter(p=>p.mvp!=="—");
-                        const maxMvp=mvpEligible.length?Math.max(...mvpEligible.map(p=>parseFloat(p.mvp))):null;
-                        const maxElo=maxOf(p=>p.elo);
-                        const maxPeakElo=maxOf(p=>p.peakElo);
-                        const winSt={border:`2px solid ${C.gold}`,boxShadow:`0 0 6px ${C.gold}66`};
-                      return standings.map((p,ri)=>{
+                      {standings.map((p,ri)=>{
                         const {wins,sotds}=totals[p.id];
                         const medal=ri===0?"🥇":ri===1?"🥈":ri===2?"🥉":`${ri+1}.`;
                         return(
@@ -3063,11 +3095,11 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                             </td>
                           </tr>
                         );
-                      });
-                      })()}
+                      })}
                     </tbody>
                   </table>
                 </div>
+                </>
               );
             })()}
 
@@ -3201,7 +3233,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               const improveCands=[...standings.filter(p=>improvementOf(p)!=null)].sort((a,b)=>improvementOf(b)-improvementOf(a)||tiebreakValue(b)-tiebreakValue(a));
               const improvedList=buildAwardList(improveCands,p=>Math.round(improvementOf(p)*10),
                 p=>improvementMetric==="elo"
-                  ?`${Math.round(p.eloFirstHalfAvg)} → ${Math.round(p.eloSecondHalfAvg)} Elo (2nd half)`
+                  ?`${Math.round(p.minElo)} (wk ${p.minEloWeek||"start"}) → ${p.elo} Elo`
                   :`${p.mvpFirstHalfAvg.toFixed(1)}% → ${p.mvpSecondHalfAvg.toFixed(1)}% MVP (2nd half)`,
                 tiebreakLabel);
               const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||tiebreakValue(b)-tiebreakValue(a));
@@ -4717,14 +4749,22 @@ function SuperlativeCategoryEditor({items=[], onChange}) {
   const iSt={flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"6px 8px",fontSize:"0.78rem",fontFamily:"Georgia,serif",outline:"none"};
   const picksSt={width:"48px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"6px 4px",fontSize:"0.78rem",fontFamily:"Georgia,serif",outline:"none",textAlign:"center"};
   const cats=normalizeSuperlatives(items);
-  const addItem=()=>{ if(draft.trim()){ onChange([...cats,{name:draft.trim(),maxPicks:1}]); setDraft(""); } };
+  const addItem=()=>{ if(draft.trim()){ onChange([...cats,{name:draft.trim(),maxPicks:1,pairMode:false}]); setDraft(""); } };
   return (
     <div style={{marginBottom:"14px"}}>
-      <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"6px"}}>CATEGORIES <span style={{textTransform:"none"}}>(picks = how many nominees a member can select, e.g. 2 for "Rivalry")</span></div>
+      <div style={{color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",marginBottom:"6px"}}>CATEGORIES <span style={{textTransform:"none"}}>(picks = how many nominees a member can select; check "Pair" for categories like Rivalry so votes are tallied by the combo people picked, not each name separately)</span></div>
       {cats.map((cat,i)=>(
         <div key={i} style={{display:"flex",gap:"6px",marginBottom:"4px",alignItems:"center"}}>
           <input style={iSt} value={cat.name} onChange={e=>{const next=[...cats];next[i]={...next[i],name:e.target.value};onChange(next);}}/>
           <input type="number" min="1" max="4" style={picksSt} value={cat.maxPicks} onChange={e=>{const next=[...cats];next[i]={...next[i],maxPicks:Math.max(1,parseInt(e.target.value)||1)};onChange(next);}}/>
+          <label style={{display:"flex",alignItems:"center",gap:"4px",color:C.muted,fontSize:"0.68rem",whiteSpace:"nowrap",cursor:"pointer"}}>
+            <input type="checkbox" checked={!!cat.pairMode} onChange={e=>{
+              const on=e.target.checked;
+              const next=[...cats];
+              next[i]={...next[i],pairMode:on,maxPicks:on?Math.max(2,cat.maxPicks):cat.maxPicks};
+              onChange(next);
+            }}/> Pair
+          </label>
           <button onClick={()=>onChange(cats.filter((_,idx)=>idx!==i))} style={{background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:"6px",padding:"6px 10px",cursor:"pointer"}}>×</button>
         </div>
       ))}
@@ -4806,6 +4846,20 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
     votes.forEach(pid=>{counts[pid]=(counts[pid]||0)+1;});
     return Object.entries(counts)
       .map(([pid,count])=>({pid,count,name:players.find(p=>String(p.id)===pid)?.name||"?"}))
+      .sort((a,b)=>b.count-a.count);
+  };
+  // Pair-mode categories (e.g. Rivalry) are tallied by the whole combination a voter picked —
+  // "Alice & Bob" is one thing people vote for, not two separate votes for Alice and for Bob.
+  const superlativePairTally=(category,maxPicks)=>{
+    const voteArrays=Object.values(finalsSuperlativeVotes[category]||{});
+    const counts={};
+    voteArrays.forEach(arr=>{
+      if(!arr||arr.length!==maxPicks) return;
+      const key=[...arr].map(String).sort().join("|");
+      counts[key]=(counts[key]||0)+1;
+    });
+    return Object.entries(counts)
+      .map(([key,count])=>({pid:key,count,name:key.split("|").map(pid=>players.find(p=>String(p.id)===pid)?.name||"?").join(" & ")}))
       .sort((a,b)=>b.count-a.count);
   };
 
@@ -5089,10 +5143,36 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
           <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"12px"}}>
             {finalsSuperlativeRevealed?"Results are in!":finalsSuperlativeVotingOpen?"Cast your vote below (also available right after logging in) — results stay hidden until the commissioner reveals them.":"Voting hasn't opened yet."}
           </div>
+
+          {isAdmin&&(()=>{
+            const eligible=players.filter(p=>!suspendedPlayers.includes(String(p.id)));
+            const hasVotedAny=pid=>superlativeCategories.some(cat=>(finalsSuperlativeVotes[cat.name]?.[String(pid)]||[]).length>0);
+            const voted=eligible.filter(p=>hasVotedAny(p.id));
+            const notVoted=eligible.filter(p=>!hasVotedAny(p.id));
+            return (
+              <div style={{background:C.card,border:`1px dashed ${C.border}`,borderRadius:"8px",padding:"10px 12px",marginBottom:"14px"}}>
+                <div style={{color:C.muted,fontSize:"0.62rem",letterSpacing:"0.06em",marginBottom:"6px"}}>👁 COMMISSIONER — VOTING PARTICIPATION</div>
+                <div style={{color:C.greenLight,fontSize:"0.72rem",fontWeight:"bold",marginBottom:"3px"}}>✅ Voted ({voted.length})</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"8px"}}>
+                  {voted.length===0
+                    ?<span style={{color:C.muted,fontSize:"0.7rem"}}>No one yet.</span>
+                    :voted.map(p=><span key={p.id} style={{background:C.green+"22",border:`1px solid ${C.green}44`,color:C.greenLight,borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem"}}>{p.name}</span>)
+                  }
+                </div>
+                <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",marginBottom:"3px"}}>⏳ Haven't voted ({notVoted.length})</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
+                  {notVoted.length===0
+                    ?<span style={{color:C.muted,fontSize:"0.7rem"}}>Everyone's voted!</span>
+                    :notVoted.map(p=><span key={p.id} style={{background:C.accent+"15",border:`1px solid ${C.accent}44`,color:C.accentLight,borderRadius:"10px",padding:"1px 8px",fontSize:"0.68rem"}}>{p.name}</span>)
+                  }
+                </div>
+              </div>
+            );
+          })()}
           {superlativeCategories.map((cat,ci)=>{
             const category=cat.name;
             const maxPicks=cat.maxPicks||1;
-            const tally=superlativeTally(category);
+            const tally=cat.pairMode?superlativePairTally(category,maxPicks):superlativeTally(category);
             const myVotes=(myVoterId?finalsSuperlativeVotes[category]?.[myVoterId]:null)||[];
             return (
               <div key={category} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px 16px",marginBottom:"12px"}}>
@@ -5100,7 +5180,9 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
                   <span style={{color:C.muted,fontSize:"0.68rem",fontWeight:"bold"}}>Q{ci+1}</span>
                   <span style={{color:C.text,fontSize:"0.9rem",fontWeight:"bold"}}>{category}</span>
                 </div>
-                <div style={{color:C.muted,fontSize:"0.68rem",marginBottom:"10px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>Pick {maxPicks}{maxPicks>1?` (${myVotes.length}/${maxPicks} selected)`:""}</div>
+                <div style={{color:C.muted,fontSize:"0.68rem",marginBottom:"10px",paddingBottom:"10px",borderBottom:`1px solid ${C.border}`}}>
+                  {cat.pairMode?`Pick ${maxPicks} — voted as a pair (${myVotes.length}/${maxPicks} selected)`:`Pick ${maxPicks}${maxPicks>1?` (${myVotes.length}/${maxPicks} selected)`:""}`}
+                </div>
                 {finalsSuperlativeRevealed?(
                   tally.length===0
                     ?<div style={{color:C.muted,fontSize:"0.76rem"}}>No votes cast.</div>
