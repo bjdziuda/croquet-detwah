@@ -19,11 +19,32 @@ code {
 
 /* Print / "Export PDF" support: when printing, show only #print-area (the History
    tab's Season Summary) and hide the rest of the app chrome, including any element
-   marked .no-print inside the printed area itself (e.g. the print button). */
+   marked .no-print inside the printed area itself (e.g. the print button).
+   The table itself is re-themed to a plain black-on-white spreadsheet so it prints
+   cleanly and without heavy ink use, regardless of the browser's "background
+   graphics" print setting. Season-leader highlights (gold border) and week
+   win/loss markers (🥇/💀 emoji) are left alone since they're just thin borders
+   and glyphs, not filled backgrounds. */
 @media print {
   @page { size: landscape; margin: 0.4in; }
   body * { visibility: hidden; }
-  #print-area, #print-area * { visibility: visible; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  #print-area { position: absolute; left: 0; top: 0; width: 100%; background: #fff; }
+  #print-area, #print-area * { visibility: visible; }
+  #print-area { position: absolute; left: 0; top: 0; width: 100%; background: #fff; color: #000; }
   .no-print { display: none !important; }
+
+  #print-area, #print-area * { color: #000 !important; }
+  #print-area table { border-collapse: collapse !important; border-spacing: 0 !important; }
+  #print-area td, #print-area th { border: 1px solid #aaa !important; padding: 2px !important; }
+  #print-area td > div, #print-area th > div {
+    background: transparent !important;
+    box-shadow: none !important;
+    min-height: auto !important;
+    border-radius: 0 !important;
+    padding: 2px !important;
+  }
+  /* Box out the season-total columns (TOT through PEAK ELO) with a light fill and a
+     bold divider on the leading TOT column, separating them from week-by-week results. */
+  #print-area .hist-summary-col,
+  #print-area .hist-summary-col > div { background: #eee !important; }
+  #print-area .hist-tot-col { border-left: 3px solid #000 !important; }
 }

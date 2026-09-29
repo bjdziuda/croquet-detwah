@@ -1142,7 +1142,9 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const allG=Object.values(weeklyGames[p.id]||{}).flat();
       const wins=allG.filter(g=>g.position===1&&!g.absent).length;
       const secondPlaceCount=allG.filter(g=>g.position===2&&!g.absent).length;
-      const absences=allG.filter(g=>g.absent).length;
+      // Count missed WEEKS, not missed game entries — a week with multiple rounds where a
+      // player is absent in all of them is one missed week, not one absence per round.
+      const absences=Object.values(weeklyGames[p.id]||{}).filter(gs=>gs.length>0&&gs.every(g=>g.absent)).length;
       const gamesPlayed=allG.filter(g=>!g.absent).length;
       const sotdTotal=allG.reduce((s,g)=>s+(g.sotd||0),0);
       const weeksAttended=getWeeksAttended(weeklyGames,p.id);
@@ -1154,7 +1156,6 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
       const eloChange=elo-prevElo;
       const peakElo=Math.round(Math.max(ELO_START,...Object.values(hist)));
       const homeTurf=computeHomeTurf(p.id,weeklyGames);
-      const improvement=weeksAttended>=MIN_WEEKS_FOR_AWARDS?elo-ELO_START:null;
       const mvpByWeek=[];
       Object.entries(weeklyGames[p.id]||{}).forEach(([w,gs])=>{
         if(!gs.some(g=>!g.absent)) return;
@@ -1163,7 +1164,15 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
         if(wmax>0) mvpByWeek.push({week:parseInt(w),mvp:(wpts/wmax)*100});
       });
       const avgMvp=mvpByWeek.length?mvpByWeek.reduce((s,x)=>s+x.mvp,0)/mvpByWeek.length:null;
-      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,improvement,avgMvp};
+      // Most Improved: average weekly MVP% in the season's second half vs its first half, so it
+      // rewards genuine upward trajectory rather than just who ended up with the highest Elo.
+      const halfWk=Math.ceil(maxWk/2);
+      const firstHalf=mvpByWeek.filter(x=>x.week<=halfWk);
+      const secondHalf=mvpByWeek.filter(x=>x.week>halfWk);
+      const firstHalfAvg=firstHalf.length?firstHalf.reduce((s,x)=>s+x.mvp,0)/firstHalf.length:null;
+      const secondHalfAvg=secondHalf.length?secondHalf.reduce((s,x)=>s+x.mvp,0)/secondHalf.length:null;
+      const improvement=(weeksAttended>=MIN_WEEKS_FOR_AWARDS&&firstHalfAvg!=null&&secondHalfAvg!=null)?secondHalfAvg-firstHalfAvg:null;
+      return{...p,pts,wins,secondPlaceCount,absences,gamesPlayed,sotdTotal,weeksAttended,mvp,elo,eloChange,peakElo,homeTurf,improvement,avgMvp,firstHalfAvg,secondHalfAvg};
     }).sort((a,b)=>b.pts-a.pts);
     const improveCands=rows.filter(p=>p.improvement!=null);
     const mostImprovedId=improveCands.length?improveCands.reduce((best,p)=>p.improvement>best.improvement?p:best).id:null;
@@ -2896,14 +2905,13 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                               letterSpacing:"0.08em",color:C.muted,padding:"3px 6px",textAlign:"center"}}>WK {wk}</div>
                           </th>
                         ))}
-                        <th style={{...thSt,color:C.accent}}>TOT</th>
-                        <th style={thSt}>GP</th>
-                        <th style={thSt}>🥇</th>
-                        <th style={thSt}>⭐</th>
-                        <th style={thSt}>ABS</th>
-                        <th style={thSt}>MVP%</th>
-                        <th style={thSt}>ELO</th>
-                        <th style={thSt}>PEAK ELO</th>
+                        <th className="hist-tot-col hist-summary-col" style={{...thSt,color:C.accent}}>TOT</th>
+                        <th className="hist-summary-col" style={thSt}>WKS</th>
+                        <th className="hist-summary-col" style={thSt}>🥇</th>
+                        <th className="hist-summary-col" style={thSt}>⭐</th>
+                        <th className="hist-summary-col" style={thSt}>MVP%</th>
+                        <th className="hist-summary-col" style={thSt}>ELO</th>
+                        <th className="hist-summary-col" style={thSt}>PEAK ELO</th>
                       </tr>
                       <tr>
                         <th style={{...thSt,textAlign:"left",position:"sticky",left:0,zIndex:2}}></th>
@@ -2915,46 +2923,44 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                             </div>
                           </th>
                         ))}
-                        <th/><th/><th/><th/><th/><th/><th/><th/>
+                        <th/><th/><th/><th/><th/><th/><th/>
                       </tr>
                     </thead>
                     <tbody>
                       {(()=>{
-                        // Precompute wins/SOTD/absences per player once so the summary columns and
-                        // the "best in column" highlighting use the exact same numbers as the cells.
+                        // Precompute wins/SOTD per player once so the summary columns and the
+                        // "best in column" highlighting use the exact same numbers as the cells.
                         const totals={};
                         standings.forEach(p=>{
-                          let wins=0,sotds=0,abs=0;
+                          let wins=0,sotds=0;
                           cols.forEach(col=>{
                             const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
-                            if(!entries.length){abs++;return;}
+                            if(!entries.length) return;
                             const allAbsent=entries.every(g=>g.absent);
+                            if(allAbsent) return;
                             let isWin=false,colSotd=0;
                             entries.forEach(g=>{
-                              if(g.absent){abs++;return;}
+                              if(g.absent) return;
                               if(g.position===1)isWin=true;
                               colSotd+=g.sotd||0;
                             });
-                            if(allAbsent) return;
                             if(isWin) wins++;
                             sotds+=colSotd;
                           });
-                          totals[p.id]={wins,sotds,abs};
+                          totals[p.id]={wins,sotds};
                         });
                         const maxOf=fn=>standings.length?Math.max(...standings.map(fn)):0;
                         const maxPts=maxOf(p=>p.pts);
-                        const maxGP=maxOf(p=>p.gamesPlayed||0);
+                        const maxWeeksAttended=maxOf(p=>p.weeksAttended||0);
                         const maxWins=maxOf(p=>totals[p.id].wins);
                         const maxSotds=maxOf(p=>totals[p.id].sotds);
-                        const playedPlayers=standings.filter(p=>(p.gamesPlayed||0)>0);
-                        const minAbs=playedPlayers.length?Math.min(...playedPlayers.map(p=>totals[p.id].abs)):null;
                         const mvpEligible=standings.filter(p=>p.mvp!=="—");
                         const maxMvp=mvpEligible.length?Math.max(...mvpEligible.map(p=>parseFloat(p.mvp))):null;
                         const maxElo=maxOf(p=>p.elo);
                         const maxPeakElo=maxOf(p=>p.peakElo);
                         const winSt={border:`2px solid ${C.gold}`,boxShadow:`0 0 6px ${C.gold}66`};
                       return standings.map((p,ri)=>{
-                        const {wins,sotds,abs}=totals[p.id];
+                        const {wins,sotds}=totals[p.id];
                         const medal=ri===0?"🥇":ri===1?"🥈":ri===2?"🥉":`${ri+1}.`;
                         return(
                           <tr key={p.id}>
@@ -3010,49 +3016,43 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                                 </td>
                               );
                             })}
-                            <td style={{padding:"2px"}}>
+                            <td className="hist-tot-col hist-summary-col" style={{padding:"2px"}}>
                               <div style={{background:"#1e2a1e",borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.pts===maxPts&&maxPts>0?winSt:{})}}>
                                 <span style={{color:C.accent,fontWeight:"bold",fontSize:"0.82rem"}}>{p.pts}</span>
                               </div>
                             </td>
-                            <td style={{padding:"2px"}}>
+                            <td className="hist-summary-col" style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...((p.gamesPlayed||0)===maxGP&&maxGP>0?winSt:{})}}>
-                                <span style={{color:C.muted,fontSize:"0.78rem"}}>{p.gamesPlayed||"—"}</span>
+                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...((p.weeksAttended||0)===maxWeeksAttended&&maxWeeksAttended>0?winSt:{})}}>
+                                <span style={{color:C.muted,fontSize:"0.78rem"}}>{p.weeksAttended||"—"}</span>
                               </div>
                             </td>
-                            <td style={{padding:"2px"}}>
+                            <td className="hist-summary-col" style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(wins===maxWins&&maxWins>0?winSt:{})}}>
                                 <span style={{color:C.gold,fontSize:"0.78rem"}}>{wins||"—"}</span>
                               </div>
                             </td>
-                            <td style={{padding:"2px"}}>
+                            <td className="hist-summary-col" style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(sotds===maxSotds&&maxSotds>0?winSt:{})}}>
                                 <span style={{color:C.gold,fontSize:"0.78rem"}}>{sotds?`⭐ ${sotds}`:"—"}</span>
                               </div>
                             </td>
-                            <td style={{padding:"2px"}}>
-                              <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
-                                textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...((p.gamesPlayed||0)>0&&abs===minAbs?winSt:{})}}>
-                                <span style={{color:C.muted,fontSize:"0.78rem"}}>{abs||"—"}</span>
-                              </div>
-                            </td>
-                            <td style={{padding:"2px"}}>
+                            <td className="hist-summary-col" style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.mvp!=="—"&&parseFloat(p.mvp)===maxMvp?winSt:{})}}>
                                 <span style={{color:C.cream,fontSize:"0.78rem"}}>{p.mvp}{p.mvp!=="—"?"%":""}</span>
                               </div>
                             </td>
-                            <td style={{padding:"2px"}}>
+                            <td className="hist-summary-col" style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.elo===maxElo?winSt:{})}}>
                                 <span style={{color:C.cream,fontSize:"0.78rem"}}>{p.elo}</span>
                               </div>
                             </td>
-                            <td style={{padding:"2px"}}>
+                            <td className="hist-summary-col" style={{padding:"2px"}}>
                               <div style={{background:C.surface,borderRadius:"5px",padding:"4px",
                                 textAlign:"center",minHeight:"34px",display:"flex",alignItems:"center",justifyContent:"center",...(p.peakElo===maxPeakElo?winSt:{})}}>
                                 <span style={{color:C.blue,fontSize:"0.78rem"}}>{p.peakElo}</span>
@@ -3195,7 +3195,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               const champCands=[...standings].sort((a,b)=>b.pts-a.pts||tiebreakValue(b)-tiebreakValue(a));
               const champList=buildAwardList(champCands,p=>p.pts,p=>`${p.pts} pts`,tiebreakLabel);
               const improveCands=[...standings.filter(p=>p.improvement!=null)].sort((a,b)=>b.improvement-a.improvement||tiebreakValue(b)-tiebreakValue(a));
-              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement),p=>`+${Math.round(p.improvement)} Elo`,tiebreakLabel);
+              const improvedList=buildAwardList(improveCands,p=>Math.round(p.improvement*10),p=>`${p.firstHalfAvg.toFixed(1)}% → ${p.secondHalfAvg.toFixed(1)}% MVP (2nd half)`,tiebreakLabel);
               const bridesmaidCands=[...standings.filter(p=>p.secondPlaceCount>0)].sort((a,b)=>b.secondPlaceCount-a.secondPlaceCount||tiebreakValue(b)-tiebreakValue(a));
               const bridesmaidList=buildAwardList(bridesmaidCands,p=>p.secondPlaceCount,p=>`${p.secondPlaceCount} 2nd-place finish${p.secondPlaceCount!==1?"es":""}`,tiebreakLabel);
               const sotdCands=[...standings.filter(p=>p.sotdTotal>0)].sort((a,b)=>b.sotdTotal-a.sotdTotal||tiebreakValue(b)-tiebreakValue(a));
