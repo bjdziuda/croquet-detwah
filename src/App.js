@@ -445,7 +445,7 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
       const peakElo=Math.round(Math.max(ELO_START,...Object.values(hist)));
       return {pts,mvp,wins,sotdTotal,weeksAttended,elo:seasonEloOf(pid),peakElo};
     };
-    return {cfg,tiers,seasonEloOf,statsOf,playingCount:playingIds.length};
+    return {cfg,tiers,seasonEloOf,statsOf,heat1ResultOf,playingCount:playingIds.length};
   },[finalsTournamentTrackerEnabled,players,weeklyGames,finalsSignups,finalsHeat1Results,finalsConfig]);
 
   const superlativeCategories=normalizeSuperlatives(finalsSuperlatives);
@@ -605,7 +605,8 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
               <div style={{color:C.muted,fontSize:"0.8rem",textAlign:"center"}}>Heats haven't been set yet — check back soon!</div>
             ):(
               <>
-                <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",marginBottom:"8px",textAlign:"center"}}>HEAT 1 — TIERED BY SEASON ELO</div>
+                <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",marginBottom:"2px",textAlign:"center"}}>HEAT 1 — TIERED BY SEASON ELO</div>
+                <div style={{color:C.muted,fontSize:"0.64rem",marginBottom:"8px",textAlign:"center"}}>Finish positions (#) update live as the commissioner enters them</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:"8px",marginBottom:"14px"}}>
                   {trackerData.tiers.heat1Ranked.map((grp,gi)=>(
                     <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"10px"}}>
@@ -613,10 +614,12 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
                       {grp.map(pid=>{
                         const p=players.find(pp=>String(pp.id)===pid);
                         if(!p) return null;
+                        const pos=trackerData.heat1ResultOf(pid);
                         return (
                           <button key={pid} onClick={()=>setStatsPlayerId(pid)}
-                            style={{display:"block",width:"100%",textAlign:"left",background:"none",border:"none",color:C.cream,fontSize:"0.76rem",padding:"3px 4px",cursor:"pointer",fontFamily:"Georgia,serif",borderRadius:"4px"}}>
-                            {p.name}
+                            style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",textAlign:"left",background:"none",border:"none",color:C.cream,fontSize:"0.76rem",padding:"3px 4px",cursor:"pointer",fontFamily:"Georgia,serif",borderRadius:"4px"}}>
+                            <span>{p.name}</span>
+                            {pos!=null&&<span style={{color:C.gold,fontSize:"0.68rem",fontWeight:"bold"}}>#{pos}</span>}
                           </button>
                         );
                       })}
