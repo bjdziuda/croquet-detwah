@@ -1200,7 +1200,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], seasonLocked=false, pastSeasons={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], seasonLocked=false, pastSeasons={}} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -2818,7 +2818,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} user={user} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} finalsSuperlatives={finalsSuperlatives} finalsSuperlativeVotingOpen={finalsSuperlativeVotingOpen} finalsSuperlativeRevealed={finalsSuperlativeRevealed} finalsSuperlativeVotes={finalsSuperlativeVotes} finalsChampionshipDayMode={finalsChampionshipDayMode} finalsTournamentTrackerEnabled={finalsTournamentTrackerEnabled} finalsGuests={finalsGuests} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} user={user} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} finalsSuperlatives={finalsSuperlatives} finalsSuperlativeVotingOpen={finalsSuperlativeVotingOpen} finalsSuperlativeRevealed={finalsSuperlativeRevealed} finalsSuperlativeVotes={finalsSuperlativeVotes} finalsChampionshipDayMode={finalsChampionshipDayMode} finalsTournamentTrackerEnabled={finalsTournamentTrackerEnabled} finalsGuests={finalsGuests} finalsFieldOrder={finalsFieldOrder} finalsExemptPlayers={finalsExemptPlayers} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -3942,6 +3942,8 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   finalsChampionshipDayMode:false,
                   finalsTournamentTrackerEnabled:false,
                   finalsGuests:[],
+                  finalsFieldOrder:[],
+                  finalsExemptPlayers:[],
                 });
                 setArchiveConfirmText("");
                 notify(`Season archived as ${year} — fresh season started!`);
@@ -4973,10 +4975,11 @@ function SuperlativeCategoryEditor({items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
+function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
   const [guestDraftName,setGuestDraftName]=useState("");
   const [guestDraftTier,setGuestDraftTier]=useState(0);
+  const [fieldDraftId,setFieldDraftId]=useState("");
   const addFinalsGuest=()=>{
     const name=guestDraftName.trim();
     if(!name) return;
@@ -4985,6 +4988,30 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
   };
   const removeFinalsGuest=id=>update({finalsGuests:finalsGuests.filter(g=>g.id!==id)});
   const setFinalsGuestTier=(id,field,tier)=>update({finalsGuests:finalsGuests.map(g=>g.id===id?{...g,[field]:tier}:g)});
+  // Finals field: an admin-ordered list of who qualified, in qualifying order. Exempting someone
+  // (they qualified but can't play) just skips them when slicing the active top finalsSize, so
+  // whoever's next in the order is automatically "promoted" into the active field.
+  const addToFinalsField=()=>{
+    if(!fieldDraftId||finalsFieldOrder.includes(fieldDraftId)) return;
+    update({finalsFieldOrder:[...finalsFieldOrder,fieldDraftId]});
+    setFieldDraftId("");
+  };
+  const removeFromFinalsField=pid=>update({
+    finalsFieldOrder:finalsFieldOrder.filter(id=>id!==pid),
+    finalsExemptPlayers:finalsExemptPlayers.filter(id=>id!==pid),
+  });
+  const moveInFinalsField=(pid,dir)=>{
+    const idx=finalsFieldOrder.indexOf(pid);
+    const swapIdx=idx+dir;
+    if(idx<0||swapIdx<0||swapIdx>=finalsFieldOrder.length) return;
+    const next=[...finalsFieldOrder];
+    [next[idx],next[swapIdx]]=[next[swapIdx],next[idx]];
+    update({finalsFieldOrder:next});
+  };
+  const toggleFinalsExempt=pid=>{
+    const next=finalsExemptPlayers.includes(pid)?finalsExemptPlayers.filter(id=>id!==pid):[...finalsExemptPlayers,pid];
+    update({finalsExemptPlayers:next});
+  };
   useEffect(()=>{setCfg(c=>({...c,...finalsConfig}));},[finalsConfig]);
 
   const saveCfg=(patch)=>{
@@ -5129,6 +5156,12 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
   const iSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",outline:"none"};
   const lbSt={color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",display:"block",marginBottom:"4px"};
 
+  // Finals field: non-exempt entries in qualifying order; the first finalsSize of those are the
+  // active field, everyone after is "next in line" — exempting someone just slides this cutoff.
+  const finalsFieldActive=finalsFieldOrder.filter(id=>!finalsExemptPlayers.includes(id)).slice(0,cfg.finalsSize);
+  const finalsFieldAlternates=finalsFieldOrder.filter(id=>!finalsExemptPlayers.includes(id)).slice(cfg.finalsSize);
+  const finalsFieldCandidates=players.filter(p=>!finalsFieldOrder.includes(String(p.id)));
+
   // Extracted so "Championship day mode" can move it to the top of the tab without duplicating it.
   const bracketSection=(
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
@@ -5258,6 +5291,54 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
       <div style={stageBoxSt}>
         <div style={{...stageTitleSt,color:C.accentLight}}>Finals — {cfg.finalsSize} spots</div>
         <div style={stageSubSt}>{cfg.autoQualifyCount} auto-qualifiers + top {Math.max(0,cfg.finalsSize-cfg.autoQualifyCount)} finishers from heat 3</div>
+      </div>
+
+      {/* Finals Field — admin-maintained roster so a qualifier who can't play can be exempted,
+          automatically promoting whoever's next in line into the active field. */}
+      <div style={arrowSt}>↓</div>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px"}}>
+        <div style={{color:C.accentLight,fontSize:"0.74rem",fontWeight:"bold",marginBottom:"4px"}}>Finals Field — who's actually playing</div>
+        {finalsFieldOrder.length===0?(
+          <div style={{color:C.muted,fontSize:"0.74rem"}}>{isAdmin?"Once Heat 3 wraps up, add qualifiers below in order — top of the list goes in first.":"Not set yet."}</div>
+        ):(
+          <>
+            {finalsFieldOrder.map((pid,idx)=>{
+              const p=players.find(x=>String(x.id)===pid);
+              if(!p) return null;
+              const exempt=finalsExemptPlayers.includes(pid);
+              const activeIdx=finalsFieldActive.indexOf(pid);
+              const isActive=activeIdx>=0;
+              return (
+                <div key={pid} style={{display:"flex",alignItems:"center",gap:"6px",padding:"3px 0",borderBottom:`1px solid ${C.border}55`,opacity:exempt?0.55:1}}>
+                  <span style={{color:C.muted,fontSize:"0.68rem",width:"18px"}}>{idx+1}.</span>
+                  <span style={{flex:1,fontSize:"0.78rem",color:exempt?C.muted:C.text,textDecoration:exempt?"line-through":"none"}}>{p.name}</span>
+                  {!exempt&&<span style={{fontSize:"0.64rem",color:isActive?C.greenLight:C.accentLight}}>{isActive?`IN (#${activeIdx+1})`:"next in line"}</span>}
+                  {exempt&&<span style={{fontSize:"0.64rem",color:C.red}}>EXEMPT</span>}
+                  {isAdmin&&(
+                    <>
+                      <button onClick={()=>moveInFinalsField(pid,-1)} disabled={idx===0} style={{background:"none",border:"none",color:idx===0?C.border:C.muted,cursor:idx===0?"default":"pointer",fontSize:"0.72rem",padding:"0 3px"}}>▲</button>
+                      <button onClick={()=>moveInFinalsField(pid,1)} disabled={idx===finalsFieldOrder.length-1} style={{background:"none",border:"none",color:idx===finalsFieldOrder.length-1?C.border:C.muted,cursor:idx===finalsFieldOrder.length-1?"default":"pointer",fontSize:"0.72rem",padding:"0 3px"}}>▼</button>
+                      <button onClick={()=>toggleFinalsExempt(pid)} style={{background:"none",border:`1px solid ${exempt?C.green:C.red}`,color:exempt?C.greenLight:C.red,borderRadius:"4px",padding:"2px 6px",cursor:"pointer",fontSize:"0.64rem",fontFamily:"Georgia,serif"}}>{exempt?"Un-exempt":"Exempt"}</button>
+                      <button onClick={()=>removeFromFinalsField(pid)} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:"0.72rem"}}>✕</button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+            {finalsFieldAlternates.length>0&&(
+              <div style={{color:C.muted,fontSize:"0.64rem",marginTop:"6px"}}>{finalsFieldAlternates.length} next in line beyond the {cfg.finalsSize} active spots.</div>
+            )}
+          </>
+        )}
+        {isAdmin&&(
+          <div style={{display:"flex",gap:"6px",marginTop:"8px"}}>
+            <select value={fieldDraftId} onChange={e=>setFieldDraftId(e.target.value)} style={{flex:1,background:C.card,border:`1px solid ${C.border}`,color:C.text,borderRadius:"6px",padding:"5px 8px",fontSize:"0.74rem",fontFamily:"Georgia,serif"}}>
+              <option value="">Add qualifier…</option>
+              {finalsFieldCandidates.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
+            </select>
+            <button onClick={addToFinalsField} disabled={!fieldDraftId} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"6px",padding:"5px 10px",cursor:fieldDraftId?"pointer":"default",fontSize:"0.74rem",fontFamily:"Georgia,serif",opacity:fieldDraftId?1:0.5}}>+ Add</button>
+          </div>
+        )}
       </div>
     </div>
   );
