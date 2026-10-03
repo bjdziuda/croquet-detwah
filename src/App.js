@@ -1203,7 +1203,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, seasonLocked=false, pastSeasons={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, finalsTieBreaks={}, seasonLocked=false, pastSeasons={}} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -2821,7 +2821,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} user={user} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} finalsSuperlatives={finalsSuperlatives} finalsSuperlativeVotingOpen={finalsSuperlativeVotingOpen} finalsSuperlativeRevealed={finalsSuperlativeRevealed} finalsSuperlativeVotes={finalsSuperlativeVotes} finalsChampionshipDayMode={finalsChampionshipDayMode} finalsTournamentTrackerEnabled={finalsTournamentTrackerEnabled} finalsGuests={finalsGuests} finalsFieldOrder={finalsFieldOrder} finalsExemptPlayers={finalsExemptPlayers} finalsHeat2Results={finalsHeat2Results} finalsHeat3Results={finalsHeat3Results} finalsResults={finalsResults} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} user={user} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} finalsSuperlatives={finalsSuperlatives} finalsSuperlativeVotingOpen={finalsSuperlativeVotingOpen} finalsSuperlativeRevealed={finalsSuperlativeRevealed} finalsSuperlativeVotes={finalsSuperlativeVotes} finalsChampionshipDayMode={finalsChampionshipDayMode} finalsTournamentTrackerEnabled={finalsTournamentTrackerEnabled} finalsGuests={finalsGuests} finalsFieldOrder={finalsFieldOrder} finalsExemptPlayers={finalsExemptPlayers} finalsHeat2Results={finalsHeat2Results} finalsHeat3Results={finalsHeat3Results} finalsResults={finalsResults} finalsTieBreaks={finalsTieBreaks} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -3950,6 +3950,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   finalsHeat2Results:{},
                   finalsHeat3Results:{},
                   finalsResults:{},
+                  finalsTieBreaks:{},
                 });
                 setArchiveConfirmText("");
                 notify(`Season archived as ${year} — fresh season started!`);
@@ -4981,7 +4982,7 @@ function SuperlativeCategoryEditor({items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
+function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, finalsTieBreaks={}, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
   const [guestDraftName,setGuestDraftName]=useState("");
   const [guestDraftTier,setGuestDraftTier]=useState(0);
@@ -5174,18 +5175,47 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
     update({finalsHeat2Results:next});
   };
   const allHeat2ResultsIn=heat2Groups.length>0&&heat2Groups.every(grp=>grp.every(r=>heat2ResultOf(r.player.id)!=null));
-  // Combined rank: each player's Heat 1 + Heat 2 finish converted to points (same scale used for
-  // regular-season scoring, via calcPoints) using their own tier's size, so tiers of different
-  // sizes stay comparable. Only resolves once every Heat 1 AND Heat 2 result is in.
+  // Combined rank: each player's Heat 1 + Heat 2 finish converted to points via calcPoints — same
+  // formula and same "largest group" convention as regular-season rebalancing, so a 1st-place
+  // finish is worth the same everywhere regardless of which tier happened to be smaller.
+  const heat1MaxGroupSize=heat1Groups.length?Math.max(...heat1Groups.map(g=>g.length)):0;
+  const heat2MaxGroupSize=heat2Groups.length?Math.max(...heat2Groups.map(g=>g.length)):0;
   const combinedReady=allHeat1ResultsIn&&allHeat2ResultsIn&&tierSorted.length>0;
   const combinedScoreOf=r=>{
-    const h1Tier=heat1Groups.find(grp=>grp.includes(r));
-    const h2Tier=heat2Groups.find(grp=>grp.includes(r));
     const h1Pos=heat1ResultOf(r.player.id), h2Pos=heat2ResultOf(r.player.id);
-    if(!h1Tier||!h2Tier||h1Pos==null||h2Pos==null) return null;
-    return calcPoints(h1Pos,h1Tier.length)+calcPoints(h2Pos,h2Tier.length);
+    if(h1Pos==null||h2Pos==null) return null;
+    return calcPoints(h1Pos,heat1MaxGroupSize)+calcPoints(h2Pos,heat2MaxGroupSize);
   };
-  const combinedRanked=combinedReady?[...tierSorted].sort((a,b)=>combinedScoreOf(b)-combinedScoreOf(a)):[];
+  // Manual tie-break: when two+ players land on the same combined score, admin picks who ranks
+  // higher (1 = wins the tie) so the auto-qualify/Heat 3 cutoff has a real answer instead of
+  // falling back to whatever arbitrary order the sort happened to leave them in.
+  const tieBreakOf=pid=>{
+    const v=finalsTieBreaks[String(pid)];
+    return typeof v==="number"?v:null;
+  };
+  const setTieBreak=(pid,val)=>{
+    const key=String(pid);
+    const next={...finalsTieBreaks};
+    if(val==="") delete next[key]; else next[key]=Math.max(1,parseInt(val)||1);
+    update({finalsTieBreaks:next});
+  };
+  const combinedRanked=combinedReady?[...tierSorted].sort((a,b)=>{
+    const diff=combinedScoreOf(b)-combinedScoreOf(a);
+    if(diff!==0) return diff;
+    const ta=tieBreakOf(a.player.id), tb=tieBreakOf(b.player.id);
+    if(ta!=null&&tb!=null) return ta-tb;
+    if(ta!=null) return -1;
+    if(tb!=null) return 1;
+    return 0;
+  }):[];
+  // Tied clusters (2+ players sharing a combined score) — surfaced in the UI so admin can set
+  // tie-break order on exactly these players.
+  const combinedScoreGroups={};
+  if(combinedReady) combinedRanked.forEach(r=>{
+    const sc=combinedScoreOf(r);
+    (combinedScoreGroups[sc]=combinedScoreGroups[sc]||[]).push(r);
+  });
+  const isTiedWithOthers=r=>combinedReady&&(combinedScoreGroups[combinedScoreOf(r)]||[]).length>1;
   const autoQualifiers=combinedReady?combinedRanked.slice(0,cfg.autoQualifyCount):[];
   const heat3Field=combinedReady?combinedRanked.slice(cfg.autoQualifyCount):[];
   // Heat 3 decider: the remaining field plays one more heat as a single group.
@@ -5354,11 +5384,23 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px",marginBottom:"10px"}}>
           <div style={{...stageTitleSt,textAlign:"center",marginBottom:"8px"}}>Combined rank — Heat 1 + Heat 2 points</div>
           {combinedRanked.map((r,i)=>(
-            <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:i<cfg.autoQualifyCount?C.greenLight:C.text,padding:"2px 0",borderBottom:`1px solid ${C.border}55`}}>
-              <span>{i+1}. {r.player.name}</span>
-              <span style={{color:C.muted}}>{combinedScoreOf(r)} pts</span>
+            <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:"6px",fontSize:"0.74rem",color:i<cfg.autoQualifyCount?C.greenLight:C.text,padding:"2px 0",borderBottom:`1px solid ${C.border}55`,background:isTiedWithOthers(r)?C.gold+"15":"transparent"}}>
+              <span>{i+1}. {r.player.name}{isTiedWithOthers(r)&&<span style={{color:C.gold,fontSize:"0.62rem",marginLeft:"4px"}}>TIE</span>}</span>
+              <span style={{display:"flex",alignItems:"center",gap:"6px",flexShrink:0}}>
+                <span style={{color:C.muted}}>{combinedScoreOf(r)} pts</span>
+                {isTiedWithOthers(r)&&(isAdmin?(
+                  <input type="number" min="1" placeholder="tie" title="Tie-break order (1 = wins the tie)" value={tieBreakOf(r.player.id)??""}
+                    onChange={e=>setTieBreak(r.player.id,e.target.value)}
+                    style={{width:"34px",flexShrink:0,background:C.card,border:`1px solid ${C.gold}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
+                ):(
+                  tieBreakOf(r.player.id)!=null&&<span style={{color:C.gold,fontSize:"0.62rem",fontWeight:"bold"}}>#{tieBreakOf(r.player.id)}</span>
+                ))}
+              </span>
             </div>
           ))}
+          {isAdmin&&Object.values(combinedScoreGroups).some(g=>g.length>1)&&(
+            <div style={{color:C.muted,fontSize:"0.64rem",marginTop:"6px",fontStyle:"italic"}}>Tied players are highlighted — enter a tie-break order (1 = wins the tie) to settle who ranks higher.</div>
+          )}
         </div>
       ):(
         <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Ranked by heat 1 + heat 2 points — waiting on results</div></div>
@@ -5717,6 +5759,9 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
             )}
             {Object.keys(finalsResults).length>0&&(
               <button onClick={()=>update({finalsResults:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem"}}>Clear all Finals results</button>
+            )}
+            {Object.keys(finalsTieBreaks).length>0&&(
+              <button onClick={()=>update({finalsTieBreaks:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem"}}>Clear all tie-breaks</button>
             )}
           </div>
 
