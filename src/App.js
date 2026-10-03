@@ -1203,7 +1203,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], seasonLocked=false, pastSeasons={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, seasonLocked=false, pastSeasons={}} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -2821,7 +2821,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
           </div>
         )}
-        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} user={user} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} finalsSuperlatives={finalsSuperlatives} finalsSuperlativeVotingOpen={finalsSuperlativeVotingOpen} finalsSuperlativeRevealed={finalsSuperlativeRevealed} finalsSuperlativeVotes={finalsSuperlativeVotes} finalsChampionshipDayMode={finalsChampionshipDayMode} finalsTournamentTrackerEnabled={finalsTournamentTrackerEnabled} finalsGuests={finalsGuests} finalsFieldOrder={finalsFieldOrder} finalsExemptPlayers={finalsExemptPlayers} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
+        {tab==="finals"&&<FinalsTab isAdmin={isAdmin} user={user} leagueLogo={leagueLogo} finalsMode={finalsMode} finalsConfig={finalsConfig} finalsSignups={finalsSignups} finalsFoodCategories={finalsFoodCategories} finalsMenu={finalsMenu} finalsHeat1Results={finalsHeat1Results} finalsFoodReminderDismissed={finalsFoodReminderDismissed} finalsSuperlatives={finalsSuperlatives} finalsSuperlativeVotingOpen={finalsSuperlativeVotingOpen} finalsSuperlativeRevealed={finalsSuperlativeRevealed} finalsSuperlativeVotes={finalsSuperlativeVotes} finalsChampionshipDayMode={finalsChampionshipDayMode} finalsTournamentTrackerEnabled={finalsTournamentTrackerEnabled} finalsGuests={finalsGuests} finalsFieldOrder={finalsFieldOrder} finalsExemptPlayers={finalsExemptPlayers} finalsHeat2Results={finalsHeat2Results} finalsHeat3Results={finalsHeat3Results} finalsResults={finalsResults} players={players} membershipDues={membershipDues} weeklyGames={weeklyGames} eloSystem={eloSystem} suspendedPlayers={suspendedPlayers} update={update} setTab={setTab} onEditRsvp={()=>{try{sessionStorage.setItem("croquetResumeRsvpFor",String(user.id));}catch(e){}onLogout();}}/>}
         {tab==="courses"&&<CoursesTab user={user} isAdmin={isAdmin} courseLayouts={appState.courseLayouts||[]} update={update}/>}
 
         {tab==="logo"&&(
@@ -3947,6 +3947,9 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   finalsGuests:[],
                   finalsFieldOrder:[],
                   finalsExemptPlayers:[],
+                  finalsHeat2Results:{},
+                  finalsHeat3Results:{},
+                  finalsResults:{},
                 });
                 setArchiveConfirmText("");
                 notify(`Season archived as ${year} — fresh season started!`);
@@ -4978,7 +4981,7 @@ function SuperlativeCategoryEditor({items=[], onChange}) {
   );
 }
 
-function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
+function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
   const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
   const [guestDraftName,setGuestDraftName]=useState("");
   const [guestDraftTier,setGuestDraftTier]=useState(0);
@@ -5159,17 +5162,82 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
   const iSt={background:C.surface,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"7px 10px",fontSize:"0.82rem",fontFamily:"Georgia,serif",outline:"none"};
   const lbSt={color:C.muted,fontSize:"0.68rem",letterSpacing:"0.08em",display:"block",marginBottom:"4px"};
 
+  // Heat 2 finish positions (admin-entered), same pattern as Heat 1.
+  const heat2ResultOf=pid=>{
+    const v=finalsHeat2Results[String(pid)];
+    return typeof v==="number"?v:null;
+  };
+  const setHeat2Result=(pid,val)=>{
+    const key=String(pid);
+    const next={...finalsHeat2Results};
+    if(val==="") delete next[key]; else next[key]=Math.max(1,parseInt(val)||1);
+    update({finalsHeat2Results:next});
+  };
+  const allHeat2ResultsIn=heat2Groups.length>0&&heat2Groups.every(grp=>grp.every(r=>heat2ResultOf(r.player.id)!=null));
+  // Combined rank: each player's Heat 1 + Heat 2 finish converted to points (same scale used for
+  // regular-season scoring, via calcPoints) using their own tier's size, so tiers of different
+  // sizes stay comparable. Only resolves once every Heat 1 AND Heat 2 result is in.
+  const combinedReady=allHeat1ResultsIn&&allHeat2ResultsIn&&tierSorted.length>0;
+  const combinedScoreOf=r=>{
+    const h1Tier=heat1Groups.find(grp=>grp.includes(r));
+    const h2Tier=heat2Groups.find(grp=>grp.includes(r));
+    const h1Pos=heat1ResultOf(r.player.id), h2Pos=heat2ResultOf(r.player.id);
+    if(!h1Tier||!h2Tier||h1Pos==null||h2Pos==null) return null;
+    return calcPoints(h1Pos,h1Tier.length)+calcPoints(h2Pos,h2Tier.length);
+  };
+  const combinedRanked=combinedReady?[...tierSorted].sort((a,b)=>combinedScoreOf(b)-combinedScoreOf(a)):[];
+  const autoQualifiers=combinedReady?combinedRanked.slice(0,cfg.autoQualifyCount):[];
+  const heat3Field=combinedReady?combinedRanked.slice(cfg.autoQualifyCount):[];
+  // Heat 3 decider: the remaining field plays one more heat as a single group.
+  const heat3ResultOf=pid=>{
+    const v=finalsHeat3Results[String(pid)];
+    return typeof v==="number"?v:null;
+  };
+  const setHeat3Result=(pid,val)=>{
+    const key=String(pid);
+    const next={...finalsHeat3Results};
+    if(val==="") delete next[key]; else next[key]=Math.max(1,parseInt(val)||1);
+    update({finalsHeat3Results:next});
+  };
+  const heat3Ranked=[...heat3Field].sort((a,b)=>{
+    const pa=heat3ResultOf(a.player.id), pb=heat3ResultOf(b.player.id);
+    if(pa==null&&pb==null) return combinedScoreOf(b)-combinedScoreOf(a);
+    if(pa==null) return 1;
+    if(pb==null) return -1;
+    return pa-pb;
+  });
+
+  // Finals results: positions for the active Finals Field roster. Whoever's #1 is the champion.
+  const finalsResultOf=pid=>{
+    const v=finalsResults[String(pid)];
+    return typeof v==="number"?v:null;
+  };
+  const setFinalsResult=(pid,val)=>{
+    const key=String(pid);
+    const next={...finalsResults};
+    if(val==="") delete next[key]; else next[key]=Math.max(1,parseInt(val)||1);
+    update({finalsResults:next});
+  };
+
   // Finals field: non-exempt entries in qualifying order; the first finalsSize of those are the
   // active field, everyone after is "next in line" — exempting someone just slides this cutoff.
   const finalsFieldActive=finalsFieldOrder.filter(id=>!finalsExemptPlayers.includes(id)).slice(0,cfg.finalsSize);
   const finalsFieldAlternates=finalsFieldOrder.filter(id=>!finalsExemptPlayers.includes(id)).slice(cfg.finalsSize);
   const finalsFieldCandidates=players.filter(p=>!finalsFieldOrder.includes(String(p.id)));
+  const finalsRanked=finalsFieldActive.map(pid=>players.find(p=>String(p.id)===pid)).filter(Boolean).sort((a,b)=>{
+    const pa=finalsResultOf(a.id), pb=finalsResultOf(b.id);
+    if(pa==null&&pb==null) return 0;
+    if(pa==null) return 1;
+    if(pb==null) return -1;
+    return pa-pb;
+  });
+  const finalsChampion=finalsRanked.find(p=>finalsResultOf(p.id)===1)||null;
 
   // Extracted so "Championship day mode" can move it to the top of the tab without duplicating it.
   const bracketSection=(
     <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px",marginBottom:"20px"}}>
       <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Bracket progression</div>
-      <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"14px"}}>Heat 1 &amp; 2 tiers update live as people sign up. The stages below explain how the field narrows down to the Finals — no results yet.</div>
+      <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"14px"}}>Enter each heat's finish positions below as you go — the stages fill in live and the field narrows down automatically to the Finals Field and champion.</div>
 
       {/* Stage 1: Heat 1 tiers, by season elo */}
       <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 — {tierSorted.length} signed up, tiered by season elo into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize}</div>
@@ -5250,9 +5318,18 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
                   const originalTier=heat1Ranked.findIndex(g=>g.includes(r));
                   const moved=originalTier!==gi;
                   return (
-                    <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:C.text,padding:"2px 0"}}>
+                    <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.74rem",color:C.text,padding:"2px 0",gap:"6px"}}>
                       <span>{r.player.name}{moved&&<span style={{color:originalTier>gi?C.greenLight:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>{originalTier>gi?"↑":"↓"}</span>}</span>
-                      <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
+                        <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                        {isAdmin?(
+                          <input type="number" min="1" placeholder="pos" value={heat2ResultOf(r.player.id)??""}
+                            onChange={e=>setHeat2Result(r.player.id,e.target.value)}
+                            style={{width:"34px",background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
+                        ):(
+                          heat2ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.66rem",fontWeight:"bold"}}>#{heat2ResultOf(r.player.id)}</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -5264,6 +5341,7 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
               </div>
             ))}
           </div>
+          {isAdmin&&<div style={{color:C.muted,fontSize:"0.66rem",marginBottom:"10px"}}>Enter each player's Heat 2 finish position (1 = best) to drive combined rank below.</div>}
         </>
       ):(
         <div style={{color:C.muted,fontSize:"0.76rem",marginBottom:"10px",fontStyle:"italic"}}>Waiting on Heat 1 finish positions — Heat 2 groups will appear once every Heat 1 player has a result entered.</div>
@@ -5272,25 +5350,55 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
       <div style={arrowSt}>↓</div>
 
       {/* Stage 2: Combined rank */}
-      <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Ranked by heat 1 + heat 2 points</div></div>
+      {combinedReady?(
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"10px",marginBottom:"10px"}}>
+          <div style={{...stageTitleSt,textAlign:"center",marginBottom:"8px"}}>Combined rank — Heat 1 + Heat 2 points</div>
+          {combinedRanked.map((r,i)=>(
+            <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",fontSize:"0.74rem",color:i<cfg.autoQualifyCount?C.greenLight:C.text,padding:"2px 0",borderBottom:`1px solid ${C.border}55`}}>
+              <span>{i+1}. {r.player.name}</span>
+              <span style={{color:C.muted}}>{combinedScoreOf(r)} pts</span>
+            </div>
+          ))}
+        </div>
+      ):(
+        <div style={stageBoxSt}><div style={stageTitleSt}>Combined rank</div><div style={stageSubSt}>Ranked by heat 1 + heat 2 points — waiting on results</div></div>
+      )}
 
       <div style={arrowSt}>↓</div>
 
-      {/* Stage 3: splits into auto-qualify vs heat 3 (explanatory only — no results yet) */}
+      {/* Stage 3: splits into auto-qualify vs heat 3 */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px",marginBottom:"10px"}}>
-        <div style={{...stageBoxSt,background:C.green+"15",borderColor:C.green+"44"}}>
-          <div style={{...stageTitleSt,color:C.greenLight}}>Auto-qualify</div>
-          <div style={stageSubSt}>Top {cfg.autoQualifyCount} advance straight to the Finals</div>
+        <div style={{...stageBoxSt,background:C.green+"15",borderColor:C.green+"44",textAlign:combinedReady?"left":"center"}}>
+          <div style={{...stageTitleSt,color:C.greenLight,textAlign:"center"}}>Auto-qualify — top {cfg.autoQualifyCount}</div>
+          {combinedReady?autoQualifiers.map((r,i)=>(
+            <div key={r.player.id} style={{fontSize:"0.72rem",color:C.text,padding:"2px 0"}}>{i+1}. {r.player.name}</div>
+          )):<div style={stageSubSt}>Advance straight to the Finals</div>}
         </div>
-        <div style={{...stageBoxSt,background:C.blue+"15",borderColor:C.blue+"44"}}>
-          <div style={{...stageTitleSt,color:C.blue}}>Heat 3 decider</div>
-          <div style={stageSubSt}>Everyone else plays one more heat (cap: {cfg.heat3Cap})</div>
+        <div style={{...stageBoxSt,background:C.blue+"15",borderColor:C.blue+"44",textAlign:combinedReady?"left":"center"}}>
+          <div style={{...stageTitleSt,color:C.blue,textAlign:"center"}}>Heat 3 decider{combinedReady?` — ${heat3Field.length} playing`:""}</div>
+          {combinedReady?heat3Ranked.map(r=>(
+            <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.72rem",color:C.text,padding:"2px 0",gap:"6px"}}>
+              <span>{r.player.name}</span>
+              {isAdmin?(
+                <input type="number" min="1" placeholder="pos" value={heat3ResultOf(r.player.id)??""}
+                  onChange={e=>setHeat3Result(r.player.id,e.target.value)}
+                  style={{width:"32px",flexShrink:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.64rem",fontFamily:"Georgia,serif"}}/>
+              ):(
+                heat3ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.64rem",fontWeight:"bold",flexShrink:0}}>#{heat3ResultOf(r.player.id)}</span>
+              )}
+            </div>
+          )):<div style={stageSubSt}>Everyone else plays one more heat (cap: {cfg.heat3Cap})</div>}
         </div>
       </div>
+      {combinedReady&&heat3Field.length>cfg.heat3Cap&&(
+        <div style={{background:C.red+"22",border:`1px solid ${C.red}44`,borderRadius:"8px",padding:"8px 10px",fontSize:"0.72rem",color:C.red,marginBottom:"10px"}}>
+          Heat 3 field ({heat3Field.length}) is over the {cfg.heat3Cap} cap — double check the auto-qualify count or headcount.
+        </div>
+      )}
 
       <div style={arrowSt}>↓</div>
 
-      {/* Stage 4: Finals (explanatory only — no results yet) */}
+      {/* Stage 4: Finals */}
       <div style={stageBoxSt}>
         <div style={{...stageTitleSt,color:C.accentLight}}>Finals — {cfg.finalsSize} spots</div>
         <div style={stageSubSt}>{cfg.autoQualifyCount} auto-qualifiers + top {Math.max(0,cfg.finalsSize-cfg.autoQualifyCount)} finishers from heat 3</div>
@@ -5343,6 +5451,31 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
           </div>
         )}
       </div>
+
+      {/* Finals Results — enter standings for the active field; whoever's #1 is champion. */}
+      {finalsFieldActive.length>0&&(
+        <>
+          <div style={arrowSt}>↓</div>
+          <div style={{background:C.accent+"15",border:`1px solid ${C.accent}44`,borderRadius:"8px",padding:"10px"}}>
+            <div style={{color:C.accentLight,fontSize:"0.74rem",fontWeight:"bold",marginBottom:"4px"}}>Finals Results</div>
+            {finalsChampion&&(
+              <div style={{textAlign:"center",color:C.gold,fontSize:"0.95rem",fontWeight:"bold",margin:"6px 0 10px"}}>🏆 {finalsChampion.name} — Champion!</div>
+            )}
+            {finalsRanked.map((p,i)=>(
+              <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.76rem",color:finalsResultOf(p.id)===1?C.gold:C.text,padding:"3px 0",borderBottom:`1px solid ${C.border}55`,gap:"6px"}}>
+                <span>{p.name}</span>
+                {isAdmin?(
+                  <input type="number" min="1" placeholder="pos" value={finalsResultOf(p.id)??""}
+                    onChange={e=>setFinalsResult(p.id,e.target.value)}
+                    style={{width:"34px",flexShrink:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
+                ):(
+                  finalsResultOf(p.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.66rem",fontWeight:"bold",flexShrink:0}}>#{finalsResultOf(p.id)}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 
@@ -5572,9 +5705,20 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
             <div><label style={lbSt}>HEAT 1 GROUP SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat1GroupSize} onChange={e=>saveCfg({heat1GroupSize:Math.max(2,parseInt(e.target.value)||2)})}/></div>
             <div><label style={lbSt}>HEAT 2 PROMOTE/RELEGATE COUNT</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat2PromoteCount} onChange={e=>saveCfg({heat2PromoteCount:Math.max(0,parseInt(e.target.value)||0)})}/></div>
           </div>
-          {Object.keys(finalsHeat1Results).length>0&&(
-            <button onClick={()=>update({finalsHeat1Results:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem",marginTop:"10px"}}>Clear all Heat 1 results</button>
-          )}
+          <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"10px"}}>
+            {Object.keys(finalsHeat1Results).length>0&&(
+              <button onClick={()=>update({finalsHeat1Results:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem"}}>Clear all Heat 1 results</button>
+            )}
+            {Object.keys(finalsHeat2Results).length>0&&(
+              <button onClick={()=>update({finalsHeat2Results:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem"}}>Clear all Heat 2 results</button>
+            )}
+            {Object.keys(finalsHeat3Results).length>0&&(
+              <button onClick={()=>update({finalsHeat3Results:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem"}}>Clear all Heat 3 results</button>
+            )}
+            {Object.keys(finalsResults).length>0&&(
+              <button onClick={()=>update({finalsResults:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem"}}>Clear all Finals results</button>
+            )}
+          </div>
 
           <div style={{color:C.accentLight,fontSize:"0.8rem",fontWeight:"bold",margin:"18px 0 8px"}}>Menu — provided by the league</div>
           <EditableStringList label="MAINS" items={finalsMenu.mains||[]} onChange={next=>update({finalsMenu:{...finalsMenu,mains:next}})}/>
