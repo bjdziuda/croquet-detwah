@@ -5177,14 +5177,20 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
   const allHeat2ResultsIn=heat2Groups.length>0&&heat2Groups.every(grp=>grp.every(r=>heat2ResultOf(r.player.id)!=null));
   // Combined rank: each player's Heat 1 + Heat 2 finish converted to points via calcPoints — same
   // formula and same "largest group" convention as regular-season rebalancing, so a 1st-place
-  // finish is worth the same everywhere regardless of which tier happened to be smaller.
+  // finish is worth the same everywhere regardless of which tier happened to be smaller. Also
+  // matching that same convention: last place in your OWN tier is always 0 points, even though
+  // non-last positions are scored against the largest tier size.
   const heat1MaxGroupSize=heat1Groups.length?Math.max(...heat1Groups.map(g=>g.length)):0;
   const heat2MaxGroupSize=heat2Groups.length?Math.max(...heat2Groups.map(g=>g.length)):0;
   const combinedReady=allHeat1ResultsIn&&allHeat2ResultsIn&&tierSorted.length>0;
   const combinedScoreOf=r=>{
+    const h1Tier=heat1Groups.find(grp=>grp.includes(r));
+    const h2Tier=heat2Groups.find(grp=>grp.includes(r));
     const h1Pos=heat1ResultOf(r.player.id), h2Pos=heat2ResultOf(r.player.id);
-    if(h1Pos==null||h2Pos==null) return null;
-    return calcPoints(h1Pos,heat1MaxGroupSize)+calcPoints(h2Pos,heat2MaxGroupSize);
+    if(!h1Tier||!h2Tier||h1Pos==null||h2Pos==null) return null;
+    const h1Pts=h1Pos===h1Tier.length?0:calcPoints(h1Pos,heat1MaxGroupSize);
+    const h2Pts=h2Pos===h2Tier.length?0:calcPoints(h2Pos,heat2MaxGroupSize);
+    return h1Pts+h2Pts;
   };
   // Manual tie-break: when two+ players land on the same combined score, admin picks who ranks
   // higher (1 = wins the tie) so the auto-qualify/Heat 3 cutoff has a real answer instead of
