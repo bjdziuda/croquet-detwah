@@ -407,6 +407,19 @@ function Switch({checked, onChange, label, disabled=false}) {
   );
 }
 
+function Section({id, title, color, children, adminOpen, setAdminOpen}) {
+  const open=!!adminOpen[id];
+  return(
+    <div id={`admin-sec-${id}`} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",marginBottom:"14px",padding:0,overflow:"hidden"}}>
+      <button onClick={()=>setAdminOpen(prev=>({...prev,[id]:!prev[id]}))} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"none",border:"none",cursor:"pointer",padding:"14px 16px",color:color||C.accentLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",fontFamily:"Georgia,serif"}}>
+        <span>{title}</span>
+        <span style={{color:C.muted,fontSize:"0.7rem"}}>{open?"▾":"▸"}</span>
+      </button>
+      {open&&<div style={{padding:"0 16px 16px"}}>{children}</div>}
+    </div>
+  );
+}
+
 function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, seasonChampionBanner={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeVotes={}, finalsConfig={}, finalsHeat1Results={}, finalsTournamentTrackerEnabled=false, finalsGuests=[], onFinalsSignup=()=>{}, onSuperlativeVote=()=>{}}) {
   const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", appetizers:[], mains:[], sides:[], desserts:[], drinks:[], leagueItems:[], otherOn:false, otherSide:"", sideNote:""});
   const [editingRsvp, setEditingRsvp] = useState(false);
@@ -3393,20 +3406,8 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             })()}
 
             {(()=>{
-              const Section=({id,title,color,children})=>{
-                const open=!!adminOpen[id];
-                return(
-                  <div id={`admin-sec-${id}`} style={{...cardSt,marginBottom:"14px",padding:0,overflow:"hidden"}}>
-                    <button onClick={()=>setAdminOpen(prev=>({...prev,[id]:!prev[id]}))} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"none",border:"none",cursor:"pointer",padding:"14px 16px",color:color||C.accentLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",fontFamily:"Georgia,serif"}}>
-                      <span>{title}</span>
-                      <span style={{color:C.muted,fontSize:"0.7rem"}}>{open?"▾":"▸"}</span>
-                    </button>
-                    {open&&<div style={{padding:"0 16px 16px"}}>{children}</div>}
-                  </div>
-                );
-              };
               return(<>
-                <Section id="activity" title="📊 PLAYER ACTIVITY">
+                <Section id="activity" title="📊 PLAYER ACTIVITY" adminOpen={adminOpen} setAdminOpen={setAdminOpen}>
             {(()=>{
               const now=Date.now();
               const DAY=86400000;
@@ -3440,7 +3441,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
 
                 </Section>
 
-                <Section id="awards" title="🏅 SEASON AWARDS" color={C.gold}>
+                <Section id="awards" title="🏅 SEASON AWARDS" color={C.gold} adminOpen={adminOpen} setAdminOpen={setAdminOpen}>
             {(()=>{
               // Builds a winner + up to 3 runners-up list from a pre-sorted candidate array,
               // tagging consecutive ties (equal value to the entry above) so ties are visible
@@ -3586,7 +3587,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             })()}
                 </Section>
 
-                <Section id="signups" title="🏑 SIGN-UPS & GROUPS" color={C.greenLight}>
+                <Section id="signups" title="🏑 SIGN-UPS & GROUPS" color={C.greenLight} adminOpen={adminOpen} setAdminOpen={setAdminOpen}>
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.green+"44",background:"#0f1a0f"}}>
               <div style={{color:C.greenLight,fontSize:"0.78rem",fontWeight:"bold",letterSpacing:"0.06em",marginBottom:"10px"}}>🏑 WEEK {curSignupWk} SIGN-UPS</div>
               <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px",alignItems:"center"}}>
@@ -3694,7 +3695,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
 
                 </Section>
 
-                <Section id="weekactions" title="⚙ WEEK ACTIONS" color={C.accent}>
+                <Section id="weekactions" title="⚙ WEEK ACTIONS" color={C.accent} adminOpen={adminOpen} setAdminOpen={setAdminOpen}>
             {seasonLocked&&(
               <div style={{...cardSt,marginBottom:"14px",borderColor:C.red+"44",background:"#1a0f0f",color:C.muted,fontSize:"0.76rem"}}>
                 🔒 The season is locked, so week actions are disabled. Unlock it in Season Management below to make changes.
@@ -3794,7 +3795,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
 
                 </Section>
 
-                <Section id="pushnotif" title="📣 ANNOUNCEMENTS & NOTIFICATIONS" color={C.accentLight}>
+                <Section id="pushnotif" title="📣 ANNOUNCEMENTS & NOTIFICATIONS" color={C.accentLight} adminOpen={adminOpen} setAdminOpen={setAdminOpen}>
             {user?.role==="superadmin"&&(
               <div style={{...cardSt,borderColor:C.accent+"44",background:"#1a1400"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"12px"}}>
@@ -3966,7 +3967,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
             </div>
                 </Section>
 
-                <Section id="season" title="🔒 SEASON MANAGEMENT" color={C.red}>
+                <Section id="season" title="🔒 SEASON MANAGEMENT" color={C.red} adminOpen={adminOpen} setAdminOpen={setAdminOpen}>
             <div style={{...cardSt,marginBottom:"14px",borderColor:C.accent+"44",background:"#1a1400"}}>
               <div style={{color:C.accentLight,fontSize:"0.72rem",fontWeight:"bold",letterSpacing:"0.08em",marginBottom:"8px"}}>🔒 LOCK SEASON</div>
               <p style={{color:C.muted,fontSize:"0.68rem",margin:"0 0 10px",lineHeight:"1.5"}}>Locking disables +Wk and the Week Actions above (rain out, rebalance, delete) so nothing changes by accident once the regular season is over. Good to flip on once you've hit your last match, before the finals.</p>
