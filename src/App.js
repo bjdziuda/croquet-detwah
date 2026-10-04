@@ -1873,8 +1873,8 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["finals","🏁 Finals"],["profile","👤 Profile"],["rulebook","📜 Rules"],["history","◷ History"],
-    ...(isAdmin?[["record","✦ Record"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
+  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["profile","👤 Profile"],["rulebook","📜 Rules"],["history","◷ History"],
+    ...(isAdmin?[["finals","🏁 Finals"],["record","✦ Record"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
   ];
