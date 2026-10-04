@@ -407,7 +407,7 @@ function Switch({checked, onChange, label, disabled=false}) {
   );
 }
 
-function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeVotes={}, finalsConfig={}, finalsHeat1Results={}, finalsTournamentTrackerEnabled=false, finalsGuests=[], onFinalsSignup=()=>{}, onSuperlativeVote=()=>{}}) {
+function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, players, weekSignups, nextMatchWeek, weeklyGames, venues, announcement={}, seasonChampionBanner={}, loginPosts=[], membershipDues={}, suspendedPlayers=[], publishedGroups=null, weekTiebreakers={}, weekVenues={}, finalsMode=false, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeVotes={}, finalsConfig={}, finalsHeat1Results={}, finalsTournamentTrackerEnabled=false, finalsGuests=[], onFinalsSignup=()=>{}, onSuperlativeVote=()=>{}}) {
   const [finalsForm, setFinalsForm] = useState({coming:true, playing:true, guests:false, guestCount:1, guestNote:"", appetizers:[], mains:[], sides:[], desserts:[], drinks:[], leagueItems:[], otherOn:false, otherSide:"", sideNote:""});
   const [editingRsvp, setEditingRsvp] = useState(false);
   const [mode, setMode]       = useState("bubbles");
@@ -545,10 +545,25 @@ function LoginScreen({onLogin, onSignup, nextMatch, leagueLogo, leagueName, play
           </div>
         )}
 
+        {/* Season champion banners */}
+        {seasonChampionBanner?.finalsChampion&&(
+          <div style={{marginBottom:"10px",borderRadius:"10px",border:`2px solid ${C.gold}`,background:"linear-gradient(135deg,#2a2200,#1a1400)",padding:"16px",textAlign:"center",boxShadow:`0 0 16px ${C.gold}33`}}>
+            <div style={{fontSize:"1.6rem",lineHeight:1}}>🏆</div>
+            <div style={{fontSize:"0.64rem",color:C.gold,letterSpacing:"0.14em",fontWeight:"bold",margin:"6px 0 4px"}}>SEASON CHAMPION</div>
+            <div style={{fontSize:"1.15rem",color:C.cream,fontWeight:"bold"}}>Congratulations, {seasonChampionBanner.finalsChampion}!</div>
+          </div>
+        )}
+        {seasonChampionBanner?.regSeasonChampion&&(
+          <div style={{marginBottom:"16px",borderRadius:"8px",border:`1px solid ${C.accent}66`,background:"#141a0c",padding:"9px 14px",textAlign:"center"}}>
+            <span style={{fontSize:"0.78rem",color:C.accentLight}}>🎉 Regular Season Champion: <strong style={{color:C.cream}}>{seasonChampionBanner.regSeasonChampion}</strong></span>
+          </div>
+        )}
+
         {/* Announcement */}
         {announcement?.body&&(
           <div style={{marginBottom:"16px",borderRadius:"10px",border:`1px solid ${C.accent}66`,background:"#1a1400",padding:"14px 16px"}}>
             <div style={{fontSize:"0.6rem",color:C.accent,letterSpacing:"0.12em",fontWeight:"bold",marginBottom:"6px"}}>📣 COMMISSIONER MESSAGE</div>
+            {announcement.imageUrl&&<img src={announcement.imageUrl} alt="" style={{display:"block",maxWidth:"100%",borderRadius:"8px",marginBottom:"10px"}}/>}
             {announcement.title&&<div style={{color:C.cream,fontWeight:"bold",fontSize:"0.88rem",marginBottom:"5px"}}>{announcement.title}</div>}
             <div style={{color:C.muted,fontSize:"0.82rem",lineHeight:"1.55",whiteSpace:"pre-wrap"}}>{announcement.body}</div>
           </div>
@@ -1167,6 +1182,7 @@ export default function App() {
     weeklyGames={appState?.weeklyGames||{}}
     venues={appState?.venues||[]}
     announcement={appState?.announcement||{title:"",body:""}}
+    seasonChampionBanner={appState?.seasonChampionBanner||{finalsChampion:"Niko",regSeasonChampion:"Eric"}}
     loginPosts={appState?.loginPosts||[]}
     membershipDues={appState?.membershipDues||{}}
     suspendedPlayers={appState?.suspendedPlayers||[]}
@@ -1203,7 +1219,7 @@ export default function App() {
 }
 
 function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout, uploadImage}) {
-  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, finalsTieBreaks={}, seasonLocked=false, pastSeasons={}} = appState;
+  const {players, weeklyGames, weeklyGuests={}, totalWeeks, leagueName, leagueLogo, venues, weekSignups={}, membershipDues={}, leagueExpenses=[], announcement={title:"",body:""}, seasonChampionBanner={finalsChampion:"",regSeasonChampion:""}, loginPosts=[], suspendedPlayers=[], weekVenues={}, weekTiebreakers={}, playerActivity={}, rookiePool=[], handicapTiers={}, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsSides=[], finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], awardTiebreakMetric="elo", awardManualWinners={}, finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, finalsTieBreaks={}, seasonLocked=false, pastSeasons={}} = appState;
   const finalsFoodCategories = appState.finalsFoodCategories||{appetizers:[],mains:[],sides:finalsSides,desserts:[],drinks:[]};
   const update = patch => persist({...appState,...patch});
 
@@ -1282,6 +1298,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const [gridEditSotd, setGridEditSotd]     = useState(0);
   const [archiveYear, setArchiveYear]       = useState(String(new Date().getFullYear()));
   const [archiveConfirmText, setArchiveConfirmText] = useState("");
+  const [historyYear, setHistoryYear]       = useState("current");
   const [gridSelWeek, setGridSelWeek]       = useState("");
   const [standingsView, setStandingsView]   = useState("list");
   const [standingsSort, setStandingsSort]   = useState("pts");
@@ -1843,8 +1860,8 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
   const cardSt={background:C.card,border:`1px solid ${C.border}`,borderRadius:"10px",padding:"14px"};
   const lbSt={color:C.muted,fontSize:"0.69rem",letterSpacing:"0.1em",display:"block",marginBottom:"5px"};
 
-  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["finals","🏁 Finals"],["profile","👤 Profile"],["rulebook","📜 Rules"],
-    ...(isAdmin?[["record","✦ Record"],["history","◷ History"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
+  const allTabs=[["standings","⚑ Standings"],["grid","📊 Scores"],["venues","📍 Venues"],["finals","🏁 Finals"],["profile","👤 Profile"],["rulebook","📜 Rules"],["history","◷ History"],
+    ...(isAdmin?[["record","✦ Record"],["players","✤ Players"],["admin","⚙ Admin"]]:[]),
     ["logo","🏆 League Honours"],
     ...(user?.role==="superadmin"?[["dues","💰 Dues"]]:[]),
   ];
@@ -3058,12 +3075,16 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
           </div>
         )}
 
-        {tab==="history"&&isAdmin&&(
+        {tab==="history"&&(
           <div id="print-area">
             {(()=>{
+              const archivedYearsList=Object.entries(pastSeasons).filter(([,v])=>v&&Array.isArray(v.standings)).sort((a,b)=>b[0].localeCompare(a[0])).map(([yr])=>yr);
+              const viewingPast=historyYear!=="current"&&pastSeasons[historyYear];
+              const histStandings=viewingPast?pastSeasons[historyYear].standings:standings;
+              const histWeeklyGames=viewingPast?(pastSeasons[historyYear].weeklyGames||{}):weeklyGames;
               const colSet=new Set(), cols=[];
-              players.forEach(p=>{
-                Object.entries(weeklyGames[p.id]||{}).forEach(([wk,entries])=>{
+              histStandings.forEach(p=>{
+                Object.entries(histWeeklyGames[p.id]||{}).forEach(([wk,entries])=>{
                   entries.forEach(g=>{
                     const r=g.gameRound||1, key=`${wk}-${r}`;
                     if(!colSet.has(key)){colSet.add(key);cols.push({wk:parseInt(wk),round:r,key});}
@@ -3084,10 +3105,10 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               // Precompute wins/SOTD per player once so the summary columns, the "best in column"
               // highlighting, and the CSV export all use the exact same numbers as the cells.
               const totals={};
-              standings.forEach(p=>{
+              histStandings.forEach(p=>{
                 let wins=0,sotds=0;
                 cols.forEach(col=>{
-                  const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
+                  const entries=(histWeeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
                   if(!entries.length) return;
                   const allAbsent=entries.every(g=>g.absent);
                   if(allAbsent) return;
@@ -3102,12 +3123,12 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 });
                 totals[p.id]={wins,sotds};
               });
-              const maxOf=fn=>standings.length?Math.max(...standings.map(fn)):0;
+              const maxOf=fn=>histStandings.length?Math.max(...histStandings.map(fn)):0;
               const maxPts=maxOf(p=>p.pts);
               const maxWeeksAttended=maxOf(p=>p.weeksAttended||0);
               const maxWins=maxOf(p=>totals[p.id].wins);
               const maxSotds=maxOf(p=>totals[p.id].sotds);
-              const mvpEligible=standings.filter(p=>p.mvp!=="—");
+              const mvpEligible=histStandings.filter(p=>p.mvp!=="—");
               const maxMvp=mvpEligible.length?Math.max(...mvpEligible.map(p=>parseFloat(p.mvp))):null;
               const maxElo=maxOf(p=>p.elo);
               const maxPeakElo=maxOf(p=>p.peakElo);
@@ -3118,10 +3139,10 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
                 };
                 const header=["Player",...cols.flatMap(c=>[`Wk${c.wk} G${c.round} Pts`,`Wk${c.wk} G${c.round} SOTD`]),"TOT","WKS","Wins","SOTD","MVP%","ELO","Peak Elo"];
-                const rows=standings.map(p=>{
+                const rows=histStandings.map(p=>{
                   const {wins,sotds}=totals[p.id];
                   const weekCells=cols.flatMap(col=>{
-                    const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
+                    const entries=(histWeeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
                     if(!entries.length||entries.every(g=>g.absent)) return ["",""];
                     const ptsVal=entries.reduce((s,g)=>s+(g.absent?0:(g.pts||0)),0);
                     const sotdVal=entries.reduce((s,g)=>s+(g.absent?0:(g.sotd||0)),0);
@@ -3134,7 +3155,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 const url=URL.createObjectURL(blob);
                 const a=document.createElement("a");
                 a.href=url;
-                a.download=`season-summary-${new Date().toISOString().slice(0,10)}.csv`;
+                a.download=`season-summary-${viewingPast?historyYear:new Date().toISOString().slice(0,10)}.csv`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -3145,7 +3166,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                 // measuring the on-screen DOM, which uses different fonts/padding than print does)
                 // and scale it down via a CSS variable so the whole season fits on one landscape page.
                 const estWidth=110+cols.length*38+7*42;
-                const estHeight=46+standings.length*30;
+                const estHeight=46+histStandings.length*30;
                 const pageWidth=950,pageHeight=710;
                 const scale=Math.min(1,pageWidth/estWidth,pageHeight/estHeight);
                 document.documentElement.style.setProperty("--hist-print-scale",scale.toFixed(3));
@@ -3154,7 +3175,16 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
               return(
                 <>
                 <div className="no-print" style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px",borderBottom:`1px solid ${C.border}`,paddingBottom:"8px"}}>
-                  <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",margin:0}}>Season Summary</h2>
+                  <div style={{display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+                    <h2 style={{color:C.cream,fontSize:"1rem",letterSpacing:"0.06em",margin:0}}>Season Summary{viewingPast?` — ${historyYear}`:""}</h2>
+                    {archivedYearsList.length>0&&(
+                      <select value={historyYear} onChange={e=>setHistoryYear(e.target.value)}
+                        style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:"6px",color:C.text,padding:"5px 8px",fontSize:"0.72rem",fontFamily:"Georgia,serif"}}>
+                        <option value="current">Current season</option>
+                        {archivedYearsList.map(yr=>(<option key={yr} value={yr}>{yr} (archived)</option>))}
+                      </select>
+                    )}
+                  </div>
                   <div style={{display:"flex",gap:"8px"}}>
                     <button onClick={exportHistoryCSV} style={{...btnSt(C.green,true),padding:"7px 14px",fontSize:"0.76rem"}}>📄 Export CSV</button>
                     <button onClick={printHistory} style={{...btnSt(C.accent,true),padding:"7px 14px",fontSize:"0.76rem"}}>🖨 Print / Export PDF</button>
@@ -3194,24 +3224,25 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                       </tr>
                     </thead>
                     <tbody>
-                      {standings.map((p,ri)=>{
+                      {histStandings.map((p,ri)=>{
                         const {wins,sotds}=totals[p.id];
                         const medal=ri===0?"🥇":ri===1?"🥈":ri===2?"🥉":`${ri+1}.`;
+                        const avatarUrl=p.imageUrl||players.find(cp=>String(cp.id)===String(p.id))?.imageUrl;
                         return(
                           <tr key={p.id}>
                             <td style={{background:C.surface,borderRadius:"5px",padding:"6px 10px",
                               position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap"}}>
                               <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                                 <span style={{fontSize:"0.78rem"}}>{medal}</span>
-                                {p.imageUrl
-                                  ?<img src={p.imageUrl} alt="" style={{width:"18px",height:"18px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
+                                {avatarUrl
+                                  ?<img src={avatarUrl} alt="" style={{width:"18px",height:"18px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
                                   :<div style={{width:"18px",height:"18px",borderRadius:"50%",background:C.border,flexShrink:0}}/>
                                 }
                                 <span style={{color:C.cream,fontSize:"0.78rem",fontWeight:"bold"}}>{p.name}</span>
                               </div>
                             </td>
                             {cols.map(col=>{
-                              const entries=(weeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
+                              const entries=(histWeeklyGames[p.id]?.[col.wk]||[]).filter(g=>(g.gameRound||1)===col.round);
                               if(!entries.length){
                                 return(
                                   <td key={col.key} style={{padding:"2px"}}>
@@ -3780,14 +3811,56 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   <textarea style={textareaSt} value={announcement.body||""} placeholder="Write a message for all members to see on the login screen…"
                     onChange={e=>update({announcement:{...announcement,body:e.target.value}})}/>
                 </div>
+                <div style={{marginBottom:"12px"}}>
+                  <label style={lbSt}>IMAGE (optional)</label>
+                  {announcement.imageUrl?(
+                    <div style={{marginBottom:"8px"}}>
+                      <img src={announcement.imageUrl} alt="" style={{maxWidth:"220px",width:"100%",borderRadius:"8px",border:`1px solid ${C.border}`,display:"block",marginBottom:"6px"}}/>
+                      <button style={{...btnSt(C.red,true),padding:"5px 10px",fontSize:"0.7rem"}} onClick={()=>update({announcement:{...announcement,imageUrl:""}})}>Remove image</button>
+                    </div>
+                  ):(
+                    <label style={{display:"block",background:C.surface,border:`1px dashed ${C.border}`,
+                      borderRadius:"8px",padding:"16px",cursor:"pointer",color:C.muted,fontSize:"0.76rem",textAlign:"center"}}>
+                      📁 Upload image
+                      <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{
+                        const file=e.target.files[0]; if(!file) return;
+                        const url=await uploadImage(file);
+                        update({announcement:{...announcement,imageUrl:url}});
+                        notify("Image added to announcement!");
+                      }}/>
+                    </label>
+                  )}
+                </div>
                 <div style={{display:"flex",gap:"8px"}}>
                   <button style={{...btnSt(C.accent),flex:1}} onClick={()=>update({announcement:{...announcement}})}>Save Message</button>
-                  {announcement.body&&<button style={{...btnSt(C.red,true)}} onClick={()=>update({announcement:{title:"",body:""}})}>Clear</button>}
+                  {(announcement.body||announcement.imageUrl)&&<button style={{...btnSt(C.red,true)}} onClick={()=>update({announcement:{title:"",body:"",imageUrl:""}})}>Clear</button>}
                 </div>
                 {announcement.body&&<p style={{color:C.green,fontSize:"0.72rem",margin:"8px 0 0"}}>✓ Message is live on the login screen</p>}
               </div>
             )}
 
+            {user?.role==="superadmin"&&(
+              <div style={{...cardSt,borderColor:C.gold+"44",background:"#1a1400",marginTop:"12px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"12px"}}>
+                  <span style={{fontSize:"1rem"}}>🏆</span>
+                  <span style={{color:C.gold,fontWeight:"bold",fontSize:"0.85rem"}}>Season Champion Banners</span>
+                </div>
+                <div style={{marginBottom:"10px"}}>
+                  <label style={lbSt}>SEASON CHAMPION (big banner)</label>
+                  <input style={inputSt} value={seasonChampionBanner.finalsChampion||""} placeholder="e.g. Niko"
+                    onChange={e=>update({seasonChampionBanner:{...seasonChampionBanner,finalsChampion:e.target.value}})}/>
+                </div>
+                <div style={{marginBottom:"12px"}}>
+                  <label style={lbSt}>REGULAR SEASON CHAMPION (smaller banner)</label>
+                  <input style={inputSt} value={seasonChampionBanner.regSeasonChampion||""} placeholder="e.g. Eric"
+                    onChange={e=>update({seasonChampionBanner:{...seasonChampionBanner,regSeasonChampion:e.target.value}})}/>
+                </div>
+                {(seasonChampionBanner.finalsChampion||seasonChampionBanner.regSeasonChampion)&&(
+                  <button style={{...btnSt(C.red,true)}} onClick={()=>update({seasonChampionBanner:{finalsChampion:"",regSeasonChampion:""}})}>Clear banners</button>
+                )}
+                {seasonChampionBanner.finalsChampion&&<p style={{color:C.green,fontSize:"0.72rem",margin:"8px 0 0"}}>✓ Banners are live on the login screen</p>}
+              </div>
+            )}
 
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:"16px",marginTop:"8px"}}>
               <div style={{color:C.muted,fontSize:"0.65rem",letterSpacing:"0.1em",marginBottom:"12px"}}>PUSH NOTIFICATIONS</div>
@@ -3929,6 +4002,7 @@ function LeagueApp({user, isAdmin, appState, persist, setLocal, saving, onLogout
                   suspendedPlayers:[],
                   leagueExpenses:[],
                   announcement:{title:"",body:""},
+                  seasonChampionBanner:{finalsChampion:"",regSeasonChampion:""},
                   loginPosts:[],
                   seasonLocked:false,
                   awardManualWinners:{},
