@@ -122,6 +122,23 @@ const totalPts = (pid, wg) => {
   Object.values(wg[pid]||{}).forEach(gs => gs.forEach(g => { s += (g.pts||0)+(g.sotd||0); }));
   return s;
 };
+// Snake/serpentine draft: deals a sorted-strongest-to-weakest list out to numGroups groups in
+// boustrophedon order (0,1,2..,n-1,n-1,..,2,1,0,0,1,2,...) so every group gets a mix of strong
+// and weak finishers instead of one group getting stacked with all the top seeds.
+const snakeSeedGroups = (sortedList, numGroups) => {
+  const groups = Array.from({length:Math.max(1,numGroups)},()=>[]);
+  let idx=0, round=0;
+  while(idx<sortedList.length){
+    const order=round%2===0?groups.map((_,i)=>i):groups.map((_,i)=>i).reverse();
+    for(const g of order){
+      if(idx>=sortedList.length) break;
+      groups[g].push(sortedList[idx]);
+      idx++;
+    }
+    round++;
+  }
+  return groups;
+};
 const buildChartData = (players, wg, maxWeek) =>
   Array.from({length:maxWeek},(_,i) => {
     const w=i+1, entry={week:`Wk ${w}`};
@@ -5058,7 +5075,7 @@ function SuperlativeCategoryEditor({items=[], onChange}) {
 }
 
 function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}, finalsSignups={}, finalsFoodCategories={appetizers:[],mains:[],sides:[],desserts:[],drinks:[]}, finalsMenu={}, finalsHeat1Results={}, finalsFoodReminderDismissed=[], finalsSuperlatives=[], finalsSuperlativeVotingOpen=false, finalsSuperlativeRevealed=false, finalsSuperlativeVotes={}, finalsChampionshipDayMode=false, finalsTournamentTrackerEnabled=false, finalsGuests=[], finalsFieldOrder=[], finalsExemptPlayers=[], finalsHeat2Results={}, finalsHeat3Results={}, finalsResults={}, finalsTieBreaks={}, players=[], membershipDues={}, weeklyGames={}, eloSystem={elo:{}}, suspendedPlayers=[], update, setTab, onEditRsvp}) {
-  const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,...finalsConfig});
+  const [cfg,setCfg]=useState({date:"",location:"",autoQualifyCount:6,heat3Cap:10,finalsSize:8,heat1GroupSize:4,heat2PromoteCount:3,seedMetric:"elo",heat1GroupMode:"balanced",...finalsConfig});
   const [guestDraftName,setGuestDraftName]=useState("");
   const [guestDraftTier,setGuestDraftTier]=useState(0);
   const [fieldDraftId,setFieldDraftId]=useState("");
@@ -5180,19 +5197,31 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
   };
 
   const seasonElo=pid=>eloSystem.elo?.[pid]??eloSystem.elo?.[String(pid)]??ELO_START;
-  const playingRows=rows.filter(r=>r.entry?.coming&&r.entry?.playing);
-  const tierSorted=[...playingRows].sort((a,b)=>seasonElo(b.player.id)-seasonElo(a.player.id));
+  // Seeding metric: admin picks whether Heat 1 tiers are seeded by season Elo or by overall
+  // season points, so a strong regular season (either read) earns a better tier.
+  const seedMetric=cfg.seedMetric==="pts"?"pts":"elo";
+  const seasonSeedScore=pid=>seedMetric==="pts"?totalPts(pid,weeklyGames):seasonElo(pid);
+  const playingRows=rows.filter(r=>r.entry?.coming&&r.entry?.playing&&!finalsExemptPlayers.includes(String(r.player.id)));
+  const tierSorted=[...playingRows].sort((a,b)=>seasonSeedScore(b.player.id)-seasonSeedScore(a.player.id));
   const heat1GroupSize=Math.max(2,parseInt(cfg.heat1GroupSize)||4);
   const heat1NumGroups=tierSorted.length>0?Math.max(1,Math.ceil(tierSorted.length/heat1GroupSize)):0;
+  // "Straight" keeps the strongest finishers together (Tier 1 strongest, Tier 2 next, ...).
+  // "Balanced" deals players out snake-draft style so every group gets a mix of top and bottom
+  // finishers — ranking higher in the regular season still earns you an easier Heat 1 draw
+  // (fewer other top seeds in your group) without stacking one group with every strong player.
+  const heat1GroupMode=cfg.heat1GroupMode==="straight"?"straight":"balanced";
   const heat1Groups=[];
-  // Tiered by season elo: Tier 1 is the strongest group, Tier 2 the next, and so on
   if(heat1NumGroups>0){
-    const base=Math.floor(tierSorted.length/heat1NumGroups), extra=tierSorted.length%heat1NumGroups;
-    let idx=0;
-    for(let g=0; g<heat1NumGroups; g++){
-      const size=base+(g<extra?1:0);
-      heat1Groups.push(tierSorted.slice(idx,idx+size));
-      idx+=size;
+    if(heat1GroupMode==="balanced"){
+      heat1Groups.push(...snakeSeedGroups(tierSorted,heat1NumGroups));
+    } else {
+      const base=Math.floor(tierSorted.length/heat1NumGroups), extra=tierSorted.length%heat1NumGroups;
+      let idx=0;
+      for(let g=0; g<heat1NumGroups; g++){
+        const size=base+(g<extra?1:0);
+        heat1Groups.push(tierSorted.slice(idx,idx+size));
+        idx+=size;
+      }
     }
   }
   const heat1ResultOf=pid=>{
@@ -5210,7 +5239,7 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
   // Rank each Heat 1 tier by finish position (lower=better); missing results fall back to season elo
   const heat1Ranked=heat1Groups.map(grp=>[...grp].sort((a,b)=>{
     const pa=heat1ResultOf(a.player.id), pb=heat1ResultOf(b.player.id);
-    if(pa==null&&pb==null) return seasonElo(b.player.id)-seasonElo(a.player.id);
+    if(pa==null&&pb==null) return seasonSeedScore(b.player.id)-seasonSeedScore(a.player.id);
     if(pa==null) return 1;
     if(pb==null) return -1;
     return pa-pb;
@@ -5350,8 +5379,27 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
       <div style={{color:C.accentLight,fontSize:"0.85rem",fontWeight:"bold",marginBottom:"4px"}}>Bracket progression</div>
       <div style={{color:C.muted,fontSize:"0.7rem",marginBottom:"14px"}}>Enter each heat's finish positions below as you go — the stages fill in live and the field narrows down automatically to the Finals Field and champion.</div>
 
+      {/* Withdrawn/exempt players — exempting someone (e.g. they had to leave early) pulls them
+          out of whichever heat they're in, so the rest of the bracket isn't blocked waiting on
+          a result that'll never come. Un-exempt here to put them back in. */}
+      {finalsExemptPlayers.filter(pid=>!finalsFieldOrder.includes(pid)).length>0&&(
+        <div style={{background:C.red+"15",border:`1px solid ${C.red}44`,borderRadius:"8px",padding:"8px 10px",marginBottom:"10px"}}>
+          <div style={{color:C.red,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"4px"}}>EXEMPT / WITHDRAWN</div>
+          {finalsExemptPlayers.filter(pid=>!finalsFieldOrder.includes(pid)).map(pid=>{
+            const p=players.find(x=>String(x.id)===pid);
+            if(!p) return null;
+            return (
+              <div key={pid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.74rem",color:C.muted,padding:"2px 0",gap:"6px"}}>
+                <span style={{textDecoration:"line-through"}}>{p.name}</span>
+                {isAdmin&&<button onClick={()=>toggleFinalsExempt(pid)} style={{background:"none",border:`1px solid ${C.green}`,color:C.greenLight,borderRadius:"4px",padding:"2px 6px",cursor:"pointer",fontSize:"0.64rem",fontFamily:"Georgia,serif"}}>Un-exempt</button>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Stage 1: Heat 1 tiers, by season elo */}
-      <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 — {tierSorted.length} signed up, tiered by season elo into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize}</div>
+      <div style={{color:C.text,fontSize:"0.78rem",fontWeight:"bold",marginBottom:"8px"}}>Heat 1 — {tierSorted.length} signed up, seeded by {seedMetric==="pts"?"season points":"season elo"} into {heat1NumGroups} group{heat1NumGroups!==1?"s":""} of ~{heat1GroupSize} ({heat1GroupMode==="balanced"?"balanced":"straight tiers"})</div>
 
       {isAdmin&&(
         <div style={{background:C.surface,border:`1px dashed ${C.border}`,borderRadius:"8px",padding:"10px",marginBottom:"10px"}}>
@@ -5384,18 +5432,22 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:"8px",marginBottom:"10px"}}>
         {heat1Groups.map((grp,gi)=>(
           <div key={gi} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:"8px",padding:"8px 10px"}}>
-            <div style={{color:C.blue,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>TIER {gi+1}</div>
+            <div style={{color:C.blue,fontSize:"0.66rem",fontWeight:"bold",letterSpacing:"0.05em",marginBottom:"6px"}}>{heat1GroupMode==="balanced"?"GROUP":"TIER"} {gi+1}</div>
             {grp.map(r=>(
               <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.74rem",color:C.text,padding:"2px 0",gap:"6px"}}>
                 <span>{r.player.name}{!r.elig.meetsGameMinimum&&" *"}</span>
                 <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
-                  <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                  <span style={{color:C.muted}} title={seedMetric==="pts"?"Season points":"Season elo"}>{Math.round(seasonSeedScore(r.player.id))}</span>
                   {isAdmin?(
                     <input type="number" min="1" placeholder="pos" value={heat1ResultOf(r.player.id)??""}
                       onChange={e=>setHeat1Result(r.player.id,e.target.value)}
                       style={{width:"34px",background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
                   ):(
                     heat1ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.66rem",fontWeight:"bold"}}>#{heat1ResultOf(r.player.id)}</span>
+                  )}
+                  {isAdmin&&(
+                    <button onClick={()=>toggleFinalsExempt(String(r.player.id))} title="Exempt this player from the rest of the tournament (e.g. they had to leave)"
+                      style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"1px 4px",cursor:"pointer",fontSize:"0.58rem",fontFamily:"Georgia,serif"}}>Exempt</button>
                   )}
                 </div>
               </div>
@@ -5432,13 +5484,17 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
                     <div key={r.player.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:"0.74rem",color:C.text,padding:"2px 0",gap:"6px"}}>
                       <span>{r.player.name}{moved&&<span style={{color:originalTier>gi?C.greenLight:C.accent,fontSize:"0.62rem",marginLeft:"4px"}}>{originalTier>gi?"↑":"↓"}</span>}</span>
                       <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
-                        <span style={{color:C.muted}}>{Math.round(seasonElo(r.player.id))}</span>
+                        <span style={{color:C.muted}}>{Math.round(seasonSeedScore(r.player.id))}</span>
                         {isAdmin?(
                           <input type="number" min="1" placeholder="pos" value={heat2ResultOf(r.player.id)??""}
                             onChange={e=>setHeat2Result(r.player.id,e.target.value)}
                             style={{width:"34px",background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.66rem",fontFamily:"Georgia,serif"}}/>
                         ):(
                           heat2ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.66rem",fontWeight:"bold"}}>#{heat2ResultOf(r.player.id)}</span>
+                        )}
+                        {isAdmin&&(
+                          <button onClick={()=>toggleFinalsExempt(String(r.player.id))} title="Exempt this player from the rest of the tournament (e.g. they had to leave)"
+                            style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"1px 4px",cursor:"pointer",fontSize:"0.58rem",fontFamily:"Georgia,serif"}}>Exempt</button>
                         )}
                       </div>
                     </div>
@@ -5508,6 +5564,10 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
                   style={{width:"32px",flexShrink:0,background:C.card,border:`1px solid ${C.border}`,borderRadius:"4px",color:C.text,padding:"2px 3px",fontSize:"0.64rem",fontFamily:"Georgia,serif"}}/>
               ):(
                 heat3ResultOf(r.player.id)!=null&&<span style={{color:C.accentLight,fontSize:"0.64rem",fontWeight:"bold",flexShrink:0}}>#{heat3ResultOf(r.player.id)}</span>
+              )}
+              {isAdmin&&(
+                <button onClick={()=>toggleFinalsExempt(String(r.player.id))} title="Exempt this player from the rest of the tournament (e.g. they had to leave)"
+                  style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"4px",padding:"1px 4px",cursor:"pointer",fontSize:"0.56rem",fontFamily:"Georgia,serif",flexShrink:0}}>Exempt</button>
               )}
             </div>
           )):<div style={stageSubSt}>Everyone else plays one more heat (cap: {cfg.heat3Cap})</div>}
@@ -5827,7 +5887,24 @@ function FinalsTab({isAdmin, user, leagueLogo, finalsMode=false, finalsConfig={}
             <div><label style={lbSt}>FINALS SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.finalsSize} onChange={e=>saveCfg({finalsSize:Math.max(0,parseInt(e.target.value)||0)})}/></div>
             <div><label style={lbSt}>HEAT 1 GROUP SIZE</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat1GroupSize} onChange={e=>saveCfg({heat1GroupSize:Math.max(2,parseInt(e.target.value)||2)})}/></div>
             <div><label style={lbSt}>HEAT 2 PROMOTE/RELEGATE COUNT</label><input type="number" style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat2PromoteCount} onChange={e=>saveCfg({heat2PromoteCount:Math.max(0,parseInt(e.target.value)||0)})}/></div>
+            <div><label style={lbSt}>SEED HEAT 1 TIERS BY</label>
+              <select style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.seedMetric||"elo"} onChange={e=>saveCfg({seedMetric:e.target.value})}>
+                <option value="elo">Season Elo</option>
+                <option value="pts">Season points (overall score)</option>
+              </select>
+            </div>
+            <div><label style={lbSt}>HEAT 1 GROUPING</label>
+              <select style={{...iSt,width:"100%",boxSizing:"border-box"}} value={cfg.heat1GroupMode==="straight"?"straight":"balanced"} onChange={e=>saveCfg({heat1GroupMode:e.target.value})}>
+                <option value="balanced">Balanced (top finishers spread across groups)</option>
+                <option value="straight">Straight tiers (strongest grouped together)</option>
+              </select>
+            </div>
           </div>
+          <p style={{color:C.muted,fontSize:"0.66rem",margin:"6px 0 0",lineHeight:"1.5"}}>
+            With HEAT 1 GROUP SIZE set to the whole field (e.g. 6 for a 6-player finals), everyone just plays each other as one group.
+            Set it smaller to split into multiple groups — <strong style={{color:C.text}}>Balanced</strong> deals top and bottom finishers into every group (so ranking higher earns an easier draw without stacking one group with all the top seeds);
+            <strong style={{color:C.text}}> Straight tiers</strong> puts the strongest together and weakest together, which pairs best with Heat 2 promotion/relegation below.
+          </p>
           <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginTop:"10px"}}>
             {Object.keys(finalsHeat1Results).length>0&&(
               <button onClick={()=>update({finalsHeat1Results:{}})} style={{background:"none",border:`1px solid ${C.red}`,color:C.red,borderRadius:"6px",padding:"6px 12px",cursor:"pointer",fontFamily:"Georgia,serif",fontSize:"0.76rem"}}>Clear all Heat 1 results</button>
